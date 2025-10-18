@@ -1,0 +1,969 @@
+import React, {useState, useEffect, useMemo, useCallback} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  FlatList,
+  Dimensions,
+} from 'react-native';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {CalendarStackParamList, Shift} from '@/types';
+import {format, startOfWeek, addDays, isSameDay, isToday, startOfMonth, endOfMonth, eachDayOfInterval} from 'date-fns';
+import {shiftService} from '@/services/shift.service';
+import {dayNoteService} from '@/services/dayNote.service';
+import {householdService} from '@/services/household.service';
+import {getShiftColor, getShiftTypeIcon, analyzeMultiPersonShifts} from '@/utils/shiftColors';
+import {getResponsiveValue, spacing, typography, borderRadius, isTablet, isDesktop} from '@/utils/responsive';
+import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
+import {useAuth} from '@/contexts/AuthContext';
+
+type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarView'>;
+
+export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
+  const {user} = useAuth();
+  const currentHouseholdId = useCurrentHouseholdId();
+  const insets = useSafeAreaInsets();
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+  const [users, setUsers] = useState<Record<string, {name: string; email: string}>>({});
+  const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
+  const [lastTapDate, setLastTapDate] = useState<Date | null>(null);
+  const [lastTapTime, setLastTapTime] = useState<number>(0);
+  
+  // Use personal mode when no household is selected
+  const isPersonalMode = !currentHouseholdId;
+
+  // Memoize expensive date calculations
+  const weekDates = useMemo(() => {
+    const start = startOfWeek(currentDate, {weekStartsOn: 1}); // Monday = 1
+    return Array.from({length: 7}, (_, i) => addDays(start, i));
+  }, [currentDate]);
+
+  const monthDates = useMemo(() => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const startDate = startOfWeek(start, {weekStartsOn: 1});
+    const endDate = addDays(startDate, 41); // 6 weeks = 42 days
+    
+    return eachDayOfInterval({start: startDate, end: endDate});
+  }, [currentDate]);
+
+  const displayDates = useMemo(() => 
+    viewMode === 'month' ? monthDates : weekDates,
+    [viewMode, monthDates, weekDates]
+  );
+
+  // Memoize user initials calculation
+  const getUserInitials = useCallback((userId: string): string => {
+    const user = users[userId];
+    if (!user) return '?';
+    
+    const names = user.name.split(' ');
+    if (names.length >= 2) {
+      return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+    }
+    return names[0][0].toUpperCase();
+  }, [users]);
+
+  // Memoize navigation function
+  const navigateWeek = useCallback((direction: 'prev' | 'next') => {
+    if (viewMode === 'month') {
+      // Navigate by month
+      const newDate = new Date(currentDate);
+      newDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
+      setCurrentDate(newDate);
+    } else {
+      // Navigate by week
+      const newDate = addDays(currentDate, direction === 'next' ? 7 : -7);
+      setCurrentDate(newDate);
+    }
+  }, [currentDate, viewMode]);
+
+  // Memoize shift filtering functions
+  const getShiftsForDate = useCallback((date: Date) => {
+    const filtered = shifts.filter(shift => {
+      // Handle Firestore Timestamp objects
+      let shiftDate: Date;
+      if (shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
+        shiftDate = new Date((shift.startTime as any).seconds * 1000);
+      } else {
+        shiftDate = new Date(shift.startTime);
+      }
+      return isSameDay(shiftDate, date);
+    });
+    
+    return filtered;
+  }, [shifts]);
+
+  const getUsersWorkingOnDate = useCallback((date: Date) => {
+    const dayShifts = getShiftsForDate(date);
+    const uniqueUsers = new Set(dayShifts.map(s => s.ownerId));
+    return Array.from(uniqueUsers);
+  }, [getShiftsForDate]);
+
+  const getDateColorIndicators = useCallback((date: Date) => {
+    if (!user) return { colors: [], count: 0 };
+    
+    const dayShifts = getShiftsForDate(date);
+    
+    // Debug for October 16
+    if (format(date, 'd') === '16' && date.getMonth() === 9) {
+      console.log('🎨 getDateColorIndicators Oct 16:', {
+        shiftsFound: dayShifts.length,
+        shifts: dayShifts.map(s => ({
+          id: s.id,
+          title: s.title,
+          startTime: s.startTime,
+          ownerId: s.ownerId,
+        })),
+        userId: user.id,
+      });
+    }
+    
+    if (dayShifts.length === 0) {
+      return { colors: [], count: 0 };
+    }
+    
+    const shiftInfo = analyzeMultiPersonShifts(dayShifts, user.id);
+    
+    // Debug for October 16
+    if (format(date, 'd') === '16' && date.getMonth() === 9) {
+      console.log('🎨 shiftInfo result:', shiftInfo);
+    }
+    
+    return {
+      colors: shiftInfo.colors,
+      count: shiftInfo.workingCount,
+      displayStrategy: shiftInfo.displayStrategy,
+    };
+  }, [getShiftsForDate, user]);
+
+  // Set up real-time data listeners and sample data
+  useEffect(() => {
+    let unsubscribeShifts: (() => void) | undefined;
+    
+    // Work in personal mode if no household selected
+    if (!currentHouseholdId) {
+      console.log('📅 Personal Mode: Using individual calendar');
+      // Set current user as the only user
+      if (user) {
+        setUsers({
+          [user.id]: {name: user.name, email: user.email}
+        });
+
+        // Set up real-time listener for personal shifts with wider date range
+        const startDate = viewMode === 'month' ? monthDates[0] : weekDates[0];
+        const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
+        
+        console.log('📅 Subscribing to personal shifts from', startDate, 'to', endDate);
+        
+        try {
+          unsubscribeShifts = shiftService.subscribeToShifts(
+            {
+              ownerId: user.id,
+              startDate: startDate,
+              endDate: endDate,
+            },
+            (updatedShifts: Shift[]) => {
+              console.log('📅 Personal shifts updated:', updatedShifts.length, 'shifts');
+              if (updatedShifts.length > 0) {
+                console.log('First shift:', updatedShifts[0]);
+              }
+              setShifts(updatedShifts);
+            },
+            (error) => {
+              console.error('Failed to load shifts:', error);
+              setShifts([]);
+            }
+          );
+          
+          return () => {
+            if (unsubscribeShifts) unsubscribeShifts();
+          };
+        } catch (error) {
+          console.error('Failed to subscribe to personal shifts:', error);
+          setShifts([]);
+        }
+      }
+      return;
+    }
+
+    // Household mode
+    console.log('📅 Household Mode:', currentHouseholdId);
+    
+    // Load household members and set up shifts listener
+    const loadHouseholdData = async () => {
+      try {
+        const members = await householdService.getHouseholdMembers(currentHouseholdId!);
+        const usersMap: Record<string, {name: string; email: string}> = {};
+        
+        members.forEach(member => {
+          usersMap[member.userId] = {
+            name: member.name || `${member.email?.split('@')[0] || 'Unknown'}`,
+            email: member.email || ''
+          };
+        });
+        
+        setUsers(usersMap);
+        
+        // Now set up shifts listener with the current users map
+        const startDate = viewMode === 'month' ? monthDates[0] : weekDates[0];
+        const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
+        
+        console.log('📅 Subscribing to household shifts from', startDate, 'to', endDate);
+        
+        try {
+          unsubscribeShifts = shiftService.listenToHouseholdShifts(
+            currentHouseholdId,
+            startDate,
+            endDate,
+            (updatedShifts: Shift[]) => {
+              console.log('📅 Household shifts updated:', updatedShifts.length, 'shifts');
+              // Filter out shifts from users who are no longer in the household
+              const filteredShifts = updatedShifts.filter(shift => {
+                const isUserInHousehold = !!usersMap[shift.ownerId];
+                if (!isUserInHousehold) {
+                  console.log('📅 Filtering out shift from user no longer in household:', shift.ownerId);
+                }
+                return isUserInHousehold;
+              });
+              console.log('📅 After filtering:', filteredShifts.length, 'shifts');
+              setShifts(filteredShifts);
+            }
+          );
+        } catch (error) {
+          console.error('Failed to subscribe to household shifts:', error);
+          setShifts([]);
+        }
+      } catch (error) {
+        console.error('Failed to load household members:', error);
+        setUsers({});
+      }
+    };
+    
+    loadHouseholdData();
+    
+    // Load note counts
+    const loadNoteCounts = async () => {
+      try {
+        const dates = viewMode === 'month' ? monthDates : weekDates;
+        const counts = await dayNoteService.getNoteCounts(
+          currentHouseholdId,
+          dates
+        );
+        setNoteCounts(counts);
+      } catch (error) {
+        console.log('Failed to load note counts:', error);
+      }
+    };
+    loadNoteCounts();
+
+    // Cleanup listener on unmount
+    return () => {
+      if (unsubscribeShifts) {
+        unsubscribeShifts();
+      }
+    };
+  }, [currentDate, currentHouseholdId, viewMode, user, weekDates, monthDates]); // Re-run when these change
+
+  // Handle date press with double-tap detection
+  const handleDatePress = (date: Date, dateString: string) => {
+    const now = Date.now();
+    const isDoubleTap = lastTapDate && isSameDay(lastTapDate, date) && now - lastTapTime < 300;
+
+    if (isDoubleTap) {
+      // Double tap - navigate to day detail with shifts for that day
+      const dayShifts = getShiftsForDate(date);
+      navigation.navigate('DayDetail', {
+        date: dateString,
+        shifts: dayShifts,
+      });
+      setLastTapDate(null);
+      setLastTapTime(0);
+    } else {
+      // Single tap - just highlight
+      setSelectedDate(date);
+      setLastTapDate(date);
+      setLastTapTime(now);
+    }
+  };
+
+  // Render month view cell (compact)
+  const renderMonthCell = ({item: date}: {item: Date}) => {
+    const dayShifts = getShiftsForDate(date);
+    const workingUsers = getUsersWorkingOnDate(date);
+    const colorInfo = getDateColorIndicators(date);
+    const isSelected = isSameDay(date, selectedDate);
+    const isCurrentDay = isToday(date);
+    const dateString = format(date, 'yyyy-MM-dd');
+    const noteCount = noteCounts[dateString] || 0;
+    const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+    
+    // Debug logging for October 16
+    if (format(date, 'd') === '16' && isCurrentMonth) {
+      console.log('📅 Month cell Oct 16:', {
+        shifts: dayShifts.length,
+        colorInfo,
+        isCurrentMonth,
+      });
+    }
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.monthCell,
+          isSelected && styles.selectedMonthCell,
+          !isCurrentMonth && styles.otherMonthCell,
+        ]}
+        onPress={() => handleDatePress(date, dateString)}>
+        <View style={[
+          styles.monthCellHeader,
+          isCurrentDay && styles.todayHeader,
+        ]}>
+          <Text style={[
+            styles.monthCellNumber,
+            isCurrentDay && styles.todayText,
+            !isCurrentMonth && styles.otherMonthText,
+          ]}>
+            {format(date, 'd')}
+          </Text>
+          {noteCount > 0 && (
+            <View style={styles.monthNoteDot} />
+          )}
+        </View>
+        
+        {/* Shift indicators */}
+        {colorInfo.count > 0 && (
+          <View style={styles.monthShiftIndicators}>
+            {(() => {
+              // Debug logging for October 16
+              if (format(date, 'd') === '16' && isCurrentMonth) {
+                console.log('🎨 Rendering indicator for Oct 16:', {
+                  displayStrategy: colorInfo.displayStrategy,
+                  colors: colorInfo.colors,
+                  count: colorInfo.count,
+                });
+              }
+              return null;
+            })()}
+            {colorInfo.displayStrategy === 'multi' ? (
+              // Show purple badge with count for 3+ people
+              <View style={[styles.multiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
+                <Text style={styles.multiPersonBadgeText}>{colorInfo.count}</Text>
+              </View>
+            ) : (
+              // Show color blocks for 1-2 people
+              <View style={styles.colorBlocksRow}>
+                {colorInfo.colors.map((color: string, index: number) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.colorBlock,
+                      { backgroundColor: color },
+                      colorInfo.colors.length === 1 && styles.colorBlockFull,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderDayColumn = ({item: date}: {item: Date}) => {
+    const dayShifts = getShiftsForDate(date);
+    const workingUsers = getUsersWorkingOnDate(date);
+    const colorInfo = getDateColorIndicators(date);
+    const isSelected = isSameDay(date, selectedDate);
+    const isCurrentDay = isToday(date);
+    const dateString = format(date, 'yyyy-MM-dd');
+    const noteCount = noteCounts[dateString] || 0;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.dayColumn,
+          isSelected && styles.selectedDayColumn,
+        ]}
+        onPress={() => handleDatePress(date, dateString)}>
+        <View style={[
+          styles.dayHeader,
+          isCurrentDay && styles.todayHeader,
+        ]}>
+          <Text style={[
+            styles.dayName,
+            isCurrentDay && styles.todayText,
+          ]}>
+            {format(date, 'EEE')}
+          </Text>
+          <View style={styles.dayNumberContainer}>
+            <Text style={[
+              styles.dayNumber,
+              isCurrentDay && styles.todayText,
+            ]}>
+              {format(date, 'd')}
+            </Text>
+            {noteCount > 0 && (
+              <View style={styles.noteBadge}>
+                <Text style={styles.noteBadgeText}>{noteCount}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        <View style={styles.shiftsContainer}>
+          {colorInfo.count === 0 ? (
+            <View style={styles.emptyDay}>
+              <Text style={styles.emptyDayText}>No shifts</Text>
+            </View>
+          ) : colorInfo.displayStrategy === 'multi' ? (
+            // Show purple badge with count for 3+ people
+            <View style={styles.weekMultiPersonContainer}>
+              <View style={[styles.weekMultiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
+                <Text style={styles.weekMultiPersonText}>
+                  {colorInfo.count} working
+                </Text>
+              </View>
+            </View>
+          ) : (
+            // Show color blocks for 1-2 people
+            <View style={styles.weekColorBlocks}>
+              {colorInfo.colors.map((color: string, index: number) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.weekColorBlock,
+                    { backgroundColor: color },
+                    colorInfo.colors.length === 1 && styles.colorBlockFull,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      {/* Header with navigation */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigateWeek('prev')}
+          accessible={true}
+          accessibilityLabel={`Go to previous ${viewMode}`}
+          accessibilityRole="button"
+          accessibilityHint={`Navigate to ${viewMode === 'month' ? 'previous month' : 'previous week'}`}>
+          <Text style={styles.navButtonText}>‹</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <Text style={styles.monthYear}>
+            {format(currentDate, 'MMMM yyyy')}
+          </Text>
+          <View style={styles.viewModeSelector}>
+            <TouchableOpacity
+              style={[
+                styles.viewModeButton,
+                viewMode === 'week' && styles.activeViewMode,
+              ]}
+              onPress={() => setViewMode('week')}
+              accessible={true}
+              accessibilityLabel="Week view"
+              accessibilityRole="button"
+              accessibilityState={{selected: viewMode === 'week'}}
+              accessibilityHint="Switch to week view">
+              <Text style={[
+                styles.viewModeText,
+                viewMode === 'week' && styles.activeViewModeText,
+              ]}>
+                Week
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.viewModeButton,
+                viewMode === 'month' && styles.activeViewMode,
+              ]}
+              onPress={() => setViewMode('month')}
+              accessible={true}
+              accessibilityLabel="Month view"
+              accessibilityRole="button"
+              accessibilityState={{selected: viewMode === 'month'}}
+              accessibilityHint="Switch to month view">
+              <Text style={[
+                styles.viewModeText,
+                viewMode === 'month' && styles.activeViewModeText,
+              ]}>
+                Month
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigateWeek('next')}
+          accessible={true}
+          accessibilityLabel={`Go to next ${viewMode}`}
+          accessibilityRole="button"
+          accessibilityHint={`Navigate to ${viewMode === 'month' ? 'next month' : 'next week'}`}>
+          <Text style={styles.navButtonText}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Calendar Grid */}
+      <View style={styles.calendarContainer}>
+        {viewMode === 'month' ? (
+          <>
+            {/* Month view header */}
+            <View style={styles.monthHeaderRow}>
+              {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                <View key={day} style={styles.monthHeaderCell}>
+                  <Text style={styles.monthHeaderText}>{day}</Text>
+                </View>
+              ))}
+            </View>
+            {/* Month grid */}
+            <FlatList
+              data={displayDates}
+              renderItem={renderMonthCell}
+              keyExtractor={item => item.toISOString()}
+              numColumns={7}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.monthGrid}
+            />
+          </>
+        ) : (
+          <FlatList
+            data={displayDates}
+            renderItem={renderDayColumn}
+            keyExtractor={item => item.toISOString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.weekContainer}
+          />
+        )}
+      </View>
+
+      {/* Add Shift Button */}
+      <TouchableOpacity
+        style={[
+          styles.addButton,
+          {marginBottom: Math.max(20, insets.bottom + 10)}, // Ensure button stays above navigation bar
+        ]}
+        onPress={() => navigation.navigate('AddShift', {
+          date: selectedDate,
+        })}
+        accessible={true}
+        accessibilityLabel="Add new shift"
+        accessibilityRole="button"
+        accessibilityHint={`Create a new shift for ${format(selectedDate, 'MMMM d, yyyy')}`}>
+        <Text style={styles.addButtonText}>+ Add Shift</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0F0F23',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#1A1A2E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C2C3E',
+  },
+  navButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6366F1',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  monthYear: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  viewModeSelector: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+  },
+  viewModeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  activeViewMode: {
+    backgroundColor: '#6366F1',
+  },
+  viewModeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#A1A1AA',
+  },
+  activeViewModeText: {
+    color: '#FFFFFF',
+  },
+  calendarContainer: {
+    flex: 1,
+  },
+  weekContainer: {
+    paddingHorizontal: 10,
+  },
+  dayColumn: {
+    width: (Dimensions.get('window').width - 40) / 7,
+    marginHorizontal: 2,
+    backgroundColor: '#1A1A2E',
+  },
+  selectedDayColumn: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+  },
+  dayHeader: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C2C3E',
+  },
+  todayHeader: {
+    backgroundColor: '#6366F1',
+    borderRadius: 8,
+  },
+  dayName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#A1A1AA',
+    textTransform: 'uppercase',
+  },
+  dayNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  todayText: {
+    color: '#FFFFFF',
+  },
+  shiftsContainer: {
+    flex: 1,
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyDay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyDayText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  weekColorBlocks: {
+    width: '100%',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  weekColorBlock: {
+    height: 60,
+    borderRadius: 8,
+    width: '100%',
+  },
+  weekMultiPersonContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weekMultiPersonBadge: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  weekMultiPersonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shiftCard: {
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 4,
+    minHeight: 44,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  shiftHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  shiftTypeIndicator: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  shiftTypeIcon: {
+    fontSize: 12,
+  },
+  userInitials: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  initialsText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  shiftTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  shiftTime: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    fontWeight: '500',
+  },
+  addButton: {
+    backgroundColor: '#6366F1',
+    margin: 20,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dayNumberContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  noteBadge: {
+    backgroundColor: '#6366F1',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  multiPersonCard: {
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 4,
+    minHeight: 44,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  splitColorContainer: {
+    flexDirection: 'row',
+    height: 30,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  splitColorHalf: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitInitials: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  multiPersonText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  multiPersonBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  multiPersonBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  quickActionsBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#1A1A2E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A3E',
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#6366F1',
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  quickActionIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Month view styles
+  monthHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#1A1A2E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A3E',
+    paddingVertical: 8,
+  },
+  monthHeaderCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  monthHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#A1A1AA',
+  },
+  monthGrid: {
+    padding: 4,
+  },
+  monthCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    padding: 4,
+    borderWidth: 0.5,
+    borderColor: '#2A2A3E',
+    backgroundColor: '#1A1A2E',
+  },
+  selectedMonthCell: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: '#6366F1',
+  },
+  otherMonthCell: {
+    backgroundColor: '#0F0F23',
+    opacity: 0.5,
+  },
+  monthCellHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  monthCellNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  otherMonthText: {
+    color: '#6B7280',
+  },
+  monthNoteDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#6366F1',
+  },
+  monthShiftIndicators: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  colorBlocksRow: {
+    flexDirection: 'row',
+    width: '100%',
+    height: 8,
+    gap: 2,
+  },
+  colorBlock: {
+    flex: 1,
+    borderRadius: 2,
+    minWidth: 8,
+  },
+  colorBlockFull: {
+    width: '100%',
+  },
+  monthShiftDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  monthShiftMore: {
+    fontSize: 8,
+    color: '#A1A1AA',
+    fontWeight: '600',
+  },
+});

@@ -1,0 +1,812 @@
+import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {Alert, Platform} from 'react-native';
+import {Notification} from '@/types';
+import {COLLECTIONS} from '@/config/firebase.config';
+
+class NotificationService {
+  private initialized = false;
+  private unsubscribeForeground: (() => void) | null = null;
+
+  /**
+   * Initialize notification service
+   */
+  async initialize(userId: string): Promise<void> {
+    if (this.initialized) return;
+
+    try {
+      // Request permission
+      const hasPermission = await this.requestPermission();
+      
+      if (hasPermission) {
+        // Get and store FCM token
+        const token = await this.getFCMToken();
+        if (token) {
+          await this.storeFCMToken(userId, token);
+        }
+
+        // Setup message handlers
+        this.setupBackgroundHandler();
+        this.unsubscribeForeground = this.setupForegroundListener();
+
+        // Listen for token refresh
+        messaging().onTokenRefresh(async (newToken: string) => {
+          console.log('FCM Token refreshed:', newToken);
+          await this.storeFCMToken(userId, newToken);
+        });
+
+        this.initialized = true;
+        console.log('Notification service initialized successfully');
+      } else {
+        console.warn('Notification permission denied');
+      }
+    } catch (error) {
+      console.error('Failed to initialize notification service:', error);
+    }
+  }
+
+  /**
+   * Cleanup notification service
+   */
+  cleanup(): void {
+    if (this.unsubscribeForeground) {
+      this.unsubscribeForeground();
+      this.unsubscribeForeground = null;
+    }
+    this.initialized = false;
+  }
+
+  /**
+   * Request permission for push notifications with user-friendly messaging
+   */
+  async requestPermission(): Promise<boolean> {
+    try {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (enabled) {
+        console.log('Authorization status:', authStatus);
+        return true;
+      } else {
+        // Show user-friendly message about enabling notifications
+        Alert.alert(
+          'Notifications Disabled',
+          'Enable notifications to receive shift updates, invitations, and important reminders. You can change this in Settings later.',
+          [
+            {text: 'Maybe Later', style: 'cancel'},
+            {text: 'Settings', onPress: () => this.openNotificationSettings()},
+          ]
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to request notification permission:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Open device notification settings (platform-specific)
+   */
+  private openNotificationSettings(): void {
+    if (Platform.OS === 'ios') {
+      // On iOS, we can only prompt user to go to Settings manually
+      Alert.alert(
+        'Enable Notifications',
+        'Go to Settings > LinkShift > Notifications and turn on Allow Notifications.',
+        [{text: 'OK'}]
+      );
+    } else {
+      // On Android, we could use Linking to open app settings
+      Alert.alert(
+        'Enable Notifications',
+        'Go to Settings > Apps > LinkShift > Notifications and enable notifications.',
+        [{text: 'OK'}]
+      );
+    }
+  }
+
+  /**
+   * Check current notification permission status
+   */
+  async checkPermission(): Promise<'authorized' | 'denied' | 'not-determined' | 'provisional'> {
+    try {
+      const authStatus = await messaging().hasPermission();
+      
+      switch (authStatus) {
+        case messaging.AuthorizationStatus.AUTHORIZED:
+          return 'authorized';
+        case messaging.AuthorizationStatus.DENIED:
+          return 'denied';
+        case messaging.AuthorizationStatus.NOT_DETERMINED:
+          return 'not-determined';
+        case messaging.AuthorizationStatus.PROVISIONAL:
+          return 'provisional';
+        default:
+          return 'denied';
+      }
+    } catch (error) {
+      console.error('Failed to check notification permission:', error);
+      return 'denied';
+    }
+  }
+
+  /**
+   * Get FCM token for this device
+   */
+  async getFCMToken(): Promise<string | null> {
+    try {
+      const token = await messaging().getToken();
+      console.log('FCM Token:', token);
+      return token;
+    } catch (error) {
+      console.error('Failed to get FCM token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Store FCM token for user
+   */
+  async storeFCMToken(userId: string, token: string): Promise<void> {
+    try {
+      await firestore()
+        .collection(COLLECTIONS.USERS)
+        .doc(userId)
+        .update({
+          fcmTokens: firestore.FieldValue.arrayUnion(token),
+          lastTokenUpdate: new Date(),
+        });
+    } catch (error) {
+      console.error('Failed to store FCM token:', error);
+    }
+  }
+
+  /**
+   * Send notification to household members
+   */
+  async sendToHousehold(
+    householdId: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>
+  ): Promise<void> {
+    try {
+      // TODO: Implement server-side function to send notifications
+      // This would typically be done via a Cloud Function
+      console.log('Sending notification to household:', householdId, title, body);
+      
+      // For now, just create notification records in Firestore
+      const household = await firestore()
+        .collection(COLLECTIONS.HOUSEHOLDS)
+        .doc(householdId)
+        .get();
+      
+      if (!household.exists) {
+        throw new Error('Household not found');
+      }
+      
+      const householdData = household.data();
+      const members = householdData?.members || [];
+      
+      // Create notification records for each member
+      const batch = firestore().batch();
+      
+      members.forEach((memberId: string) => {
+        const notificationRef = firestore().collection(COLLECTIONS.NOTIFICATIONS).doc();
+        const notification: Notification = {
+          id: notificationRef.id,
+          userId: memberId,
+          householdId,
+          type: 'shift_created', // This should be dynamic
+          title,
+          body,
+          data: data || {},
+          read: false,
+          createdAt: new Date(),
+        };
+        
+        batch.set(notificationRef, notification);
+      });
+      
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+    }
+  }
+
+  /**
+   * Setup foreground message listener
+   */
+  setupForegroundListener(): () => void {
+    return messaging().onMessage(async (remoteMessage: any) => {
+      console.log('Received foreground message:', remoteMessage);
+      
+      if (remoteMessage.notification) {
+        // Show local notification when app is in foreground
+        this.showLocalNotification(
+          remoteMessage.notification.title || 'LinkShift',
+          remoteMessage.notification.body || 'New notification',
+          remoteMessage.data
+        );
+      }
+
+      // Handle data-only messages
+      if (remoteMessage.data) {
+        await this.handleNotificationData(remoteMessage.data);
+      }
+    });
+  }
+
+  /**
+   * Setup background message handler
+   */
+  setupBackgroundHandler(): void {
+    messaging().setBackgroundMessageHandler(async (remoteMessage: any) => {
+      console.log('Received background message:', remoteMessage);
+      
+      // Process the message when app is in background
+      if (remoteMessage.data) {
+        await this.handleNotificationData(remoteMessage.data);
+      }
+    });
+  }
+
+  /**
+   * Show local notification (fallback for foreground)
+   */
+  private showLocalNotification(title: string, body: string, data?: any): void {
+    Alert.alert(
+      title,
+      body,
+      [
+        {text: 'Dismiss', style: 'cancel'},
+        {
+          text: 'View', 
+          onPress: () => this.handleNotificationTap(data)
+        }
+      ]
+    );
+  }
+
+  /**
+   * Handle notification data for app state updates
+   */
+  private async handleNotificationData(data: any): Promise<void> {
+    try {
+      const notificationType = data.type;
+      
+      switch (notificationType) {
+        case 'shift_created':
+        case 'shift_updated':
+        case 'shift_deleted':
+          // Trigger shift data refresh
+          console.log('Shift data changed, should refresh calendar');
+          break;
+          
+        case 'invitation_received':
+          // Handle invitation notifications
+          console.log('New invitation received');
+          break;
+          
+        case 'conflict_detected':
+          // Handle conflict notifications
+          console.log('Conflict detected, should refresh calendar');
+          break;
+          
+        default:
+          console.log('Unknown notification type:', notificationType);
+      }
+    } catch (error) {
+      console.error('Error handling notification data:', error);
+    }
+  }
+
+  /**
+   * Handle notification tap (navigation)
+   */
+  private handleNotificationTap(data?: any): void {
+    try {
+      if (!data) return;
+
+      const notificationType = data.type;
+      
+      switch (notificationType) {
+        case 'shift_created':
+        case 'shift_updated':
+          // Navigate to shift detail or calendar
+          console.log('Should navigate to shift:', data.shiftId);
+          break;
+          
+        case 'invitation_received':
+          // Navigate to invitation accept screen
+          console.log('Should navigate to invitation:', data.inviteCode);
+          break;
+          
+        case 'conflict_detected':
+          // Navigate to conflict resolution
+          console.log('Should navigate to conflicts');
+          break;
+          
+        default:
+          // Navigate to notifications screen
+          console.log('Should navigate to notifications');
+      }
+    } catch (error) {
+      console.error('Error handling notification tap:', error);
+    }
+  }
+
+  /**
+   * Get notifications for user
+   */
+  async getUserNotifications(userId: string): Promise<Notification[]> {
+    try {
+      const snapshot = await firestore()
+        .collection(COLLECTIONS.NOTIFICATIONS)
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get();
+
+      return snapshot.docs.map((doc: FirebaseFirestoreTypes.QueryDocumentSnapshot) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Notification[];
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Mark notification as read
+   */
+  async markAsRead(notificationId: string): Promise<void> {
+    try {
+      await firestore()
+        .collection(COLLECTIONS.NOTIFICATIONS)
+        .doc(notificationId)
+        .update({
+          read: true,
+        });
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  }
+
+  /**
+   * Listen to user notifications
+   */
+  listenToUserNotifications(
+    userId: string,
+    callback: (notifications: Notification[]) => void
+  ): () => void {
+    return firestore()
+      .collection(COLLECTIONS.NOTIFICATIONS)
+      .where('userId', '==', userId)
+      .where('read', '==', false)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot((snapshot: any) => {
+        const notifications = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Notification[];
+        callback(notifications);
+      });
+  }
+
+  /**
+   * Trigger notification for shift creation
+   */
+  async notifyShiftCreated(
+    householdId: string,
+    shiftId: string,
+    shiftTitle: string,
+    creatorName: string,
+    excludeUserId?: string
+  ): Promise<void> {
+    const title = 'New Shift Added';
+    const body = `${creatorName} added "${shiftTitle}"`;
+    const data = {
+      type: 'shift_created',
+      shiftId,
+      householdId,
+    };
+
+    await this.sendToHouseholdMembers(householdId, title, body, data, excludeUserId);
+  }
+
+  /**
+   * Trigger notification for multiple shifts creation (pattern)
+   */
+  async notifyMultipleShiftsCreated(
+    householdId: string,
+    creatorName: string,
+    shiftCount: number,
+    excludeUserId?: string
+  ): Promise<void> {
+    const title = 'Shifts Added';
+    const body = shiftCount > 1 
+      ? `${creatorName} has added ${shiftCount} shifts`
+      : `${creatorName} has added a shift`;
+    const data = {
+      type: 'shifts_created',
+      shiftCount,
+      householdId,
+    };
+
+    await this.sendToHouseholdMembers(householdId, title, body, data, excludeUserId);
+  }
+
+  /**
+   * Trigger notification for shift updates
+   */
+  async notifyShiftUpdated(
+    householdId: string,
+    shiftId: string,
+    shiftTitle: string,
+    editorName: string,
+    excludeUserId?: string
+  ): Promise<void> {
+    const title = 'Shift Updated';
+    const body = `${editorName} updated "${shiftTitle}"`;
+    const data = {
+      type: 'shift_updated',
+      shiftId,
+      householdId,
+    };
+
+    await this.sendToHouseholdMembers(householdId, title, body, data, excludeUserId);
+  }
+
+  /**
+   * Trigger notification for shift deletion
+   */
+  async notifyShiftDeleted(
+    householdId: string,
+    shiftTitle: string,
+    deleterName: string,
+    excludeUserId?: string
+  ): Promise<void> {
+    const title = 'Shift Canceled';
+    const body = `${deleterName} canceled "${shiftTitle}"`;
+    const data = {
+      type: 'shift_deleted',
+      householdId,
+    };
+
+    await this.sendToHouseholdMembers(householdId, title, body, data, excludeUserId);
+  }
+
+  /**
+   * Trigger notification for invitations
+   */
+  async notifyInvitationSent(
+    inviteCode: string,
+    householdName: string,
+    inviterName: string,
+    recipientUserId?: string
+  ): Promise<void> {
+    const title = 'Household Invitation';
+    const body = `${inviterName} invited you to join "${householdName}"`;
+    const data = {
+      type: 'invitation_received',
+      inviteCode,
+      householdName,
+    };
+
+    if (recipientUserId) {
+      await this.sendToUser(recipientUserId, title, body, data);
+    }
+  }
+
+  /**
+   * Trigger notification when invitation is accepted
+   */
+  async notifyInvitationAccepted(
+    householdId: string,
+    newMemberName: string,
+    householdName: string
+  ): Promise<void> {
+    const title = 'New Member Joined';
+    const body = `${newMemberName} has joined "${householdName}"`;
+    const data = {
+      type: 'member_joined',
+      householdId,
+      newMemberName,
+    };
+
+    // Notify all household members about the new member
+    await this.sendToHouseholdMembers(householdId, title, body, data);
+  }
+
+  /**
+   * Trigger notification for conflicts
+   */
+  async notifyConflictDetected(
+    householdId: string,
+    conflictDescription: string,
+    affectedUserIds: string[]
+  ): Promise<void> {
+    const title = 'Schedule Conflict Detected';
+    const body = conflictDescription;
+    const data = {
+      type: 'conflict_detected',
+      householdId,
+    };
+
+    // Only notify affected users
+    for (const userId of affectedUserIds) {
+      await this.sendToUser(userId, title, body, data);
+    }
+  }
+
+  /**
+   * Trigger reminder notifications
+   */
+  async sendShiftReminder(
+    userId: string,
+    shiftId: string,
+    shiftTitle: string,
+    minutesBefore: number
+  ): Promise<void> {
+    const title = 'Shift Reminder';
+    const body = `"${shiftTitle}" starts in ${minutesBefore} minutes`;
+    const data = {
+      type: 'shift_reminder',
+      shiftId,
+      minutesBefore,
+    };
+
+    await this.sendToUser(userId, title, body, data);
+  }
+
+  /**
+   * Send notification to specific user
+   */
+  private async sendToUser(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>
+  ): Promise<void> {
+    try {
+      // Create notification record
+      const notificationRef = firestore().collection(COLLECTIONS.NOTIFICATIONS).doc();
+      const notification: Notification = {
+        id: notificationRef.id,
+        userId,
+        householdId: data?.householdId || '',
+        type: (data?.type as any) || 'message',
+        title,
+        body,
+        data: data || {},
+        read: false,
+        createdAt: new Date(),
+      };
+
+      await notificationRef.set(notification);
+      
+      // TODO: Trigger actual push notification via Cloud Function
+      console.log(`Notification created for user ${userId}: ${title}`);
+      
+    } catch (error) {
+      console.error('Failed to send notification to user:', error);
+    }
+  }
+
+  /**
+   * Send notification to household members (excluding specified user)
+   */
+  private async sendToHouseholdMembers(
+    householdId: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>,
+    excludeUserId?: string
+  ): Promise<void> {
+    try {
+      // Get household members
+      const household = await firestore()
+        .collection(COLLECTIONS.HOUSEHOLDS)
+        .doc(householdId)
+        .get();
+      
+      if (!household.exists) {
+        throw new Error('Household not found');
+      }
+      
+      const householdData = household.data();
+      const members = householdData?.members || [];
+      
+      // Create notification records for each member (except excluded)
+      const batch = firestore().batch();
+      
+      members.forEach((memberId: string) => {
+        if (excludeUserId && memberId === excludeUserId) {
+          return; // Skip the excluded user
+        }
+
+        const notificationRef = firestore().collection(COLLECTIONS.NOTIFICATIONS).doc();
+        const notification: Notification = {
+          id: notificationRef.id,
+          userId: memberId,
+          householdId,
+          type: (data?.type as any) || 'message',
+          title,
+          body,
+          data: data || {},
+          read: false,
+          createdAt: new Date(),
+        };
+        
+        batch.set(notificationRef, notification);
+      });
+      
+      await batch.commit();
+      
+      // TODO: Trigger actual push notifications via Cloud Function
+      console.log(`Notifications created for household ${householdId}: ${title}`);
+      
+    } catch (error) {
+      console.error('Failed to send notifications to household:', error);
+    }
+  }
+
+  /**
+   * Get unread notification count
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    try {
+      const snapshot = await firestore()
+        .collection(COLLECTIONS.NOTIFICATIONS)
+        .where('userId', '==', userId)
+        .where('read', '==', false)
+        .get();
+
+      return snapshot.size;
+    } catch (error) {
+      console.error('Failed to get unread count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Mark all notifications as read for user
+   */
+  async markAllAsRead(userId: string): Promise<void> {
+    try {
+      const snapshot = await firestore()
+        .collection(COLLECTIONS.NOTIFICATIONS)
+        .where('userId', '==', userId)
+        .where('read', '==', false)
+        .get();
+
+      const batch = firestore().batch();
+      
+      snapshot.docs.forEach((doc: any) => {
+        batch.update(doc.ref, {read: true});
+      });
+      
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a notification
+   */
+  async deleteNotification(notificationId: string): Promise<void> {
+    try {
+      await firestore()
+        .collection(COLLECTIONS.NOTIFICATIONS)
+        .doc(notificationId)
+        .delete();
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Notify household members of tier downgrade warning (7-day grace period)
+   */
+  async notifyHouseholdDowngrade(
+    householdId: string,
+    householdName: string,
+    currentTier: string,
+    downgradeTier: string,
+    excessMembers: number,
+    adminName: string
+  ): Promise<void> {
+    try {
+      const tierMap: Record<string, string> = {
+        free: '2',
+        standard: '4',
+        premium: 'unlimited',
+      };
+
+      const title = '📉 Household Tier Downgrade Warning';
+      const body = `${householdName} will be downgraded from ${currentTier} tier (${tierMap[currentTier]} members) to ${downgradeTier} tier (${tierMap[downgradeTier]} members) in 7 days. ${excessMembers} excess member(s) will be removed.`;
+      
+      const data = {
+        type: 'household_downgrade_warning',
+        householdId,
+        householdName,
+        currentTier,
+        downgradeTier,
+        excessMembers,
+        adminName,
+      };
+
+      await this.sendToHouseholdMembers(householdId, title, body, data);
+      console.log(`📧 Sent downgrade warning to all members of ${householdName}`);
+    } catch (error) {
+      console.error('Failed to notify household downgrade:', error);
+      // Don't throw - notification failure should not block subscription operations
+    }
+  }
+
+  /**
+   * Notify individual member that they were removed due to tier violation
+   */
+  async notifyExcessMemberRemoval(
+    userId: string,
+    householdName: string,
+    tierLimit: number,
+    tier: string
+  ): Promise<void> {
+    try {
+      const title = '👋 Removed from Household';
+      const body = `You were removed from "${householdName}" because the household exceeded its ${tier} tier member limit (${tierLimit} members). The household admin can reinvite you if they upgrade their plan.`;
+      
+      const data = {
+        type: 'member_removed_due_to_tier',
+        householdName,
+        tierLimit,
+        tier,
+      };
+
+      await this.sendToUser(userId, title, body, data);
+      console.log(`📧 Notified ${userId} of removal from ${householdName}`);
+    } catch (error) {
+      console.error('Failed to notify member removal:', error);
+      // Don't throw - notification failure should not block removal
+    }
+  }
+
+  /**
+   * Notify admin of subscription cancellation impact
+   */
+  async notifySubscriptionCanceled(
+    adminId: string,
+    affectedHouseholds: Array<{name: string; memberCount: number; tierLimit: number}>
+  ): Promise<void> {
+    try {
+      const householdDetails = affectedHouseholds
+        .map(h => `• ${h.name}: ${h.memberCount}/${h.tierLimit} members`)
+        .join('\n');
+
+      const title = '🛑 Subscription Canceled';
+      const body = `Your subscription has been canceled. The following households will be downgraded:\n\n${householdDetails}\n\nYou have 7 days to restore your subscription or members will be removed.`;
+      
+      const data = {
+        type: 'subscription_canceled',
+        affectedHouseholds: JSON.stringify(affectedHouseholds),
+      };
+
+      await this.sendToUser(adminId, title, body, data);
+      console.log(`📧 Notified admin ${adminId} of subscription cancellation`);
+    } catch (error) {
+      console.error('Failed to notify subscription cancellation:', error);
+      // Don't throw - notification failure should not block subscription operations
+    }
+  }
+}
+
+export const notificationService = new NotificationService();

@@ -1,0 +1,607 @@
+/**
+ * Plan Comparison Screen
+ * Shows all available subscription plans with features and pricing
+ * 
+ * CRITICAL TODO FOR PRODUCTION:
+ * ================================
+ * 1. PAYMENT INTEGRATION (Lines ~140-160)
+ *    - Integrate Stripe, RevenueCat, or payment gateway
+ *    - MUST verify payment success BEFORE updating subscription tier
+ *    - Handle payment failures gracefully
+ *    - Implement webhooks for payment status updates
+ * 
+ * 2. SUBSCRIPTION TIER VALIDATION
+ *    - Backend validation to prevent unauthorized tier changes
+ *    - Cloud Functions to verify payment before Firestore updates
+ *    - Security rules to prevent client-side tier manipulation
+ * 
+ * 3. BILLING CYCLE MANAGEMENT
+ *    - Implement proper prorated billing for upgrades
+ *    - Handle downgrades at end of billing period (not immediate)
+ *    - Track payment history and invoices
+ * 
+ * 4. ERROR HANDLING
+ *    - Payment declined scenarios
+ *    - Subscription expiration
+ *    - Failed renewals
+ *    - Refund processing
+ * 
+ * CURRENT STATE: TEST MODE ONLY
+ * - No payment processing
+ * - Direct Firestore updates (UNSAFE for production)
+ * - For development/testing purposes only
+ */
+
+import React, {useState, useEffect} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import {useNavigation, useFocusEffect} from '@react-navigation/native';
+import {PricingInfo, subscriptionService, Subscription, SubscriptionTier} from '@/services/subscription.service';
+import {spacing, typography, borderRadius} from '@/utils/responsive';
+import {useAuth} from '@/contexts/AuthContext';
+import {showAlert, showConfirm} from '@/utils/alert';
+
+export const PlanComparisonScreen: React.FC = () => {
+  const navigation = useNavigation();
+  const {user} = useAuth();
+  const [currentTier, setCurrentTier] = useState<SubscriptionTier>('free');
+  const [loading, setLoading] = useState(true);
+  
+  // Reload subscription when screen comes into focus (e.g., after payment success)
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCurrentSubscription();
+    }, [user])
+  );
+
+  const loadCurrentSubscription = async () => {
+    if (!user) {
+      console.log('No user found');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      console.log('Loading subscription for user:', user.id);
+      const subscription = await subscriptionService.getUserSubscription(user.id);
+      console.log('Loaded subscription:', subscription);
+      if (subscription) {
+        // Handle both 'tier' and 'plan' properties (service may return either)
+        const tierValue = (subscription as any).tier || (subscription as any).plan || 'free';
+        console.log('Setting current tier to:', tierValue);
+        setCurrentTier(tierValue as SubscriptionTier);
+      }
+    } catch (error) {
+      console.error('Failed to load subscription:', error);
+      // Default to free tier on error
+      setCurrentTier('free');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Inline pricing data as workaround for bundler issue
+  const plans: PricingInfo[] = [
+    {
+      tier: 'free',
+      name: 'Free',
+      priceMonthly: 0,
+      priceYearly: 0,
+      currency: 'GBP',
+      features: [
+        '1 household',
+        'Up to 2 members',
+        'Unlimited shifts & notes',
+        'All core features',
+        'Banner ads shown',
+      ],
+    },
+    {
+      tier: 'standard',
+      name: 'Standard',
+      priceMonthly: 2.99,
+      priceYearly: 29.99,
+      currency: 'GBP',
+      features: [
+        '1 household',
+        'Up to 4 members',
+        'Unlimited shifts & notes',
+        'All core features',
+        'Ad-free for admin',
+      ],
+    },
+    {
+      tier: 'premium',
+      name: 'Premium',
+      priceMonthly: 7.99,
+      priceYearly: 79.99,
+      currency: 'GBP',
+      features: [
+        'Unlimited households',
+        'Up to 12 members per household',
+        'Unlimited shifts & notes',
+        'All core features',
+        'Completely ad-free',
+        'Calendar export',
+        'Priority support',
+      ],
+    },
+  ];
+
+  const handleSelectPlan = async (plan: PricingInfo) => {
+    console.log('[PlanComparison] Button pressed for plan:', plan.tier);
+    console.log('[PlanComparison] Current tier:', currentTier);
+    
+    if (!user) {
+      showAlert('Error', 'You must be logged in to change subscription plans.');
+      return;
+    }
+    
+    // Check if this is the current plan
+    if (plan.tier === currentTier) {
+      console.log('[PlanComparison] This is current plan, showing alert');
+      showAlert('Current Plan', 'This is your current subscription plan.');
+      return;
+    }
+    
+    // Determine if upgrade or downgrade
+    const tierOrder = {free: 0, standard: 1, premium: 2};
+    const isUpgrade = tierOrder[plan.tier] > tierOrder[currentTier];
+    const isDowngrade = tierOrder[plan.tier] < tierOrder[currentTier];
+    
+    console.log('[PlanComparison] isUpgrade:', isUpgrade, 'isDowngrade:', isDowngrade);
+    
+    if (isDowngrade) {
+      // Handle downgrade - FREE (no payment processing needed)
+      console.log('[PlanComparison] Showing downgrade confirmation');
+      showConfirm(
+        'Downgrade Plan',
+        `Are you sure you want to downgrade to ${plan.name}?\n\nYou'll lose access to some features at the end of your billing period.\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
+        async () => {
+          try {
+            console.log('[PlanComparison] User confirmed downgrade, updating Firestore...');
+            setLoading(true);
+            
+            // Update subscription in Firestore
+            await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
+            
+            console.log('[PlanComparison] Downgrade successful, reloading subscription...');
+            await loadCurrentSubscription();
+            
+            showAlert(
+              'Downgrade Scheduled',
+              `Your plan will be downgraded to ${plan.name} at the end of your current billing period.\n\nYou'll continue to have ${currentTier} access until then.`
+            );
+          } catch (error) {
+            console.error('[PlanComparison] Downgrade failed:', error);
+            showAlert('Error', 'Failed to downgrade subscription. Please try again.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      );
+    } else if (isUpgrade) {
+      // Handle upgrade - REQUIRES PAYMENT
+      console.log('[PlanComparison] Showing upgrade confirmation');
+      
+      const monthlyPrice = plan.priceMonthly.toFixed(2);
+      const yearlyPrice = plan.priceYearly.toFixed(2);
+      
+      showConfirm(
+        'Upgrade Plan',
+        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year (save 16%)\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}\n\n⚠️ PAYMENT PROCESSING NOT YET INTEGRATED\nThis is a test - no charges will be made.`,
+        async () => {
+          try {
+            console.log('[PlanComparison] User confirmed upgrade, processing...');
+            setLoading(true);
+            
+            // TODO: CRITICAL - Integrate payment processor here
+            // Options: Stripe, RevenueCat, or direct payment gateway
+            // MUST verify payment success before updating tier
+            
+            // For now (TESTING ONLY): Update tier without payment
+            console.warn('[PlanComparison] ⚠️ UPGRADING WITHOUT PAYMENT - TESTING ONLY');
+            await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
+            
+            console.log('[PlanComparison] Upgrade successful, reloading subscription...');
+            await loadCurrentSubscription();
+            
+            showAlert(
+              'Upgrade Successful',
+              `Welcome to ${plan.name}!\n\nYour subscription has been upgraded.\n\n⚠️ TEST MODE - No payment was processed.`
+            );
+          } catch (error) {
+            console.error('[PlanComparison] Upgrade failed:', error);
+            showAlert('Error', 'Failed to upgrade subscription. Please try again.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      );
+    }
+  };
+
+  const getButtonText = (planTier: SubscriptionTier): string => {
+    console.log('getButtonText - planTier:', planTier, 'currentTier:', currentTier);
+    if (planTier === currentTier) return 'Current Plan';
+    
+    const tierOrder = {free: 0, standard: 1, premium: 2};
+    const isUpgrade = tierOrder[planTier] > tierOrder[currentTier];
+    
+    if (isUpgrade) return 'Upgrade';
+    return 'Downgrade';
+  };
+
+  const getButtonStyle = (planTier: SubscriptionTier) => {
+    console.log('getButtonStyle - planTier:', planTier, 'currentTier:', currentTier);
+    if (planTier === currentTier) return styles.currentPlanButton;
+    
+    const tierOrder = {free: 0, standard: 1, premium: 2};
+    const isUpgrade = tierOrder[planTier] > tierOrder[currentTier];
+    
+    if (isUpgrade) return styles.upgradeButton;
+    return styles.downgradeButton;
+  };
+
+  const getPlanStyle = (tier: string) => {
+    if (tier === 'premium') return styles.premiumPlan;
+    if (tier === 'standard') return styles.standardPlan;
+    return styles.freePlan;
+  };
+
+  const getPlanHeaderStyle = (tier: string) => {
+    if (tier === 'premium') return styles.premiumHeader;
+    if (tier === 'standard') return styles.standardHeader;
+    return styles.freeHeader;
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Choose Your Plan</Text>
+          <Text style={styles.subtitle}>
+            All plans include unlimited shifts and notes. Upgrade for more households and members!
+          </Text>
+          
+          {/* TEST MODE WARNING */}
+          <View style={{backgroundColor: '#FFA500', padding: 12, borderRadius: 8, marginTop: 16}}>
+            <Text style={{color: '#000', fontWeight: 'bold', textAlign: 'center'}}>
+              ⚠️ TEST MODE - NO PAYMENTS PROCESSED
+            </Text>
+            <Text style={{color: '#000', fontSize: 12, textAlign: 'center', marginTop: 4}}>
+              Payment integration required before production use
+            </Text>
+          </View>
+        </View>
+
+        {/* Plans */}
+        <View style={styles.plansContainer}>
+          {plans.map((plan) => (
+            <View key={plan.tier} style={[styles.planCard, getPlanStyle(plan.tier)]}>
+              {/* Badge for Premium or Current Plan */}
+              {plan.tier === 'premium' && plan.tier !== currentTier && (
+                <View style={styles.popularBadge}>
+                  <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
+                </View>
+              )}
+              {plan.tier === currentTier && (
+                <View style={styles.currentPlanBadge}>
+                  <Text style={styles.currentPlanBadgeText}>CURRENT PLAN</Text>
+                </View>
+              )}
+
+              {/* Plan Header */}
+              <View style={[styles.planHeader, getPlanHeaderStyle(plan.tier)]}>
+                <Text style={styles.planName}>{plan.name}</Text>
+                <View style={styles.priceContainer}>
+                  {plan.priceMonthly > 0 ? (
+                    <>
+                      <Text style={styles.currency}>£</Text>
+                      <Text style={styles.price}>{plan.priceMonthly.toFixed(2)}</Text>
+                      <Text style={styles.period}>/month</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.priceFREE}>FREE</Text>
+                  )}
+                </View>
+                {plan.priceYearly > 0 && (
+                  <Text style={styles.yearlyPrice}>
+                    or £{plan.priceYearly.toFixed(2)}/year (save 16%)
+                  </Text>
+                )}
+              </View>
+
+              {/* Features */}
+              <View style={styles.featuresContainer}>
+                {plan.features.map((feature, index) => (
+                  <View key={index} style={styles.featureItem}>
+                    <Text style={styles.featureIcon}>✓</Text>
+                    <Text style={styles.featureText}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Select Button */}
+              <TouchableOpacity
+                style={[styles.selectButton, getButtonStyle(plan.tier)]}
+                onPress={() => handleSelectPlan(plan)}
+                disabled={plan.tier === currentTier}>
+                <Text style={styles.selectButtonText}>
+                  {getButtonText(plan.tier)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+
+        {/* FAQ */}
+        <View style={styles.faqSection}>
+          <Text style={styles.faqTitle}>Frequently Asked Questions</Text>
+
+          <View style={styles.faqItem}>
+            <Text style={styles.faqQuestion}>Can I cancel anytime?</Text>
+            <Text style={styles.faqAnswer}>
+              Yes! You can cancel your subscription at any time. You'll keep access until the end of your billing period.
+            </Text>
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={styles.faqQuestion}>What happens to my data if I downgrade?</Text>
+            <Text style={styles.faqAnswer}>
+              Your data is safe! If you exceed limits after downgrading, you'll be prompted to remove extra households or members.
+            </Text>
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={styles.faqQuestion}>Are there any hidden fees?</Text>
+            <Text style={styles.faqAnswer}>
+              No! The price you see is what you pay. No setup fees, no hidden charges.
+            </Text>
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={styles.faqQuestion}>Can I try before buying?</Text>
+            <Text style={styles.faqAnswer}>
+              The Free plan lets you try all core features! Upgrade when you need more households or members.
+            </Text>
+          </View>
+        </View>
+
+        {/* Support */}
+        <View style={styles.supportSection}>
+          <Text style={styles.supportText}>
+            Have questions? Contact us at support@linkshift.app
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0F0F23',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxl,
+  },
+  header: {
+    padding: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  backButton: {
+    marginBottom: spacing.md,
+  },
+  backButtonText: {
+    fontSize: typography.body,
+    color: '#6366F1',
+  },
+  title: {
+    fontSize: typography.heading,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    fontSize: typography.body,
+    color: '#A1A1AA',
+    lineHeight: 22,
+  },
+  plansContainer: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+  },
+  planCard: {
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    borderWidth: 2,
+    position: 'relative',
+  },
+  freePlan: {
+    backgroundColor: '#1F1F37',
+    borderColor: '#2A2A3E',
+  },
+  standardPlan: {
+    backgroundColor: '#1E293B',
+    borderColor: '#3B82F6',
+  },
+  premiumPlan: {
+    backgroundColor: '#1E1B2E',
+    borderColor: '#8B5CF6',
+  },
+  popularBadge: {
+    position: 'absolute',
+    top: -12,
+    right: spacing.lg,
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  popularBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  currentPlanBadge: {
+    position: 'absolute',
+    top: -12,
+    right: spacing.lg,
+    backgroundColor: '#10B981',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  currentPlanBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  planHeader: {
+    marginBottom: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  freeHeader: {
+    borderBottomColor: '#2A2A3E',
+  },
+  standardHeader: {
+    borderBottomColor: '#3B82F6',
+  },
+  premiumHeader: {
+    borderBottomColor: '#8B5CF6',
+  },
+  planName: {
+    fontSize: typography.title,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: spacing.md,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: spacing.xs,
+  },
+  currency: {
+    fontSize: typography.subtitle,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  price: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginHorizontal: 4,
+  },
+  priceFREE: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  period: {
+    fontSize: typography.body,
+    color: '#A1A1AA',
+  },
+  yearlyPrice: {
+    fontSize: typography.caption,
+    color: '#10B981',
+  },
+  featuresContainer: {
+    marginBottom: spacing.lg,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+  featureIcon: {
+    fontSize: 16,
+    color: '#10B981',
+    marginRight: spacing.sm,
+    marginTop: 2,
+  },
+  featureText: {
+    fontSize: typography.body,
+    color: '#B4B4C8',
+    flex: 1,
+  },
+  selectButton: {
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  freeButton: {
+    backgroundColor: '#374151',
+  },
+  standardButton: {
+    backgroundColor: '#3B82F6',
+  },
+  premiumButton: {
+    backgroundColor: '#8B5CF6',
+  },
+  currentPlanButton: {
+    backgroundColor: '#10B981',
+    opacity: 0.6,
+  },
+  upgradeButton: {
+    backgroundColor: '#6366F1',
+  },
+  downgradeButton: {
+    backgroundColor: '#DC2626',
+  },
+  selectButtonText: {
+    fontSize: typography.body,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  faqSection: {
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  faqTitle: {
+    fontSize: typography.subtitle,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: spacing.lg,
+  },
+  faqItem: {
+    marginBottom: spacing.lg,
+  },
+  faqQuestion: {
+    fontSize: typography.body,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: spacing.xs,
+  },
+  faqAnswer: {
+    fontSize: typography.caption,
+    color: '#A1A1AA',
+    lineHeight: 18,
+  },
+  supportSection: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  supportText: {
+    fontSize: typography.caption,
+    color: '#6366F1',
+    textAlign: 'center',
+  },
+});

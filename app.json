@@ -1,30 +1,38 @@
 {
   "expo": {
-    "name": "LinkShift-fresh",
-    "slug": "LinkShift-fresh",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "name": "LinkShift",
+    "slug": "linkshift",
+    "version": "0.1.0",
     "icon": "./assets/icon.png",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0F0F23"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.linkshift.app"
     },
     "android": {
+      "backgroundColor": "#0F0F23",
+      "package": "com.linkshift.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F0F23"
+      }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "519ab785-c013-4ecb-b983-2354ae498ec4"
+      }
     }
   }
 }
