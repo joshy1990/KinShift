@@ -6,6 +6,10 @@ jest.mock('firebase/app', () => ({
   getApp: jest.fn(() => ({})),
 }));
 
+jest.mock('firebase/storage', () => ({
+  getStorage: jest.fn(() => ({})),
+}));
+
 jest.mock('firebase/firestore', () => ({
   getFirestore: jest.fn(),
   initializeFirestore: jest.fn(),
@@ -51,6 +55,17 @@ jest.mock('@testing-library/react-native', () => ({
     getByTestId: jest.fn(),
     findByText: jest.fn(),
   },
+}));
+
+// Mock Expo Notifications
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+  getLastNotificationResponseAsync: jest.fn(() => Promise.resolve(null)),
+  scheduleNotificationAsync: jest.fn(),
 }));
 
 // Suppress console output during tests (but keep errors for debugging)
