@@ -140,8 +140,8 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
               onValueChange={(value) =>
                 setFormData({...formData, allowMemberEditOthers: value})
               }
-              trackColor={{false: '#BDC3C7', true: '#3498DB'}}
-              thumbColor={'#FFFFFF'}
+              trackColor={{false: '#3F3F46', true: '#06B6D4'}}
+              thumbColor={formData.allowMemberEditOthers ? '#FFFFFF' : '#A1A1AA'}
             />
           </View>
 
@@ -157,8 +157,8 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
               onValueChange={(value) =>
                 setFormData({...formData, requireApprovalForShifts: value})
               }
-              trackColor={{false: '#BDC3C7', true: '#3498DB'}}
-              thumbColor={'#FFFFFF'}
+              trackColor={{false: '#3F3F46', true: '#06B6D4'}}
+              thumbColor={formData.requireApprovalForShifts ? '#FFFFFF' : '#A1A1AA'}
             />
           </View>
 
@@ -174,8 +174,8 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
               onValueChange={(value) =>
                 setFormData({...formData, notifyOnConflicts: value})
               }
-              trackColor={{false: '#BDC3C7', true: '#3498DB'}}
-              thumbColor={'#FFFFFF'}
+              trackColor={{false: '#3F3F46', true: '#06B6D4'}}
+              thumbColor={formData.notifyOnConflicts ? '#FFFFFF' : '#A1A1AA'}
             />
           </View>
         </View>

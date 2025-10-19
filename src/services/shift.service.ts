@@ -18,9 +18,10 @@ import {
   QueryConstraint
 } from 'firebase/firestore';
 import { db } from '@/config/firebase.config';
-import { Shift, ShiftMessage, DayMessage, User } from '@/types';
+import { Shift, ShiftMessage, DayMessage, User, ShiftType } from '@/types';
 import { BaseService, ServiceError } from './base.service';
 import { householdService } from './household.service';
+import { getShiftTypeColor, getShiftTypeLabel } from '@/utils/shiftTypeHelpers';
 
 console.log('[ShiftService] Module loaded - db instance:', db);
 console.log('[ShiftService] db._settings:', (db as any)._settings);
@@ -31,17 +32,18 @@ export interface CreateShiftData {
   title: string;
   startTime: Date;
   endTime: Date;
-  shiftType: 'days' | 'nights' | 'afternoons' | 'morning' | 'evening' | 'custom';
+  shiftType: ShiftType;
   notes?: string;
   recurringRule?: any;
   patternRule?: any;
+  splitTimes?: Array<{ startTime: Date; endTime: Date }>; // For split shifts
 }
 
 export interface UpdateShiftData {
   title?: string;
   startTime?: Date;
   endTime?: Date;
-  shiftType?: 'days' | 'nights' | 'afternoons' | 'morning' | 'evening' | 'custom';
+  shiftType?: ShiftType;
   notes?: string;
 }
 
@@ -62,6 +64,59 @@ export class ShiftService extends BaseService {
   private readonly collection = 'shifts';
   private readonly messagesCollection = 'shiftMessages';
   private readonly dayMessagesCollection = 'dayMessages';
+
+  /**
+   * SECURITY & ENFORCEMENT: Validate shift permissions with household settings
+   */
+  private async validateShiftPermissionWithSettings(
+    shiftId: string,
+    userId: string,
+    requiredRole: 'owner' | 'admin' | 'member' = 'member',
+  ): Promise<void> {
+    try {
+      const shiftRef = doc(db, this.collection, shiftId);
+      const shiftDoc = await getDoc(shiftRef);
+
+      if (!shiftDoc.exists()) {
+        throw new Error('Shift not found');
+      }
+
+      const shift = shiftDoc.data() as Shift;
+
+      // Validate household membership if household shift
+      if (shift.householdId) {
+        const household = await householdService.getHousehold(shift.householdId);
+
+        // User must be a member
+        if (!household.members.includes(userId)) {
+          throw new Error('Unauthorized: You are not a member of this household');
+        }
+
+        // Check shift editing permissions based on household settings
+        if (shift.ownerId !== userId) {
+          // User is not the shift owner - check if they can edit others' shifts
+          if (!household.settings?.allowMemberEditOthers) {
+            throw new Error('Unauthorized: Members cannot edit shifts created by others');
+          }
+        }
+
+        // Additional checks based on required role
+        if (requiredRole === 'admin' && !household.admins.includes(userId)) {
+          throw new Error('Unauthorized: Only household admins can perform this action');
+        }
+      } else {
+        // Personal shift - only owner can modify
+        if (shift.ownerId !== userId) {
+          throw new Error('Unauthorized: Only the shift owner can modify personal shifts');
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        throw error;
+      }
+      throw this.handleError(error);
+    }
+  }
 
   /**
    * SECURITY: Validate shift permissions before modification
@@ -166,6 +221,7 @@ export class ShiftService extends BaseService {
         endTime: shiftData.endTime,
         shiftType: shiftData.shiftType,
         colorTag: this.generateColorForShiftType(shiftData.shiftType),
+        label: getShiftTypeLabel(shiftData.shiftType as ShiftType), // Add display label
         createdAt: new Date(),
         updatedAt: new Date(),
         lastEditedBy: shiftData.ownerId,
@@ -174,7 +230,29 @@ export class ShiftService extends BaseService {
       // Only add optional fields if they have values
       if (shiftData.householdId) {
         baseShift.householdId = shiftData.householdId;
+        
+        // ENFORCEMENT: Check if household requires approval for new shifts
+        const household = await householdService.getHousehold(shiftData.householdId);
+        if (household.settings?.requireApprovalForShifts) {
+          // Set shift as pending approval
+          baseShift.isApproved = false;
+          baseShift.approvalStatus = 'pending';
+          baseShift.approvedBy = null;
+          baseShift.approvalRejectionReason = null;
+          console.log('[ShiftService] Shift requires approval - setting isApproved to false');
+        } else {
+          // Shift is automatically approved
+          baseShift.isApproved = true;
+          baseShift.approvalStatus = 'approved';
+          baseShift.approvedBy = shiftData.ownerId;
+        }
+      } else {
+        // Personal shifts are always approved
+        baseShift.isApproved = true;
+        baseShift.approvalStatus = 'approved';
+        baseShift.approvedBy = shiftData.ownerId;
       }
+      
       if (shiftData.notes) {
         baseShift.notes = this.sanitizeString(shiftData.notes);
       }
@@ -183,6 +261,10 @@ export class ShiftService extends BaseService {
       }
       if (shiftData.patternRule) {
         baseShift.patternRule = shiftData.patternRule;
+      }
+      if (shiftData.splitTimes && Array.isArray(shiftData.splitTimes)) {
+        baseShift.splitTimes = shiftData.splitTimes;
+        console.log('[ShiftService] Added splitTimes to shift:', shiftData.splitTimes);
       }
 
       console.log('[ShiftService] Prepared shift object:', baseShift);
@@ -211,8 +293,8 @@ export class ShiftService extends BaseService {
         throw new Error('Invalid shift ID or no updates provided');
       }
 
-      // SECURITY: Validate permission before allowing update
-      await this.validateShiftPermission(shiftId, userId, 'owner');
+      // ENFORCEMENT: Use settings-aware validation to check household permissions
+      await this.validateShiftPermissionWithSettings(shiftId, userId, 'owner');
 
       // SECURITY: Cannot change ownerId
       if ('ownerId' in updates) {
@@ -267,6 +349,32 @@ export class ShiftService extends BaseService {
         updatedAt: new Date(),
         lastEditedBy: userId,
       });
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Deletes multiple shifts in bulk (soft delete) - for pattern cleanup
+   */
+  async deleteBulkShifts(shiftIds: string[]): Promise<void> {
+    try {
+      if (shiftIds.length === 0) return;
+
+      console.log(`[ShiftService] Bulk deleting ${shiftIds.length} shifts...`);
+      const batch = writeBatch(db);
+      const now = new Date();
+
+      shiftIds.forEach((shiftId) => {
+        const shiftRef = doc(db, this.collection, shiftId);
+        batch.update(shiftRef, {
+          isDeleted: true,
+          updatedAt: now,
+        });
+      });
+
+      await batch.commit();
+      console.log(`[ShiftService] Successfully deleted ${shiftIds.length} shifts in batch`);
     } catch (error) {
       throw this.handleError(error);
     }
@@ -431,48 +539,18 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
     return onSnapshot(
       q,
       (querySnapshot) => {
-        console.log('[ShiftService] onSnapshot triggered, documents:', querySnapshot.size);
-        let shifts: Shift[] = [];
+        console.log('[ShiftService] 📦 Received snapshot:', querySnapshot.size, 'documents');
+        const shifts: Shift[] = [];
+        
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          console.log('[ShiftService] Processing document:', doc.id, 'isDeleted:', data.isDeleted, 'startTime:', data.startTime);
-          // Filter out deleted shifts and apply date range filter in memory
+          // Only filter out deleted shifts - let UI handle date filtering
           if (data.isDeleted !== true) {
-            const shift = { id: doc.id, ...data } as Shift;
-
-            // Apply date range filter if specified
-            if (filters.startDate && filters.endDate) {
-              // Convert Firestore Timestamp to Date if needed
-              let shiftStart: Date;
-              if (shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
-                // Firestore Timestamp object
-                shiftStart = new Date((shift.startTime as any).seconds * 1000);
-              } else {
-                shiftStart = new Date(shift.startTime);
-              }
-
-              console.log('[ShiftService] Date filter check:', {
-                shiftStart,
-                filterStart: filters.startDate,
-                filterEnd: filters.endDate,
-                isAfterStart: shiftStart >= filters.startDate,
-                isBeforeEnd: shiftStart <= filters.endDate
-              });
-              if (shiftStart >= filters.startDate && shiftStart <= filters.endDate) {
-                shifts.push(shift);
-                console.log('[ShiftService] ✓ Shift included');
-              } else {
-                console.log('[ShiftService] ✗ Shift filtered out by date');
-              }
-            } else {
-              shifts.push(shift);
-              console.log('[ShiftService] ✓ Shift included (no date filter)');
-            }
-          } else {
-            console.log('[ShiftService] ✗ Shift is deleted');
+            shifts.push({ id: doc.id, ...data } as Shift);
           }
         });
-        console.log('[ShiftService] Final shift count:', shifts.length);
+        
+        console.log('[ShiftService] ✅ Loaded', shifts.length, 'shifts (deleted excluded)');
         callback(shifts);
       },
       (error) => {
@@ -503,6 +581,7 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
           title: this.sanitizeString(shiftData.title),
           notes: shiftData.notes ? this.sanitizeString(shiftData.notes) : undefined,
           colorTag: this.generateColorForShiftType(shiftData.shiftType),
+          label: getShiftTypeLabel(shiftData.shiftType as ShiftType), // Add display label
           createdAt: new Date(),
           updatedAt: new Date(),
           lastEditedBy: shiftData.ownerId,
@@ -656,20 +735,11 @@ return {
 }
 
   /**
-   * Generates color based on shift type
+   * Generates color based on shift type (using new system)
    */
   private generateColorForShiftType(shiftType: string): string {
-  const colorMap: Record<string, string> = {
-    'days': '#10B981',     // Green
-    'morning': '#10B981',   // Green
-    'afternoons': '#F59E0B', // Orange
-    'evening': '#F59E0B',    // Orange
-    'nights': '#3B82F6',     // Blue
-    'custom': '#6B7280',     // Gray
-  };
-
-  return colorMap[shiftType] || '#6B7280';
-}
+    return getShiftTypeColor(shiftType as ShiftType);
+  }
 
   // ============================================
   // BACKWARDS COMPATIBILITY ALIASES

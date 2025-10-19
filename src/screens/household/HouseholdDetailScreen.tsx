@@ -12,11 +12,13 @@ import {
   Alert,
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {HouseholdStackParamList, Household, HouseholdMember} from '@/types';
+import {HouseholdStackParamList, Household, HouseholdMember, Shift} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
 import {useHousehold} from '@/contexts/HouseholdContext';
 import {householdService} from '@/services/household.service';
+import {shiftService} from '@/services/shift.service';
 import {showAlert, showError, showSuccess} from '@/utils/alert';
+import {getMemberStatus} from '@/utils/memberStatus';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'HouseholdDetail'>;
 
@@ -27,6 +29,7 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
   
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [leavingInProgress, setLeavingInProgress] = useState(false);
@@ -44,6 +47,19 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
       
       const membersList = await householdService.getHouseholdMembers(householdId);
       setMembers(membersList);
+      
+      // Load shifts for today to show status
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      
+      const shiftsData = await shiftService.getShifts({
+        householdId,
+        startDate: startOfDay,
+        endDate: endOfDay,
+      });
+      
+      setShifts(shiftsData.shifts);
     } catch (error) {
       console.error('Error loading household:', error);
       showError('Failed to load household details');
@@ -146,22 +162,52 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
-  const renderMember = (item: HouseholdMember) => (
-    <View style={styles.memberCard}>
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>{item.name}</Text>
-        {item.email && (
-          <Text style={styles.memberEmail}>{item.email}</Text>
-        )}
-        <Text style={styles.memberRole}>
-          {item.role === 'admin' ? '👑 Admin' : '👤 Member'}
+  const renderMember = (item: HouseholdMember) => {
+    const statusInfo = getMemberStatus(item.userId, shifts);
+    
+    return (
+      <View style={styles.memberCard}>
+        <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 12}}>
+          {/* Status Indicator Dot with Pulse Effect */}
+          <View style={{justifyContent: 'center', alignItems: 'center', paddingTop: 4}}>
+            <View 
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: statusInfo.color,
+                shadowColor: statusInfo.color,
+                shadowOffset: {width: 0, height: 0},
+                shadowOpacity: 0.5,
+                shadowRadius: 3,
+                elevation: 3,
+              }}
+            />
+          </View>
+          
+          <View style={{flex: 1}}>
+            <Text style={styles.memberName}>{item.name}</Text>
+            {item.email && (
+              <Text style={styles.memberEmail}>{item.email}</Text>
+            )}
+            <Text style={styles.memberRole}>
+              {item.role === 'admin' ? '👑 Admin' : '👤 Member'} • <Text style={{color: statusInfo.color, fontWeight: '600'}}>{statusInfo.label}</Text>
+            </Text>
+            
+            {/* Show reason/details below status */}
+            {statusInfo.reason && (
+              <Text style={[styles.memberStatus, {color: statusInfo.color}]}>
+                {statusInfo.reason}
+              </Text>
+            )}
+          </View>
+        </View>
+        <Text style={styles.joinedDate}>
+          Joined {new Date(item.joinedAt).toLocaleDateString()}
         </Text>
       </View>
-      <Text style={styles.joinedDate}>
-        Joined {new Date(item.joinedAt).toLocaleDateString()}
-      </Text>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -426,6 +472,11 @@ const styles = StyleSheet.create({
   memberRole: {
     fontSize: 12,
     color: '#6366F1',
+    fontWeight: '500',
+  },
+  memberStatus: {
+    fontSize: 11,
+    marginTop: 4,
     fontWeight: '500',
   },
   joinedDate: {

@@ -16,9 +16,12 @@ import {shiftService} from '@/services/shift.service';
 import {dayNoteService} from '@/services/dayNote.service';
 import {householdService} from '@/services/household.service';
 import {getShiftColor, getShiftTypeIcon, analyzeMultiPersonShifts} from '@/utils/shiftColors';
+import {getShiftTypeLabel} from '@/utils/shiftTypeHelpers';
 import {getResponsiveValue, spacing, typography, borderRadius, isTablet, isDesktop} from '@/utils/responsive';
+import {getScreenBottomPadding} from '@/utils/bottomSpacing';
 import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
 import {useAuth} from '@/contexts/AuthContext';
+import {CalendarLegend} from '@/components/CalendarLegend';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarView'>;
 
@@ -156,29 +159,36 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
           [user.id]: {name: user.name, email: user.email}
         });
 
-        // Set up real-time listener for personal shifts with wider date range
-        const startDate = viewMode === 'month' ? monthDates[0] : weekDates[0];
-        const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
-        
-        console.log('📅 Subscribing to personal shifts from', startDate, 'to', endDate);
+        // Set up real-time listener for personal shifts (load all, filter in UI)
+        console.log('📅 Subscribing to all personal shifts for user:', user.id);
         
         try {
           unsubscribeShifts = shiftService.subscribeToShifts(
             {
               ownerId: user.id,
-              startDate: startDate,
-              endDate: endDate,
+              // No date filters - load all shifts and let UI filter by visible dates
             },
             (updatedShifts: Shift[]) => {
               console.log('📅 Personal shifts updated:', updatedShifts.length, 'shifts');
               if (updatedShifts.length > 0) {
-                console.log('First shift:', updatedShifts[0]);
+                console.log('📊 All shifts:', updatedShifts.map(s => ({
+                  title: s.title,
+                  type: s.shiftType,
+                  start: s.startTime,
+                  id: s.id
+                })));
               }
-              setShifts(updatedShifts);
+              // Ensure all shifts have valid shiftType (set default if missing)
+              const shiftsWithTypes = updatedShifts.map(shift => ({
+                ...shift,
+                shiftType: shift.shiftType || 'custom',
+              }));
+              setShifts(shiftsWithTypes);
             },
             (error) => {
               console.error('Failed to load shifts:', error);
-              setShifts([]);
+              // Don't clear shifts on error - let previously loaded shifts display
+              // This prevents momentary color flicker when index errors occur
             }
           );
           
@@ -216,6 +226,8 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
         
         console.log('📅 Subscribing to household shifts from', startDate, 'to', endDate);
+        console.log('🔍 [CALENDAR] Household ID:', currentHouseholdId);
+        console.log('🔍 [CALENDAR] Household members:', Object.keys(usersMap).length, usersMap);
         
         try {
           unsubscribeShifts = shiftService.listenToHouseholdShifts(
@@ -224,21 +236,37 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
             endDate,
             (updatedShifts: Shift[]) => {
               console.log('📅 Household shifts updated:', updatedShifts.length, 'shifts');
+              console.log('🔍 [CALENDAR] Raw shifts from Firestore:', updatedShifts.map(s => ({
+                id: s.id,
+                ownerId: s.ownerId,
+                householdId: s.householdId,
+                shiftType: s.shiftType,
+                title: s.title,
+              })));
+              
               // Filter out shifts from users who are no longer in the household
               const filteredShifts = updatedShifts.filter(shift => {
                 const isUserInHousehold = !!usersMap[shift.ownerId];
                 if (!isUserInHousehold) {
-                  console.log('📅 Filtering out shift from user no longer in household:', shift.ownerId);
+                  console.log('⚠️ [CALENDAR] Filtering out shift from user no longer in household:', shift.ownerId);
                 }
                 return isUserInHousehold;
               });
-              console.log('📅 After filtering:', filteredShifts.length, 'shifts');
-              setShifts(filteredShifts);
+              console.log('✅ [CALENDAR] After filtering:', filteredShifts.length, 'shifts');
+              
+              // Ensure all shifts have valid shiftType (set default if missing)
+              const shiftsWithTypes = filteredShifts.map(shift => ({
+                ...shift,
+                shiftType: shift.shiftType || 'custom',
+              }));
+              
+              setShifts(shiftsWithTypes);
             }
           );
         } catch (error) {
           console.error('Failed to subscribe to household shifts:', error);
-          setShifts([]);
+          // Don't clear shifts on error - let previously loaded shifts display
+          // This prevents momentary color flicker when index errors occur
         }
       } catch (error) {
         console.error('Failed to load household members:', error);
@@ -340,24 +368,18 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         {/* Shift indicators */}
         {colorInfo.count > 0 && (
           <View style={styles.monthShiftIndicators}>
-            {(() => {
-              // Debug logging for October 16
-              if (format(date, 'd') === '16' && isCurrentMonth) {
-                console.log('🎨 Rendering indicator for Oct 16:', {
-                  displayStrategy: colorInfo.displayStrategy,
-                  colors: colorInfo.colors,
-                  count: colorInfo.count,
-                });
-              }
-              return null;
-            })()}
             {colorInfo.displayStrategy === 'multi' ? (
               // Show purple badge with count for 3+ people
               <View style={[styles.multiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
                 <Text style={styles.multiPersonBadgeText}>{colorInfo.count}</Text>
               </View>
+            ) : dayShifts.length === 1 && dayShifts[0].label ? (
+              // Show shift label for single shift (HOL, OFF, etc.)
+              <View style={[styles.shiftLabelBadge, { backgroundColor: colorInfo.colors[0] || '#6366F1' }]}>
+                <Text style={styles.shiftLabelText}>{dayShifts[0].label}</Text>
+              </View>
             ) : (
-              // Show color blocks for 1-2 people
+              // Show color blocks for multiple shifts or no label
               <View style={styles.colorBlocksRow}>
                 {colorInfo.colors.map((color: string, index: number) => (
                   <View
@@ -540,7 +562,10 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
               keyExtractor={item => item.toISOString()}
               numColumns={7}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.monthGrid}
+              contentContainerStyle={[
+                styles.monthGrid,
+                {paddingBottom: getScreenBottomPadding(insets.bottom)}
+              ]}
             />
           </>
         ) : (
@@ -550,10 +575,16 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
             keyExtractor={item => item.toISOString()}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.weekContainer}
+            contentContainerStyle={[
+              styles.weekContainer,
+              {paddingBottom: getScreenBottomPadding(insets.bottom)}
+            ]}
           />
         )}
       </View>
+
+      {/* Calendar Legend */}
+      <CalendarLegend defaultExpanded={false} />
 
       {/* Add Shift Button */}
       <TouchableOpacity
@@ -965,5 +996,18 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: '#A1A1AA',
     fontWeight: '600',
+  },
+  shiftLabelBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shiftLabelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

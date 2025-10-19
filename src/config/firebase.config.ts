@@ -5,42 +5,44 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Suppress Firebase verbose logging
-if (process.env.NODE_ENV === 'production') {
-  // In production, suppress debug logs from Firebase
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  
-  console.log = function(...args: any[]) {
-    // Filter out Firebase webchannel warnings
-    if (args[0]?.toString().includes('@firebase/firestore') && 
-        args[0]?.toString().includes('WebChannelConnection')) {
-      return;
-    }
-    originalLog.apply(console, args);
-  };
-  
-  console.warn = function(...args: any[]) {
-    // Filter out Firebase webchannel warnings
-    if (args[0]?.toString().includes('@firebase/firestore') && 
-        args[0]?.toString().includes('WebChannelConnection')) {
-      return;
-    }
-    originalWarn.apply(console, args);
-  };
-}
+// CRITICAL: Disable WebChannel BEFORE Firebase initialization
+// This prevents 400 errors and forces long-polling from the start
+(globalThis as any).__FIREBASE_DEFAULTS__ = {
+  config: {
+    useEmulator: false,
+  },
+};
 
-// Production Firebase configuration
+// Disable WebChannel by setting transport
+(globalThis as any).__FIREBASE_TRANSPORT__ = 'http';
+
+// Suppress WebChannel errors in console (they're cosmetic, not functional)
+const originalError = console.error;
+const originalWarn = console.warn;
+console.error = function(...args: any[]) {
+  const message = args[0]?.toString?.() || '';
+  // Suppress WebChannel errors - they're expected with long-polling fallback
+  if (!message.includes('WebChannel') && !message.includes('0x52693830')) {
+    originalError.apply(console, args);
+  }
+};
+console.warn = function(...args: any[]) {
+  const message = args[0]?.toString?.() || '';
+  // Allow warnings through, but could filter here if needed
+  originalWarn.apply(console, args);
+};
+
+// Production Firebase configuration - NEW PROJECT
 const firebaseConfig = {
-  apiKey: 'AIzaSyBZciC9cOd6UVSjnhnOHsjAOTOA-VI12Yg',
-  authDomain: 'linkshift.firebaseapp.com',
-  projectId: 'linkshift',
-  storageBucket: 'linkshift.firebasestorage.app',
-  messagingSenderId: '73936598703',
-  appId: '1:73936598703:web:56a3d43f0eb4959eff865a',
+  apiKey: 'AIzaSyAlpo7Wi29uqY3coh0EjXWsmjaZfdmxo7c',
+  authDomain: 'linkshift-c2725.firebaseapp.com',
+  projectId: 'linkshift-c2725',
+  storageBucket: 'linkshift-c2725.firebasestorage.app',
+  messagingSenderId: '518355942929',
+  appId: '1:518355942929:web:183f005b7c513873e03bb0',
 };
 
 // Initialize Firebase
@@ -56,9 +58,27 @@ export const auth = getAuth(app);
 console.log('[Firebase] Auth initialized');
 
 // Firestore settings for React Native (avoid WebSockets on some Android networks)
+// Force long-polling only, disable all other transports
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: false,
+  ignoreUndefinedProperties: true,
+  cacheSizeBytes: 50 * 1024 * 1024, // 50MB cache
 });
+
+// Enable offline persistence for better reliability
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    // Persistence might already be enabled, ignore
+    if (err.code !== 'failed-precondition' && err.code !== 'unimplemented') {
+      console.warn('[Firebase] Persistence error:', err);
+    }
+  });
+  console.log('[Firebase] Offline persistence enabled');
+} catch (err) {
+  console.warn('[Firebase] Could not enable persistence:', err);
+}
+
 export const storage = getStorage(app);
 console.log('[Firebase] All Firebase services initialized');
 

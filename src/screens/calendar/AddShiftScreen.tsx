@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,10 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, ShiftType} from '@/types';
-import {format} from 'date-fns';
+import {format, isSameDay} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
 import {notificationService} from '@/services/notification.service';
 import {useAuth} from '@/contexts/AuthContext';
@@ -27,6 +28,54 @@ import {
   getShiftTypeIcon,
   SHIFT_TYPE_COLORS,
 } from '@/utils/shiftColors';
+import {ShiftTypePicker} from '@/components/ShiftTypePicker';
+import {requiresStartEndTime, getShiftTypeName} from '@/utils/shiftTypeHelpers';
+
+// Default times for each shift type
+const getDefaultTimesForShiftType = (type: ShiftType, baseDate: Date): { start: Date; end: Date; title: string } => {
+  const start = new Date(baseDate);
+  const end = new Date(baseDate);
+  
+  switch (type) {
+    case 'day':
+      start.setHours(9, 0, 0, 0);
+      end.setHours(17, 0, 0, 0);
+      return { start, end, title: 'Day Shift' };
+    case 'night':
+      start.setHours(22, 0, 0, 0);
+      end.setHours(6, 0, 0, 0);
+      end.setDate(end.getDate() + 1); // Next day
+      return { start, end, title: 'Night Shift' };
+    case 'twilight':
+      start.setHours(14, 0, 0, 0);
+      end.setHours(22, 0, 0, 0);
+      return { start, end, title: 'Twilight Shift' };
+    case 'split':
+      start.setHours(6, 0, 0, 0);
+      end.setHours(14, 0, 0, 0);
+      return { start, end, title: 'Split Shift' };
+    case 'holiday':
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 0, 0);
+      return { start, end, title: 'Holiday' };
+    case 'off':
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 0, 0);
+      return { start, end, title: 'Day Off' };
+    case 'sick':
+      start.setHours(9, 0, 0, 0);
+      end.setHours(17, 0, 0, 0);
+      return { start, end, title: 'Sick Leave' };
+    case 'training':
+      start.setHours(8, 0, 0, 0);
+      end.setHours(16, 0, 0, 0);
+      return { start, end, title: 'Training' };
+    case 'custom':
+    default:
+      // Keep current times
+      return { start: new Date(baseDate), end: new Date(baseDate), title: 'Custom Shift' };
+  }
+};
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'AddShift'>;
 
@@ -35,8 +84,9 @@ const SIMPLE_PATTERNS = {
   '4on4off': { name: '4 On, 4 Off', workDays: 4, restDays: 4 },
   '2on3off': { name: '2 On, 3 Off', workDays: 2, restDays: 3 },
   '5on2off': { name: '5 On, 2 Off (Mon-Fri)', workDays: 5, restDays: 2 },
-  '2d2n': { name: '2 Days, 2 Nights, Off', desc: '2 day shifts, then 2 night shifts, then days off' },
 };
+
+import {customPatternService, CustomPattern} from '@/services/customPattern.service';
 
 export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const {user} = useAuth();
@@ -48,6 +98,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const [timePickerType, setTimePickerType] = useState<'start' | 'end'>('start');
   const [pickerHour, setPickerHour] = useState(9);
   const [pickerMinute, setPickerMinute] = useState(0);
+  const [customPatterns, setCustomPatterns] = useState<CustomPattern[]>([]);
   
   const initialStartTime = route.params?.date || new Date();
   initialStartTime.setHours(9, 0, 0, 0); // 9 AM default
@@ -68,8 +119,56 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const [shiftType, setShiftType] = useState<ShiftType>(detectShiftType(initialStartTime, initialEndTime));
   const [notes, setNotes] = useState('');
   const [usePattern, setUsePattern] = useState(false);
-  const [selectedPattern, setSelectedPattern] = useState<keyof typeof SIMPLE_PATTERNS>('4on4off');
+  const [selectedPattern, setSelectedPattern] = useState<keyof typeof SIMPLE_PATTERNS | string>('4on4off');
+  const [selectedCustomPattern, setSelectedCustomPattern] = useState<CustomPattern | null>(null);
   const [patternMonths, setPatternMonths] = useState(6);
+  
+  // Holiday/OFF date range state
+  const [holidayStartDate, setHolidayStartDate] = useState(initialStartTime);
+  const [holidayEndDate, setHolidayEndDate] = useState(initialStartTime);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  // Split shift state - two separate time ranges
+  const [split1StartTime, setSplit1StartTime] = useState(new Date(initialStartTime.setHours(9, 0, 0, 0)));
+  const [split1EndTime, setSplit1EndTime] = useState(new Date(initialStartTime.setHours(12, 0, 0, 0)));
+  const [split2StartTime, setSplit2StartTime] = useState(new Date(initialStartTime.setHours(14, 0, 0, 0)));
+  const [split2EndTime, setSplit2EndTime] = useState(new Date(initialStartTime.setHours(18, 0, 0, 0)));
+  const [split1StartAMPM, setSplit1StartAMPM] = useState<'AM' | 'PM'>('AM');
+  const [split1EndAMPM, setSplit1EndAMPM] = useState<'AM' | 'PM'>('PM');
+  const [split2StartAMPM, setSplit2StartAMPM] = useState<'AM' | 'PM'>('PM');
+  const [split2EndAMPM, setSplit2EndAMPM] = useState<'AM' | 'PM'>('PM');
+  const [activeSplitPicker, setActiveSplitPicker] = useState<'split1Start' | 'split1End' | 'split2Start' | 'split2End' | null>(null);
+
+  // Load custom patterns when screen mounts or when user returns from pattern builder
+  useEffect(() => {
+    const loadPatterns = async () => {
+      if (!user) return;
+      try {
+        const patterns = await customPatternService.getUserPatterns(user.id);
+        setCustomPatterns(patterns);
+        console.log('📋 Loaded', patterns.length, 'custom patterns');
+      } catch (error) {
+        console.error('Failed to load custom patterns:', error);
+      }
+    };
+    loadPatterns();
+  }, [user]);
+
+  // Reload patterns when navigating back from PatternBuilder
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      if (!user) return;
+      try {
+        const patterns = await customPatternService.getUserPatterns(user.id);
+        setCustomPatterns(patterns);
+        console.log('🔄 Reloaded', patterns.length, 'custom patterns');
+      } catch (error) {
+        console.error('Failed to reload custom patterns:', error);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, user]);
 
   // Smart time input formatting - handles "0455" → "04:55", "455" → "04:55", "4:55" → "04:55"
   const formatTimeInput = (input: string): string => {
@@ -185,6 +284,73 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
+  // Smart handler when shift type changes - auto-fills times and title
+  const handleShiftTypeChange = (newType: ShiftType) => {
+    // If custom is selected, navigate to Pattern Builder
+    if (newType === 'custom') {
+      navigation.navigate('PatternBuilder');
+      return;
+    }
+    
+    setShiftType(newType);
+    
+    // Get default times and title for this shift type
+    const defaults = getDefaultTimesForShiftType(newType, route.params?.date || new Date());
+    
+    // Only auto-fill if title is empty or matches a shift type name
+    const currentTitleIsDefault = !title || 
+      title.endsWith('Shift') || 
+      title === 'Holiday' || 
+      title === 'Day Off' ||
+      title === 'Sick Leave' ||
+      title === 'Training';
+    
+    if (currentTitleIsDefault) {
+      setTitle(defaults.title);
+    }
+    
+    // For holiday/off types, set up date range
+    if (newType === 'holiday' || newType === 'off') {
+      const baseDate = route.params?.date || new Date();
+      setHolidayStartDate(new Date(baseDate));
+      setHolidayEndDate(new Date(baseDate));
+    }
+    
+    // For split shifts, initialize split times with sensible defaults
+    if (newType === 'split') {
+      const baseDate = route.params?.date || new Date();
+      // Shift 1: 9:00 AM - 12:00 PM
+      setSplit1StartTime(new Date(baseDate.setHours(9, 0, 0, 0)));
+      setSplit1EndTime(new Date(baseDate.setHours(12, 0, 0, 0)));
+      setSplit1StartAMPM('AM');
+      setSplit1EndAMPM('PM');
+      
+      // Shift 2: 2:00 PM - 6:00 PM
+      setSplit2StartTime(new Date(baseDate.setHours(14, 0, 0, 0)));
+      setSplit2EndTime(new Date(baseDate.setHours(18, 0, 0, 0)));
+      setSplit2StartAMPM('PM');
+      setSplit2EndAMPM('PM');
+    }
+    
+    // Auto-fill times (only for types that need times)
+    if (requiresStartEndTime(newType)) {
+      setStartTime(defaults.start);
+      setEndTime(defaults.end);
+      
+      // Update time text displays
+      if (is24HourFormat) {
+        setStartTimeText(format(defaults.start, 'HH:mm'));
+        setEndTimeText(format(defaults.end, 'HH:mm'));
+      } else {
+        setStartTimeText(format(defaults.start, 'h:mm'));
+        setEndTimeText(format(defaults.end, 'h:mm'));
+      }
+      
+      setStartAMPM(defaults.start.getHours() >= 12 ? 'PM' : 'AM');
+      setEndAMPM(defaults.end.getHours() >= 12 ? 'PM' : 'AM');
+    }
+  };
+
   // Simple time adjustment
   const adjustTime = (type: 'start' | 'end', hours: number) => {
     const current = type === 'start' ? startTime : endTime;
@@ -195,8 +361,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       setStartTime(newTime);
       setStartTimeText(is24HourFormat ? format(newTime, 'HH:mm') : format(newTime, 'h:mm'));
       setStartAMPM(newTime.getHours() >= 12 ? 'PM' : 'AM');
-      // Auto-detect shift type
-      setShiftType(detectShiftType(newTime, endTime));
     } else {
       setEndTime(newTime);
       setEndTimeText(is24HourFormat ? format(newTime, 'HH:mm') : format(newTime, 'h:mm'));
@@ -219,6 +383,36 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     const newTime = new Date(timePickerType === 'start' ? startTime : endTime);
     newTime.setHours(pickerHour, pickerMinute, 0, 0);
     
+    // Handle split shift time pickers
+    if (activeSplitPicker) {
+      const baseDate = route.params?.date || new Date();
+      const splitTime = new Date(baseDate);
+      splitTime.setHours(pickerHour, pickerMinute, 0, 0);
+      
+      switch (activeSplitPicker) {
+        case 'split1Start':
+          setSplit1StartTime(splitTime);
+          setSplit1StartAMPM(splitTime.getHours() >= 12 ? 'PM' : 'AM');
+          break;
+        case 'split1End':
+          setSplit1EndTime(splitTime);
+          setSplit1EndAMPM(splitTime.getHours() >= 12 ? 'PM' : 'AM');
+          break;
+        case 'split2Start':
+          setSplit2StartTime(splitTime);
+          setSplit2StartAMPM(splitTime.getHours() >= 12 ? 'PM' : 'AM');
+          break;
+        case 'split2End':
+          setSplit2EndTime(splitTime);
+          setSplit2EndAMPM(splitTime.getHours() >= 12 ? 'PM' : 'AM');
+          break;
+      }
+      setActiveSplitPicker(null);
+      setShowTimePicker(false);
+      return;
+    }
+    
+    // Handle regular time pickers
     if (timePickerType === 'start') {
       setStartTime(newTime);
       setStartTimeText(is24HourFormat ? format(newTime, 'HH:mm') : format(newTime, 'h:mm a'));
@@ -231,6 +425,45 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       setShiftType(detectShiftType(startTime, newTime));
     }
     setShowTimePicker(false);
+  };
+
+  // Helper function to calculate actual cycle length for a pattern
+  const calculatePatternCycleLength = (cells: any[]): number => {
+    // Try all possible cycle lengths from 1 to 14
+    // Start with smallest to find the true repeating unit
+    for (let cycleLength = 1; cycleLength <= 14; cycleLength++) {
+      // For each potential cycle, check if entire 14-day pattern repeats correctly
+      let repeats = true;
+      
+      for (let i = 0; i < 14; i++) {
+        const currentCell = cells[i];
+        const referenceCell = cells[i % cycleLength];
+        
+        // Check if shift type matches
+        if (currentCell.shiftType !== referenceCell.shiftType) {
+          repeats = false;
+          break;
+        }
+        
+        // If both have shift times, verify times match exactly
+        if (currentCell.shiftType !== null && referenceCell.shiftType !== null) {
+          if (currentCell.startTime !== referenceCell.startTime ||
+              currentCell.endTime !== referenceCell.endTime) {
+            repeats = false;
+            break;
+          }
+        }
+      }
+      
+      if (repeats) {
+        console.log(`✅ [PATTERN] Detected cycle length: ${cycleLength} days`);
+        return cycleLength; // Found the smallest repeating cycle
+      }
+    }
+    
+    // Fallback (should never happen since 14-day always repeats)
+    console.log('⚠️ [PATTERN] Could not detect cycle, defaulting to 14 days');
+    return 14;
   };
 
   const validateForm = (): boolean => {
@@ -248,6 +481,49 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Check for existing shifts on the selected date
+  const checkForConflicts = async (shiftDate: Date): Promise<any[]> => {
+    if (!user) return [];
+    
+    const startOfDay = new Date(shiftDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(shiftDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    console.log('🔍 Checking conflicts for:', format(shiftDate, 'MMM dd, yyyy'));
+    console.log('📅 Date range:', format(startOfDay, 'yyyy-MM-dd HH:mm'), 'to', format(endOfDay, 'yyyy-MM-dd HH:mm'));
+    
+    try {
+      // Get shifts for this date range
+      const result = await shiftService.getShifts({
+        householdId: currentHouseholdId || undefined,
+        startDate: startOfDay,
+        endDate: endOfDay,
+      });
+      
+      console.log('📊 Total shifts found:', result.shifts.length);
+      
+      // Filter to only current user's shifts on this specific day
+      const userShifts = result.shifts.filter(shift => {
+        const shiftStart = shift.startTime instanceof Date ? shift.startTime : new Date(shift.startTime);
+        const isUserShift = shift.ownerId === user.id;
+        const isOnThisDay = shiftStart >= startOfDay && shiftStart <= endOfDay;
+        
+        if (isUserShift && isOnThisDay) {
+          console.log('✅ Found conflict:', shift.title, format(shiftStart, 'MMM dd HH:mm'));
+        }
+        
+        return isUserShift && isOnThisDay;
+      });
+      
+      console.log('⚠️ User conflicts:', userShifts.length);
+      return userShifts;
+    } catch (error) {
+      console.error('Error checking for conflicts:', error);
+      return [];
+    }
+  };
+
   const handleSave = async () => {
     if (!validateForm()) {
       showError('Please fix the errors before saving');
@@ -259,56 +535,230 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     }
 
     setLoading(true);
+    
     try {
+      // SPECIAL CASE: OFF shift type just deletes existing shifts (no new shift created)
+      if (!usePattern && shiftType === 'off') {
+        const selectedDate = route.params?.date || startTime;
+        console.log('🗑️ OFF type selected - deleting existing shifts on:', format(selectedDate, 'MMM dd, yyyy'));
+        
+        // Get all shifts for this user on this date
+        const result = await shiftService.getShifts(
+          {
+            ownerId: user.id,
+          },
+          {
+            pageSize: 1000, // High limit to get ALL shifts
+          }
+        );
+        
+        // Filter to only this date
+        const shiftsOnDate = result.shifts.filter(shift => {
+          const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+            ? new Date((shift.startTime as any).seconds * 1000)
+            : new Date(shift.startTime);
+          return isSameDay(shiftDate, selectedDate);
+        });
+        
+        console.log('🗑️ Found', shiftsOnDate.length, 'shift(s) to delete');
+        
+        // Delete all shifts on this date
+        for (const shift of shiftsOnDate) {
+          await shiftService.deleteShift(shift.id, user.id);
+        }
+        
+        if (shiftsOnDate.length > 0) {
+          showSuccess('Shift(s) removed - Day marked as OFF');
+        } else {
+          showSuccess('Day marked as OFF');
+        }
+        setLoading(false);
+        navigation.goBack();
+        return; // Don't create any shift, just delete and exit
+      }
       if (usePattern) {
         // Create pattern of shifts
-        const pattern = SIMPLE_PATTERNS[selectedPattern];
         const shiftsToCreate: any[] = [];
         const endDate = new Date(startTime);
         endDate.setMonth(endDate.getMonth() + patternMonths);
-        
-        let currentDate = new Date(startTime);
-        
-        if ('workDays' in pattern) {
-          // Simple work/rest pattern (e.g., 4 on 4 off)
-          let isWorkPeriod = true;
+
+        // Check if custom pattern is selected
+        if (selectedCustomPattern) {
+          console.log('📅 Custom Pattern creation:', {
+            patternName: selectedCustomPattern.name,
+            patternMode: selectedCustomPattern.patternMode,
+            startDate: format(startTime, 'MMM dd, yyyy'),
+            dayOfWeekStart: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][startTime.getDay()],
+            endDate: format(endDate, 'MMM dd, yyyy'),
+            months: patternMonths,
+            cellsTotal: selectedCustomPattern.cells.length,
+          });
+
+          // Determine cycle length based on pattern mode
+          let cycleLength: number;
+          if (selectedCustomPattern.patternMode === 'weekly') {
+            // Weekly mode: Always use 7-day cycle (Mon-Sun repeat)
+            cycleLength = 7;
+            console.log('📅 Weekly mode - using 7-day cycle');
+          } else {
+            // Repetition mode: Auto-detect the cycle length
+            cycleLength = calculatePatternCycleLength(selectedCustomPattern.cells);
+            console.log(`🔄 Repetition mode - detected ${cycleLength}-day cycle`);
+          }
+
+          let currentDate = new Date(startTime);
           
+          // Initialize dayInPattern based on pattern mode
+          let dayInPattern: number = 0;
+          if (selectedCustomPattern.patternMode === 'weekly') {
+            // In weekly mode, always use 7-day cycle, starting from day 0 of the pattern
+            console.log(`📅 Weekly mode - using fixed 7-day cycle starting from pattern day 0`);
+          } else {
+            // In repetition mode, start at day 0 and auto-detect the cycle length
+            console.log(`🔄 Repetition mode - will auto-detect cycle length`);
+          }
+
           while (currentDate <= endDate) {
-            const daysInPeriod = isWorkPeriod ? pattern.workDays : pattern.restDays;
-            
-            if (isWorkPeriod) {
-              // Create shifts for work days
-              for (let i = 0; i < daysInPeriod && currentDate <= endDate; i++) {
-                const shiftStart = new Date(currentDate);
-                shiftStart.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
-                
-                const shiftEnd = new Date(currentDate);
-                shiftEnd.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
-                
-                // Handle overnight shifts
-                if (shiftEnd <= shiftStart) {
-                  shiftEnd.setDate(shiftEnd.getDate() + 1);
-                }
-                
-                shiftsToCreate.push({
-                  title: title.trim(),
-                  householdId: currentHouseholdId || undefined,
-                  ownerId: user.id,
-                  startTime: shiftStart,
-                  endTime: shiftEnd,
-                  shiftType,
-                  notes: notes.trim(),
-                });
-                
-                currentDate.setDate(currentDate.getDate() + 1);
+            const cell = selectedCustomPattern.cells[dayInPattern];
+
+            // Only create shift if this day has a shift type (not a day off)
+            if (cell.shiftType !== null) {
+              const [startHours, startMinutes] = cell.startTime.split(':').map(Number);
+              const [endHours, endMinutes] = cell.endTime.split(':').map(Number);
+
+              const shiftStart = new Date(currentDate);
+              shiftStart.setHours(startHours, startMinutes, 0, 0);
+
+              const shiftEnd = new Date(currentDate);
+              shiftEnd.setHours(endHours, endMinutes, 0, 0);
+
+              // Handle overnight shifts (e.g., night shift 20:00-06:00)
+              if (shiftEnd <= shiftStart) {
+                shiftEnd.setDate(shiftEnd.getDate() + 1);
               }
-            } else {
-              // Skip rest days
-              currentDate.setDate(currentDate.getDate() + daysInPeriod);
+
+              shiftsToCreate.push({
+                title: title.trim() || `${cell.shiftType.charAt(0).toUpperCase() + cell.shiftType.slice(1)} Shift`,
+                householdId: currentHouseholdId || undefined,
+                ownerId: user.id,
+                startTime: shiftStart,
+                endTime: shiftEnd,
+                shiftType: cell.shiftType,
+                notes: notes.trim(),
+              });
+            }
+
+            // Move to next day
+            currentDate.setDate(currentDate.getDate() + 1);
+            dayInPattern = (dayInPattern + 1) % cycleLength; // Use detected cycle length
+          }
+
+          // Log the shifts that were created for debugging
+          console.log(`✅ Custom pattern loop complete. Created ${shiftsToCreate.length} shift entries:`);
+          shiftsToCreate.slice(0, 10).forEach((s, i) => {
+            console.log(`  [${i}] ${format(s.startTime, 'MMM dd (EEE)')}: ${s.shiftType}`);
+          });
+          if (shiftsToCreate.length > 10) {
+            console.log(`  ... and ${shiftsToCreate.length - 10} more shifts`);
+          }
+
+        } else {
+          // Simple pattern (existing code)
+          const pattern = SIMPLE_PATTERNS[selectedPattern as keyof typeof SIMPLE_PATTERNS];
+          let currentDate = new Date(startTime);
+          
+          console.log('📅 Pattern creation:', {
+            pattern: selectedPattern,
+            patternName: pattern.name,
+            startDate: format(startTime, 'MMM dd, yyyy'),
+            endDate: format(endDate, 'MMM dd, yyyy'),
+            months: patternMonths,
+          });
+        
+          if ('workDays' in pattern) {
+            // Simple work/rest pattern (e.g., 4 on 4 off)
+            let isWorkPeriod = true;
+            
+            console.log('🔄 Starting pattern loop with', pattern.workDays, 'work days,', pattern.restDays, 'rest days');
+            
+            while (currentDate <= endDate) {
+              const daysInPeriod = isWorkPeriod ? pattern.workDays : pattern.restDays;
+              
+              if (isWorkPeriod) {
+                // Create shifts for work days
+                for (let i = 0; i < daysInPeriod && currentDate <= endDate; i++) {
+                  const shiftStart = new Date(currentDate);
+                  shiftStart.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
+                  
+                  const shiftEnd = new Date(currentDate);
+                  shiftEnd.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
+                  
+                  // Handle overnight shifts
+                  if (shiftEnd <= shiftStart) {
+                    shiftEnd.setDate(shiftEnd.getDate() + 1);
+                  }
+                  
+                  shiftsToCreate.push({
+                    title: title.trim(),
+                    householdId: currentHouseholdId || undefined,
+                    ownerId: user.id,
+                    startTime: shiftStart,
+                    endTime: shiftEnd,
+                    shiftType,
+                    notes: notes.trim(),
+                  });
+                  
+                  currentDate.setDate(currentDate.getDate() + 1);
+                }
+              } else {
+                // Skip rest days
+                currentDate.setDate(currentDate.getDate() + daysInPeriod);
+              }
+              
+              isWorkPeriod = !isWorkPeriod;
             }
             
-            isWorkPeriod = !isWorkPeriod;
+            console.log('✅ Pattern loop complete. Created', shiftsToCreate.length, 'shift entries');
           }
+        }
+        
+        // CLEANUP: Delete existing shifts on dates where pattern will create shifts
+        console.log('🧹 Cleaning up existing shifts before pattern creation...');
+        try {
+          const allExistingShifts = await shiftService.getShifts(
+            {
+              ownerId: user.id,
+            },
+            {
+              pageSize: 1000,
+            }
+          );
+          
+          // Get unique dates from shiftsToCreate
+          const patternDates = new Set(
+            shiftsToCreate.map(shift => format(shift.startTime, 'yyyy-MM-dd'))
+          );
+          
+          // Find existing shifts on those dates
+          const shiftsToDelete = allExistingShifts.shifts.filter(shift => {
+            const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+              ? new Date((shift.startTime as any).seconds * 1000)
+              : new Date(shift.startTime);
+            const dateKey = format(shiftDate, 'yyyy-MM-dd');
+            return patternDates.has(dateKey);
+          });
+          
+          if (shiftsToDelete.length > 0) {
+            console.log(`🗑️ Deleting ${shiftsToDelete.length} existing shift(s) that conflict with pattern using BULK delete...`);
+            const shiftIdsToDelete = shiftsToDelete.map(s => s.id);
+            await shiftService.deleteBulkShifts(shiftIdsToDelete);
+            console.log('✅ Bulk cleanup complete - ready to create pattern');
+          } else {
+            console.log('✅ No conflicts found - proceeding with pattern creation');
+          }
+        } catch (cleanupError) {
+          console.error('❌ Pattern cleanup failed:', cleanupError);
+          // Continue anyway - pattern will be created even if cleanup fails
         }
         
         // Create all shifts in batch (MUCH FASTER!)
@@ -322,10 +772,8 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         if (currentHouseholdId) {
           try {
             await notificationService.notifyMultipleShiftsCreated(
-              currentHouseholdId,
-              user.name || user.email.split('@')[0],
-              shiftsToCreate.length,
-              user.id // Exclude creator
+              shiftsToCreate,
+              { id: currentHouseholdId }
             );
           } catch (notifyError) {
             console.error('Failed to send pattern shift notification:', notifyError);
@@ -336,7 +784,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
       } else {
         // Create single shift
-        const newShift = await shiftService.createShift({
+        const shiftData: any = {
           title: title.trim(),
           householdId: currentHouseholdId || undefined,
           ownerId: user.id,
@@ -344,17 +792,113 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           endTime,
           shiftType,
           notes: notes.trim(),
-        });
+        };
+
+        // For split shifts, add split times array
+        if (shiftType === 'split') {
+          shiftData.splitTimes = [
+            {
+              startTime: split1StartTime,
+              endTime: split1EndTime,
+            },
+            {
+              startTime: split2StartTime,
+              endTime: split2EndTime,
+            },
+          ];
+          // For split shifts, use the first shift's times as the main times
+          shiftData.startTime = split1StartTime;
+          shiftData.endTime = split2EndTime; // Overall end time
+          
+          console.log('💾 Saving split shift with data:', {
+            shiftType: shiftData.shiftType,
+            splitTimes: shiftData.splitTimes,
+            mainStartTime: shiftData.startTime,
+            mainEndTime: shiftData.endTime,
+          });
+        }
+
+        const newShift = await shiftService.createShift(shiftData);
+        
+        console.log('✅ New shift created:', newShift.id);
+        
+        // CLEANUP: Ensure only ONE shift per THIS USER per day
+        // (Other household members' shifts are NOT affected)
+        console.log('🧹 Cleaning up duplicate shifts for user:', user.id);
+        const selectedDate = route.params?.date || startTime;
+        
+        // Query all shifts for this user (with error handling)
+        try {
+          const allShifts = await shiftService.getShifts(
+            {
+              ownerId: user.id, // Only THIS user's shifts
+            },
+            {
+              pageSize: 1000, // High limit to get ALL shifts for cleanup
+            }
+          );
+          
+          console.log('✅ Cleanup query successful - got', allShifts.shifts.length, 'total shifts');
+          
+          // Filter to only shifts on this date (still only THIS user)
+          const shiftsOnDate = allShifts.shifts.filter(shift => {
+            const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+              ? new Date((shift.startTime as any).seconds * 1000)
+              : new Date(shift.startTime);
+            const matches = isSameDay(shiftDate, selectedDate);
+            if (matches) {
+              console.log('  → Shift on this date:', {
+                id: shift.id,
+                title: shift.title,
+                startTime: shiftDate,
+                createdAt: shift.createdAt,
+              });
+            }
+            return matches;
+          });
+          
+          console.log('📊 Total shifts for THIS USER on', format(selectedDate, 'MMM dd'), ':', shiftsOnDate.length);
+          
+          // If there's more than one shift, keep only the NEWEST one (by createdAt)
+          if (shiftsOnDate.length > 1) {
+            // Sort by createdAt descending (newest first)
+            const sortedShifts = shiftsOnDate.sort((a, b) => {
+              const aCreated = a.createdAt && typeof a.createdAt === 'object' && 'seconds' in a.createdAt
+                ? new Date((a.createdAt as any).seconds * 1000)
+                : new Date(a.createdAt);
+              const bCreated = b.createdAt && typeof b.createdAt === 'object' && 'seconds' in b.createdAt
+                ? new Date((b.createdAt as any).seconds * 1000)
+                : new Date(b.createdAt);
+              return bCreated.getTime() - aCreated.getTime(); // Newest first
+            });
+            
+            // Keep the first one (newest), delete the rest
+            const newestShift = sortedShifts[0];
+            const oldShifts = sortedShifts.slice(1);
+            
+            console.log('🗑️ Keeping newest shift:', newestShift.id, 'Deleting', oldShifts.length, 'old shift(s) FOR THIS USER');
+            
+            for (const oldShift of oldShifts) {
+              console.log('  Deleting old shift:', oldShift.id, oldShift.title, 'Owner:', oldShift.ownerId);
+              await shiftService.deleteShift(oldShift.id, user.id);
+            }
+            
+            console.log('✅ Cleanup complete - Only 1 shift remains FOR THIS USER (other members unaffected)');
+          } else {
+            console.log('✅ No cleanup needed - only 1 shift on this date');
+          }
+        } catch (cleanupError) {
+          console.error('❌ CLEANUP FAILED:', cleanupError);
+          console.error('Index may not be ready yet. Shift created but duplicates not cleaned.');
+          // Don't throw - shift was created successfully, just cleanup failed
+        }
 
         // Send notification for single shift creation (only in household mode)
         if (currentHouseholdId && newShift.id) {
           try {
             await notificationService.notifyShiftCreated(
-              currentHouseholdId,
-              newShift.id,
-              title,
-              user.name || user.email.split('@')[0],
-              user.id // Exclude creator from notification
+              newShift,
+              { id: currentHouseholdId }
             );
           } catch (notifyError) {
             console.error('Failed to send shift creation notification:', notifyError);
@@ -410,113 +954,233 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           <Text style={styles.helperText}>Shifts are created for the selected calendar date</Text>
         </View>
 
-        {/* Quick Shift Presets */}
+        {/* Shift Type - Now with smart auto-fill */}
         <View style={styles.section}>
-          <Text style={styles.label}>Quick Shift Templates</Text>
-          <View style={styles.presetRow}>
-            <TouchableOpacity
-              style={styles.presetButton}
-              onPress={() => {
-                setTitle('Day Shift');
-                adjustTime('start', 9);  // 9 AM
-                adjustTime('end', 17);   // 5 PM
-                setShiftType('days');
-              }}>
-              <Text style={styles.presetIcon}>☀️</Text>
-              <Text style={styles.presetLabel}>Day</Text>
-              <Text style={styles.presetTime}>9AM-5PM</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.presetButton}
-              onPress={() => {
-                setTitle('Afternoon Shift');
-                adjustTime('start', 14); // 2 PM
-                adjustTime('end', 22);   // 10 PM
-                setShiftType('afternoons');
-              }}>
-              <Text style={styles.presetIcon}>🌤️</Text>
-              <Text style={styles.presetLabel}>Afternoon</Text>
-              <Text style={styles.presetTime}>2PM-10PM</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.presetButton}
-              onPress={() => {
-                setTitle('Night Shift');
-                adjustTime('start', 22); // 10 PM
-                adjustTime('end', 6);    // 6 AM (next day)
-                setShiftType('nights');
-              }}>
-              <Text style={styles.presetIcon}>🌙</Text>
-              <Text style={styles.presetLabel}>Night</Text>
-              <Text style={styles.presetTime}>10PM-6AM</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.helperText}>Tap a template to quickly fill in common shift times</Text>
+          <ShiftTypePicker
+            selectedType={shiftType}
+            onSelectType={handleShiftTypeChange}
+            quickAccessOnly={true}
+          />
+          <Text style={styles.helperText}>
+            {requiresStartEndTime(shiftType) 
+              ? 'Times auto-filled based on shift type. You can adjust them below.' 
+              : 'Selected type does not require start/end times'}
+          </Text>
         </View>
 
         {/* Time Format Toggle */}
-        <View style={styles.section}>
-          <View style={styles.toggleRow}>
-            <Text style={styles.label}>Time Format</Text>
-            <TouchableOpacity 
-              style={[styles.formatToggle, is24HourFormat && styles.formatToggleActive]}
-              onPress={toggle24HourFormat}>
-              <Text style={[styles.formatToggleText, is24HourFormat && styles.formatToggleTextActive]}>
-                {is24HourFormat ? '24 Hour' : '12 Hour'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Times */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Start Time *</Text>
-          <TouchableOpacity 
-            style={styles.timePickerButton}
-            onPress={() => openTimePicker('start')}>
-            <Text style={styles.timePickerText}>
-              🕐 {startTimeText} {!is24HourFormat && startAMPM}
-            </Text>
-            <Text style={styles.timePickerHint}>Tap to change</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>End Time *</Text>
-          <TouchableOpacity 
-            style={styles.timePickerButton}
-            onPress={() => openTimePicker('end')}>
-            <Text style={styles.timePickerText}>
-              🕐 {endTimeText} {!is24HourFormat && endAMPM}
-            </Text>
-            <Text style={styles.timePickerHint}>Tap to change</Text>
-          </TouchableOpacity>
-          {errors.time && <Text style={styles.errorText}>{errors.time}</Text>}
-        </View>
-
-        {/* Shift Type */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Shift Type</Text>
-          <Text style={styles.helperText}>Auto-detected based on your shift times</Text>
-          <View style={styles.shiftTypeRow}>
-            {(['days', 'afternoons', 'nights'] as ShiftType[]).map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.shiftTypeButton,
-                  {backgroundColor: SHIFT_TYPE_COLORS[type]},
-                  shiftType === type && styles.shiftTypeButtonActive,
-                ]}
-                onPress={() => setShiftType(type)}>
-                <Text style={styles.shiftTypeIcon}>{getShiftTypeIcon(type)}</Text>
-                <Text style={styles.shiftTypeLabel}>{getShiftTypeDisplayName(type)}</Text>
-                {shiftType === type && <Text style={styles.checkmark}>✓</Text>}
+        {requiresStartEndTime(shiftType) && (
+          <View style={styles.section}>
+            <View style={styles.toggleRow}>
+              <Text style={styles.label}>Time Format</Text>
+              <TouchableOpacity 
+                style={[styles.formatToggle, is24HourFormat && styles.formatToggleActive]}
+                onPress={toggle24HourFormat}>
+                <Text style={[styles.formatToggleText, is24HourFormat && styles.formatToggleTextActive]}>
+                  {is24HourFormat ? '24 Hour' : '12 Hour'}
+                </Text>
               </TouchableOpacity>
-            ))}
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Times - Only for working shifts (but not split shifts) */}
+        {requiresStartEndTime(shiftType) && shiftType !== 'split' && (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.label}>Start Time *</Text>
+              <TouchableOpacity 
+                style={styles.timePickerButton}
+                onPress={() => openTimePicker('start')}>
+                <Text style={styles.timePickerText}>
+                  🕐 {startTimeText} {!is24HourFormat && startAMPM}
+                </Text>
+                <Text style={styles.timePickerHint}>Tap to change</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>End Time *</Text>
+              <TouchableOpacity 
+                style={styles.timePickerButton}
+                onPress={() => openTimePicker('end')}>
+                <Text style={styles.timePickerText}>
+                  🕐 {endTimeText} {!is24HourFormat && endAMPM}
+                </Text>
+                <Text style={styles.timePickerHint}>Tap to change</Text>
+              </TouchableOpacity>
+              {errors.time && <Text style={styles.errorText}>{errors.time}</Text>}
+            </View>
+          </>
+        )}
+
+        {/* Split Shift Times - Show two sets of time pickers */}
+        {shiftType === 'split' && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Split Shift Times *</Text>
+            <Text style={styles.helperText}>
+              Add two separate time ranges for your split shift
+            </Text>
+            
+            {/* Shift 1 */}
+            <View style={styles.splitShiftContainer}>
+              <Text style={styles.splitShiftLabel}>Shift 1</Text>
+              <View style={styles.splitTimeRow}>
+                <View style={styles.splitTimeItem}>
+                  <Text style={styles.splitTimeItemLabel}>Start</Text>
+                  <TouchableOpacity 
+                    style={styles.splitTimeButton}
+                    onPress={() => {
+                      setActiveSplitPicker('split1Start');
+                      setPickerHour(split1StartTime.getHours());
+                      setPickerMinute(split1StartTime.getMinutes());
+                      setShowTimePicker(true);
+                    }}>
+                    <Text style={styles.splitTimeText}>
+                      {format(split1StartTime, is24HourFormat ? 'HH:mm' : 'h:mm a')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={styles.splitTimeSeparator}>→</Text>
+                
+                <View style={styles.splitTimeItem}>
+                  <Text style={styles.splitTimeItemLabel}>End</Text>
+                  <TouchableOpacity 
+                    style={styles.splitTimeButton}
+                    onPress={() => {
+                      setActiveSplitPicker('split1End');
+                      setPickerHour(split1EndTime.getHours());
+                      setPickerMinute(split1EndTime.getMinutes());
+                      setShowTimePicker(true);
+                    }}>
+                    <Text style={styles.splitTimeText}>
+                      {format(split1EndTime, is24HourFormat ? 'HH:mm' : 'h:mm a')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+            
+            {/* Shift 2 */}
+            <View style={styles.splitShiftContainer}>
+              <Text style={styles.splitShiftLabel}>Shift 2</Text>
+              <View style={styles.splitTimeRow}>
+                <View style={styles.splitTimeItem}>
+                  <Text style={styles.splitTimeItemLabel}>Start</Text>
+                  <TouchableOpacity 
+                    style={styles.splitTimeButton}
+                    onPress={() => {
+                      setActiveSplitPicker('split2Start');
+                      setPickerHour(split2StartTime.getHours());
+                      setPickerMinute(split2StartTime.getMinutes());
+                      setShowTimePicker(true);
+                    }}>
+                    <Text style={styles.splitTimeText}>
+                      {format(split2StartTime, is24HourFormat ? 'HH:mm' : 'h:mm a')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={styles.splitTimeSeparator}>→</Text>
+                
+                <View style={styles.splitTimeItem}>
+                  <Text style={styles.splitTimeItemLabel}>End</Text>
+                  <TouchableOpacity 
+                    style={styles.splitTimeButton}
+                    onPress={() => {
+                      setActiveSplitPicker('split2End');
+                      setPickerHour(split2EndTime.getHours());
+                      setPickerMinute(split2EndTime.getMinutes());
+                      setShowTimePicker(true);
+                    }}>
+                    <Text style={styles.splitTimeText}>
+                      {format(split2EndTime, is24HourFormat ? 'HH:mm' : 'h:mm a')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+            
+            <Text style={styles.splitTotalHours}>
+              Total: {((split1EndTime.getTime() - split1StartTime.getTime() + split2EndTime.getTime() - split2StartTime.getTime()) / (1000 * 60 * 60)).toFixed(1)} hours
+            </Text>
+          </View>
+        )}
+
+        {/* Date Range Picker - For Holiday/OFF types */}
+        {!requiresStartEndTime(shiftType) && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Date Range</Text>
+            <Text style={styles.helperText}>Select the start and end dates for this {shiftType === 'holiday' ? 'holiday' : 'time off'}</Text>
+            
+            {/* Start Date */}
+            <View style={styles.dateRangeRow}>
+              <View style={styles.dateRangeItem}>
+                <Text style={styles.dateRangeLabel}>From</Text>
+                {Platform.OS === 'web' ? (
+                  <TextInput
+                    style={styles.input}
+                    value={format(holidayStartDate, 'yyyy-MM-dd')}
+                    onChangeText={(text) => {
+                      const date = new Date(text);
+                      if (!isNaN(date.getTime())) {
+                        setHolidayStartDate(date);
+                        if (holidayEndDate < date) {
+                          setHolidayEndDate(date);
+                        }
+                      }
+                    }}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#6B7280"
+                  />
+                ) : (
+                  <TouchableOpacity
+                    style={styles.dateRangeButton}
+                    onPress={() => setShowStartDatePicker(true)}>
+                    <Text style={styles.dateRangeText}>
+                      📅 {format(holidayStartDate, 'MMM d, yyyy')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              {/* End Date */}
+              <View style={styles.dateRangeItem}>
+                <Text style={styles.dateRangeLabel}>To</Text>
+                {Platform.OS === 'web' ? (
+                  <TextInput
+                    style={styles.input}
+                    value={format(holidayEndDate, 'yyyy-MM-dd')}
+                    onChangeText={(text) => {
+                      const date = new Date(text);
+                      if (!isNaN(date.getTime()) && date >= holidayStartDate) {
+                        setHolidayEndDate(date);
+                      }
+                    }}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#6B7280"
+                  />
+                ) : (
+                  <TouchableOpacity
+                    style={styles.dateRangeButton}
+                    onPress={() => setShowEndDatePicker(true)}>
+                    <Text style={styles.dateRangeText}>
+                      📅 {format(holidayEndDate, 'MMM d, yyyy')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            
+            {/* Duration Display */}
+            {holidayStartDate && holidayEndDate && (
+              <Text style={styles.dateRangeDurationText}>
+                Duration: {Math.ceil((holidayEndDate.getTime() - holidayStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1} day(s)
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Notes */}
         <View style={styles.section}>
@@ -551,30 +1215,64 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             <View style={styles.patternContent}>
               <Text style={styles.patternSubtitle}>Select Pattern:</Text>
               <View style={styles.patternGrid}>
+                {/* Simple Patterns */}
                 {(Object.entries(SIMPLE_PATTERNS) as [keyof typeof SIMPLE_PATTERNS, typeof SIMPLE_PATTERNS[keyof typeof SIMPLE_PATTERNS]][]).map(([key, pattern]) => (
                   <TouchableOpacity
                     key={key}
                     style={[
                       styles.patternCard,
-                      selectedPattern === key && styles.patternCardActive,
+                      selectedPattern === key && !selectedCustomPattern && styles.patternCardActive,
                     ]}
-                    onPress={() => setSelectedPattern(key)}>
+                    onPress={() => {
+                      setSelectedPattern(key);
+                      setSelectedCustomPattern(null);
+                    }}>
                     <Text style={[
                       styles.patternName,
-                      selectedPattern === key && styles.patternNameActive,
+                      selectedPattern === key && !selectedCustomPattern && styles.patternNameActive,
                     ]}>
                       {pattern.name}
                     </Text>
-                    {'desc' in pattern && (
-                      <Text style={[
-                        styles.patternDesc,
-                        selectedPattern === key && styles.patternDescActive,
-                      ]}>
-                        {pattern.desc}
-                      </Text>
-                    )}
+                    <Text style={[
+                      styles.patternDesc,
+                      selectedPattern === key && !selectedCustomPattern && styles.patternDescActive,
+                    ]}>
+                      {pattern.workDays} days on, {pattern.restDays} days off
+                    </Text>
                   </TouchableOpacity>
                 ))}
+
+                {/* Custom Patterns */}
+                {customPatterns.map((customPattern) => {
+                  const workingDays = customPattern.cells.filter(c => c.shiftType !== null).length;
+                  const daysOff = 14 - workingDays;
+                  return (
+                    <TouchableOpacity
+                      key={customPattern.id}
+                      style={[
+                        styles.patternCard,
+                        styles.patternCardCustom,
+                        selectedCustomPattern?.id === customPattern.id && styles.patternCardActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedCustomPattern(customPattern);
+                        setSelectedPattern(customPattern.id);
+                      }}>
+                      <Text style={[
+                        styles.patternName,
+                        selectedCustomPattern?.id === customPattern.id && styles.patternNameActive,
+                      ]}>
+                        ✨ {customPattern.name}
+                      </Text>
+                      <Text style={[
+                        styles.patternDesc,
+                        selectedCustomPattern?.id === customPattern.id && styles.patternDescActive,
+                      ]}>
+                        {workingDays} working days, {daysOff} days off
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.patternSubtitle}>Duration:</Text>
@@ -709,6 +1407,41 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           </View>
         </View>
       </Modal>
+
+      {/* Date Picker for Holiday Start Date */}
+      {showStartDatePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={holidayStartDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedDate) => {
+            setShowStartDatePicker(Platform.OS === 'ios');
+            if (selectedDate) {
+              setHolidayStartDate(selectedDate);
+              // If end date is before start date, update it
+              if (holidayEndDate < selectedDate) {
+                setHolidayEndDate(selectedDate);
+              }
+            }
+          }}
+        />
+      )}
+
+      {/* Date Picker for Holiday End Date */}
+      {showEndDatePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={holidayEndDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={holidayStartDate}
+          onChange={(event, selectedDate) => {
+            setShowEndDatePicker(Platform.OS === 'ios');
+            if (selectedDate) {
+              setHolidayEndDate(selectedDate);
+            }
+          }}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -722,7 +1455,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   label: {
     fontSize: 16,
@@ -881,6 +1614,10 @@ const styles = StyleSheet.create({
     borderColor: '#6366F1',
     backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
+  patternCardCustom: {
+    borderColor: '#F59E0B',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
   patternName: {
     fontSize: 16,
     fontWeight: '600',
@@ -1011,6 +1748,93 @@ const styles = StyleSheet.create({
     minWidth: 50,
     alignItems: 'center',
   },
+  dateRangeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  dateRangeItem: {
+    flex: 1,
+  },
+  dateRangeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  dateRangeButton: {
+    backgroundColor: '#1E1E2E',
+    borderWidth: 1,
+    borderColor: '#2A2A3E',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  dateRangeText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  dateRangeDurationText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  splitShiftContainer: {
+    backgroundColor: '#1E1E2E',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A3E',
+  },
+  splitShiftLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  splitTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  splitTimeItem: {
+    flex: 1,
+  },
+  splitTimeItemLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 6,
+  },
+  splitTimeButton: {
+    backgroundColor: '#0F0F23',
+    borderWidth: 1,
+    borderColor: '#2A2A3E',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  splitTimeText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  splitTimeSeparator: {
+    fontSize: 20,
+    color: '#6366F1',
+    fontWeight: '600',
+    marginTop: 18,
+  },
+  splitTotalHours: {
+    fontSize: 14,
+    color: '#6366F1',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 12,
+  },
   ampmButtonActive: {
     backgroundColor: '#6366F1',
     borderColor: '#6366F1',
@@ -1022,35 +1846,6 @@ const styles = StyleSheet.create({
   },
   ampmTextActive: {
     color: '#FFFFFF',
-  },
-  presetRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  presetButton: {
-    flex: 1,
-    backgroundColor: '#1A1A2E',
-    borderWidth: 2,
-    borderColor: '#6366F1',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  presetIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  presetLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  presetTime: {
-    fontSize: 11,
-    color: '#9CA3AF',
   },
   timePickerButton: {
     backgroundColor: '#1A1A2E',
@@ -1158,6 +1953,94 @@ const styles = StyleSheet.create({
   },
   modalSaveButtonText: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Conflict Modal Styles
+  conflictModalContent: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  conflictModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  conflictModalText: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  conflictModalQuestion: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 20,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  existingShiftCard: {
+    backgroundColor: '#0F0F23',
+    borderWidth: 1,
+    borderColor: '#2A2A3E',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  existingShiftTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  existingShiftTime: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  conflictButtonContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  conflictCancelButton: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  conflictCancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  conflictKeepBothButton: {
+    flex: 1,
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  conflictKeepBothButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  conflictReplaceButton: {
+    flex: 1,
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  conflictReplaceButtonText: {
+    fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
   },

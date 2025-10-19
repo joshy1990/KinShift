@@ -68,5 +68,13 @@ export const notificationService = {
   
   sendNotification: async (notification: any) => {
     console.log('[Stub] Send notification', notification);
+  },
+  
+  notifyShiftCreated: async (shift: any, household: any) => {
+    console.log('[Stub] Notify shift created', shift, household);
+  },
+  
+  notifyMultipleShiftsCreated: async (shifts: any[], household: any) => {
+    console.log('[Stub] Notify multiple shifts created', shifts.length, household);
   }
 };

@@ -10,12 +10,14 @@ import {AddShiftPatternScreen} from '@/screens/calendar/AddShiftPatternScreen';
 import {EditShiftScreen} from '@/screens/calendar/EditShiftScreen';
 import {DayDetailScreen} from '@/screens/calendar/DayDetailScreen';
 import {TwoWeekViewScreen} from '@/screens/calendar/TwoWeekViewScreen';
+import {PatternBuilderScreen} from '@/screens/calendar/PatternBuilderScreen';
 
 const Stack = createNativeStackNavigator<CalendarStackParamList>();
 
 export const CalendarStack: React.FC = () => {
   return (
     <Stack.Navigator
+      id={undefined}
       screenOptions={{
         headerStyle: {
           backgroundColor: '#0F0F23',
@@ -59,6 +61,11 @@ export const CalendarStack: React.FC = () => {
         name="EditShift"
         component={EditShiftScreen}
         options={{title: 'Edit Shift', presentation: 'modal'}}
+      />
+      <Stack.Screen
+        name="PatternBuilder"
+        component={PatternBuilderScreen}
+        options={{title: 'Create Custom Pattern', presentation: 'modal'}}
       />
     </Stack.Navigator>
   );

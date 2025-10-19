@@ -52,16 +52,42 @@ export interface Shift {
   endTime: Date; // ISO timestamp
   colorTag: string; // Hex color code (auto-generated based on type)
   shiftType: ShiftType; // Type of shift for color coding
+  label?: string; // Display label (e.g., "D", "N", "HOL", "OFF")
   notes?: string; // Additional details, responsibilities, errands
   recurringRule?: RecurringRule; // Optional recurring pattern
   patternRule?: PatternRule; // Work pattern like 4on4off
+  splitTimes?: Array<{ startTime: Date; endTime: Date }>; // For split shifts - multiple time ranges in one day
   createdAt: Date;
   updatedAt: Date;
   lastEditedBy: string; // User ID of last editor
   isDeleted?: boolean; // Soft delete flag
 }
 
-export type ShiftType = 'days' | 'nights' | 'afternoons' | 'morning' | 'evening' | 'custom';
+// Extended shift types for comprehensive shift worker needs
+export type ShiftType = 
+  | 'day'        // Standard day shift
+  | 'night'      // Night shift
+  | 'twilight'   // Evening/twilight shift
+  | 'split'      // Split shift (multiple shifts per day)
+  | 'holiday'    // Holiday/annual leave
+  | 'off'        // Scheduled day off
+  | 'sick'       // Sick leave
+  | 'training'   // Training day
+  | 'custom';    // Custom pattern builder
+
+// Legacy types mapped to new types for backward compatibility
+export type LegacyShiftType = 'days' | 'nights' | 'afternoons' | 'morning' | 'evening';
+
+export function mapLegacyShiftType(legacy: LegacyShiftType): ShiftType {
+  const mapping: Record<LegacyShiftType, ShiftType> = {
+    'days': 'day',
+    'nights': 'night',
+    'afternoons': 'twilight',
+    'morning': 'day',
+    'evening': 'twilight',
+  };
+  return mapping[legacy] || 'day';
+}
 
 export interface PatternRule {
   type: 'rotation' | 'fixed_weekly' | 'custom';
@@ -237,6 +263,7 @@ export type CalendarStackParamList = {
   EditShift: {shiftId: string};
   DayDetail: {date: string; shifts?: Shift[]}; // YYYY-MM-DD format, optional pre-loaded shifts
   TwoWeekView: undefined; // 14-day forward view
+  PatternBuilder: undefined; // Custom pattern builder screen
 };
 
 export type HouseholdStackParamList = {

@@ -10,6 +10,7 @@ import {
   Switch,
   Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList, Shift, DayNote } from '@/types';
 import { format, isSameDay } from 'date-fns';
@@ -33,7 +34,8 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteContent, setNoteContent] = useState('');
-  const [noteTime, setNoteTime] = useState('');
+  const [noteTime, setNoteTime] = useState<Date | null>(null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [noteCategory, setNoteCategory] = useState<DayNote['category']>('other');
   const [notifyWorking, setNotifyWorking] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,34 +66,44 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         unsubscribeShifts = shiftService.subscribeToShifts(
           {
             ownerId: user.id,
-            startDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
-            endDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59),
+            // No date filter - we filter in the callback
           },
           (updatedShifts) => {
-            console.log('📅 Day details: Personal shifts updated:', updatedShifts.length);
-            setShifts(updatedShifts);
+            console.log('📅 Day details: All personal shifts received:', updatedShifts.length);
+            // Filter to only THIS DATE
+            const shiftsOnThisDate = updatedShifts.filter(shift => {
+              const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+                ? new Date((shift.startTime as any).seconds * 1000)
+                : new Date(shift.startTime);
+              return isSameDay(shiftDate, dateObj);
+            });
+            console.log('📅 Day details: Shifts on', format(dateObj, 'MMM dd'), ':', shiftsOnThisDate.length);
+            setShifts(shiftsOnThisDate);
           }
         );
       } else if (currentHouseholdId) {
-        // Household mode - subscribe to shifts for this household on this day
+        // Household mode - subscribe to shifts for this household
         unsubscribeShifts = shiftService.subscribeToShifts(
           {
             householdId: currentHouseholdId,
-            startDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
-            endDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59),
+            // No date filter - we filter in the callback
           },
           (updatedShifts) => {
-            console.log('📅 Day details: Household shifts updated:', updatedShifts.length);
-            // Filter out shifts from users no longer in household
-            const filteredShifts = updatedShifts.filter(shift => {
+            console.log('📅 Day details: All household shifts received:', updatedShifts.length);
+            // Filter to only THIS DATE and users in household
+            const shiftsOnThisDate = updatedShifts.filter(shift => {
+              const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+                ? new Date((shift.startTime as any).seconds * 1000)
+                : new Date(shift.startTime);
+              const isOnThisDate = isSameDay(shiftDate, dateObj);
               const isUserInHousehold = !!users[shift.ownerId];
               if (!isUserInHousehold) {
-                console.log('📅 Day details: Filtering out shift from departed user:', shift.ownerId);
+                console.log('📅 Filtering out shift from departed user:', shift.ownerId);
               }
-              return isUserInHousehold;
+              return isOnThisDate && isUserInHousehold;
             });
-            console.log('📅 Day details: After filtering:', filteredShifts.length);
-            setShifts(filteredShifts);
+            console.log('📅 Day details: Shifts on', format(dateObj, 'MMM dd'), ':', shiftsOnThisDate.length);
+            setShifts(shiftsOnThisDate);
           }
         );
         
@@ -217,14 +229,14 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         authorId: user.id,
         authorName: user.name || 'User',
         content: noteContent.trim(),
-        time: noteTime.trim() || undefined,
+        time: noteTime ? format(noteTime, 'HH:mm') : undefined,
         category: noteCategory,
         notifyWorkingMembers: isPersonalMode ? false : notifyWorking, // No notifications in personal mode
       });
 
       // Reset form
       setNoteContent('');
-      setNoteTime('');
+      setNoteTime(null);
       setNoteCategory('other');
       setNotifyWorking(true);
       setShowAddNote(false);
@@ -239,6 +251,29 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteShift = async (shift: Shift) => {
+    if (!user) {
+      showError('You must be logged in to delete shifts');
+      return;
+    }
+
+    // Confirm deletion
+    showConfirm(
+      'Delete Shift',
+      `Are you sure you want to delete "${shift.title}"?`,
+      async () => {
+        try {
+          await shiftService.deleteShift(shift.id, user.id);
+          showSuccess('Shift deleted successfully');
+          // The real-time subscription will automatically update the UI
+        } catch (error) {
+          console.error('Failed to delete shift:', error);
+          showError('Failed to delete shift');
+        }
+      }
+    );
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -314,21 +349,80 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                     <Text style={styles.shiftOwner}>👤 {getUserName(shift.ownerId)}</Text>
                   </View>
                 </View>
-                <Text style={styles.shiftTime}>
-                  🕐 {format(
-                    shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
-                      ? new Date((shift.startTime as any).seconds * 1000)
-                      : new Date(shift.startTime),
-                    'h:mm a'
-                  )} -{' '}
-                  {format(
-                    shift.endTime && typeof shift.endTime === 'object' && 'seconds' in shift.endTime
-                      ? new Date((shift.endTime as any).seconds * 1000)
-                      : new Date(shift.endTime),
-                    'h:mm a'
-                  )}
-                </Text>
+                
+                {/* Display time(s) - different format for split shifts */}
+                {(() => {
+                  console.log('🔍 Shift display data:', {
+                    id: shift.id,
+                    title: shift.title,
+                    shiftType: shift.shiftType,
+                    hasSplitTimes: !!shift.splitTimes,
+                    splitTimesLength: shift.splitTimes?.length,
+                    splitTimes: shift.splitTimes,
+                  });
+                  return null;
+                })()}
+                {shift.shiftType === 'split' && shift.splitTimes && shift.splitTimes.length === 2 ? (
+                  // Split shift - show BOTH time ranges
+                  <View style={styles.splitTimesContainer}>
+                    <Text style={styles.splitShiftLabel}>🕐 SPLIT SHIFT</Text>
+                    <Text style={styles.shiftTime}>
+                      {format(
+                        shift.splitTimes[0].startTime && typeof shift.splitTimes[0].startTime === 'object' && 'seconds' in shift.splitTimes[0].startTime
+                          ? new Date((shift.splitTimes[0].startTime as any).seconds * 1000)
+                          : new Date(shift.splitTimes[0].startTime),
+                        'h:mm a'
+                      )} -{' '}
+                      {format(
+                        shift.splitTimes[0].endTime && typeof shift.splitTimes[0].endTime === 'object' && 'seconds' in shift.splitTimes[0].endTime
+                          ? new Date((shift.splitTimes[0].endTime as any).seconds * 1000)
+                          : new Date(shift.splitTimes[0].endTime),
+                        'h:mm a'
+                      )}
+                    </Text>
+                    <Text style={styles.shiftTime}>
+                      {format(
+                        shift.splitTimes[1].startTime && typeof shift.splitTimes[1].startTime === 'object' && 'seconds' in shift.splitTimes[1].startTime
+                          ? new Date((shift.splitTimes[1].startTime as any).seconds * 1000)
+                          : new Date(shift.splitTimes[1].startTime),
+                        'h:mm a'
+                      )} -{' '}
+                      {format(
+                        shift.splitTimes[1].endTime && typeof shift.splitTimes[1].endTime === 'object' && 'seconds' in shift.splitTimes[1].endTime
+                          ? new Date((shift.splitTimes[1].endTime as any).seconds * 1000)
+                          : new Date(shift.splitTimes[1].endTime),
+                        'h:mm a'
+                      )}
+                    </Text>
+                  </View>
+                ) : (
+                  // Normal shift - single time range
+                  <Text style={styles.shiftTime}>
+                    🕐 {format(
+                      shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
+                        ? new Date((shift.startTime as any).seconds * 1000)
+                        : new Date(shift.startTime),
+                      'h:mm a'
+                    )} -{' '}
+                    {format(
+                      shift.endTime && typeof shift.endTime === 'object' && 'seconds' in shift.endTime
+                        ? new Date((shift.endTime as any).seconds * 1000)
+                        : new Date(shift.endTime),
+                      'h:mm a'
+                    )}
+                  </Text>
+                )}
+                
                 {shift.notes && <Text style={styles.shiftNotes}>📝 {shift.notes}</Text>}
+                
+                {/* Delete Button - only show if user owns the shift */}
+                {user && shift.ownerId === user.id && (
+                  <TouchableOpacity
+                    style={styles.deleteShiftButton}
+                    onPress={() => handleDeleteShift(shift)}>
+                    <Text style={styles.deleteShiftButtonText}>🗑️ Delete Shift</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ))
@@ -360,13 +454,64 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             />
 
             <Text style={styles.formLabel}>Time (optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g., 18:00"
-              value={noteTime}
-              onChangeText={setNoteTime}
-              maxLength={5}
-            />
+            {Platform.OS === 'web' ? (
+              // Web: Use text input with time parsing
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., 18:00 or 6:00 PM"
+                value={noteTime ? format(noteTime, 'HH:mm') : ''}
+                onChangeText={(text) => {
+                  if (!text) {
+                    setNoteTime(null);
+                    return;
+                  }
+                  // Parse time input (supports HH:mm format)
+                  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+                  if (match) {
+                    const [, hours, minutes] = match;
+                    const h = parseInt(hours, 10);
+                    const m = parseInt(minutes, 10);
+                    if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+                      const date = new Date();
+                      date.setHours(h, m, 0, 0);
+                      setNoteTime(date);
+                    }
+                  }
+                }}
+                maxLength={5}
+              />
+            ) : (
+              // Native: Use DateTimePicker
+              <>
+                <TouchableOpacity
+                  style={styles.timePickerButton}
+                  onPress={() => setShowTimePicker(true)}>
+                  <Text style={styles.timePickerText}>
+                    {noteTime ? format(noteTime, 'h:mm a') : 'Select time...'}
+                  </Text>
+                </TouchableOpacity>
+                {noteTime && (
+                  <TouchableOpacity
+                    style={styles.clearTimeButton}
+                    onPress={() => setNoteTime(null)}>
+                    <Text style={styles.clearTimeText}>✕ Clear</Text>
+                  </TouchableOpacity>
+                )}
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={noteTime || new Date()}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      setShowTimePicker(Platform.OS === 'ios');
+                      if (selectedDate) {
+                        setNoteTime(selectedDate);
+                      }
+                    }}
+                  />
+                )}
+              </>
+            )}
 
             <Text style={styles.formLabel}>Category</Text>
             <View style={styles.categoryContainer}>
@@ -413,7 +558,8 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => {
                   setShowAddNote(false);
                   setNoteContent('');
-                  setNoteTime('');
+                  setNoteTime(null);
+                  setShowTimePicker(false);
                 }}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -449,7 +595,12 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               </View>
               <View style={styles.noteFooter}>
                 <Text style={styles.noteAuthor}>
-                  by {note.authorName} · {format(new Date(note.createdAt), 'HH:mm')}
+                  by {note.authorName} · {format(
+                    note.createdAt && typeof note.createdAt === 'object' && 'seconds' in note.createdAt
+                      ? new Date((note.createdAt as any).seconds * 1000)
+                      : new Date(note.createdAt),
+                    'HH:mm'
+                  )}
                 </Text>
                 <TouchableOpacity onPress={() => handleDeleteNote(note.id)}>
                   <Text style={styles.deleteButton}>Delete</Text>
@@ -573,11 +724,34 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginBottom: 4,
   },
+  splitTimesContainer: {
+    marginTop: 4,
+  },
+  splitShiftLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6366F1',
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
   shiftNotes: {
     fontSize: 14,
     color: '#A1A1AA',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  deleteShiftButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  deleteShiftButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   addNoteForm: {
     backgroundColor: '#1A1A2E',
@@ -600,6 +774,27 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     marginBottom: 16,
+  },
+  timePickerButton: {
+    backgroundColor: '#0F0F23',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  timePickerText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  clearTimeButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  clearTimeText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
   },
   categoryContainer: {
     flexDirection: 'row',

@@ -9,19 +9,31 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAuth} from '@/contexts/AuthContext';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileStackParamList} from '@/types';
 import {getResponsiveValue, spacing, typography, borderRadius} from '@/utils/responsive';
-import {showAlert, showConfirm, showError} from '@/utils/alert';
+import {getScreenBottomPadding} from '@/utils/bottomSpacing';
+import {showAlert, showConfirm, showError, showSuccess} from '@/utils/alert';
+import {getShiftTypeIcon} from '@/utils/shiftColors';
+import {shiftService} from '@/services/shift.service';
+import {customPatternService} from '@/services/customPattern.service';
+import {CustomPattern} from '@/types/customPattern';
+import {Modal} from 'react-native';
 
 type ProfileScreenNavigationProp = NativeStackNavigationProp<ProfileStackParamList, 'ProfileMain'>;
 
 export const ProfileScreen: React.FC = () => {
   const {user, signOut, updateUserProfile} = useAuth();
   const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
+  const [clearingShifts, setClearingShifts] = useState(false);
+  const [customPatterns, setCustomPatterns] = useState<any[]>([]);
+  const [selectedPattern, setSelectedPattern] = useState<CustomPattern | null>(null);
+  const [showPatternModal, setShowPatternModal] = useState(false);
 
   const handleSignOut = async () => {
     showConfirm(
@@ -61,6 +73,92 @@ export const ProfileScreen: React.FC = () => {
     navigation.navigate('About');
   };
 
+  const handleClearAllShifts = async () => {
+    showConfirm(
+      '⚠️ Clear All Shifts',
+      'This will permanently delete ALL your shifts. This cannot be undone. Are you sure?',
+      async () => {
+        setClearingShifts(true);
+        try {
+          // Get all shifts for this user
+          const result = await shiftService.getShifts(
+            {
+              ownerId: user?.id,
+            },
+            {
+              pageSize: 1000, // Get all shifts
+            }
+          );
+
+          if (result.shifts.length === 0) {
+            showAlert('No Shifts', 'You have no shifts to clear.');
+            setClearingShifts(false);
+            return;
+          }
+
+          // Delete all shifts using bulk delete
+          const shiftIds = result.shifts.map(shift => shift.id);
+          console.log(`🗑️ Clearing ${shiftIds.length} shifts for user ${user?.id}`);
+          
+          await shiftService.deleteBulkShifts(shiftIds);
+          
+          console.log('✅ All shifts cleared successfully');
+          showSuccess(`Deleted ${result.shifts.length} shift${result.shifts.length !== 1 ? 's' : ''}. Your schedule is now clear.`);
+        } catch (error) {
+          console.error('Failed to clear shifts:', error);
+          showError('Failed to clear shifts. Please try again.');
+        } finally {
+          setClearingShifts(false);
+        }
+      }
+    );
+  };
+
+  const handleViewPattern = (pattern: CustomPattern) => {
+    setSelectedPattern(pattern);
+    setShowPatternModal(true);
+  };
+
+  const handleDeleteCustomPattern = (patternId: string, patternName: string) => {
+    showConfirm(
+      '⚠️ Delete Custom Shift',
+      `Are you sure you want to delete the "${patternName}" pattern? This cannot be undone.`,
+      async () => {
+        try {
+          setClearingShifts(true);
+          await customPatternService.deletePattern(patternId);
+          console.log('✅ Pattern deleted:', patternId);
+          // Reload patterns list
+          if (user) {
+            const patterns = await customPatternService.getUserPatterns(user.id);
+            setCustomPatterns(patterns);
+          }
+          showSuccess(`"${patternName}" pattern deleted successfully`);
+        } catch (error) {
+          console.error('Failed to delete pattern:', error);
+          showError('Failed to delete pattern. Please try again.');
+        } finally {
+          setClearingShifts(false);
+        }
+      }
+    );
+  };
+
+  // Load custom patterns when screen mounts
+  React.useEffect(() => {
+    const loadPatterns = async () => {
+      if (!user) return;
+      try {
+        const patterns = await customPatternService.getUserPatterns(user.id);
+        setCustomPatterns(patterns);
+        console.log('📋 Loaded', patterns.length, 'custom patterns');
+      } catch (error) {
+        console.error('Failed to load custom patterns:', error);
+      }
+    };
+    loadPatterns();
+  }, [user]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -76,7 +174,10 @@ export const ProfileScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView 
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingBottom: getScreenBottomPadding(insets.bottom)}
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Header */}
@@ -173,7 +274,66 @@ export const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Sign Out Button */}
+        {/* Shift Management Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Shift Management</Text>
+          
+          <TouchableOpacity 
+            style={[styles.menuItem, styles.clearShiftsItem]}
+            onPress={handleClearAllShifts}
+            activeOpacity={0.7}
+            disabled={clearingShifts}
+          >
+            <View style={styles.menuItemContent}>
+              <Text style={styles.menuIcon}>🗑️</Text>
+              <View style={styles.clearShiftsContent}>
+                <Text style={styles.menuText}>Clear All Shifts</Text>
+                <Text style={styles.clearShiftsHint}>Remove all your shifts at once</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* Custom Patterns List */}
+          {customPatterns.length > 0 && (
+            <View style={styles.customPatternsContainer}>
+              <Text style={styles.customPatternsTitle}>Your Custom Patterns</Text>
+              {customPatterns.map((pattern) => {
+                const workingDays = pattern.cells?.filter((c: any) => c.shiftType !== null).length || 0;
+                return (
+                  <TouchableOpacity 
+                    key={pattern.id} 
+                    style={styles.patternItem}
+                    onPress={() => handleViewPattern(pattern)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.patternItemLeft}>
+                      <Text style={styles.patternItemName}>✨ {pattern.name}</Text>
+                      <Text style={styles.patternItemDesc}>{workingDays} working days in 14-day cycle</Text>
+                      <Text style={styles.patternMode}>
+                        {pattern.patternMode === 'weekly' ? '📅 Weekly' : '🔄 Repetition'}
+                      </Text>
+                    </View>
+                    <View style={styles.patternItemRight}>
+                      <TouchableOpacity
+                        style={styles.patternViewButton}
+                        onPress={() => handleViewPattern(pattern)}
+                      >
+                        <Text style={styles.patternViewButtonText}>View</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.patternDeleteButton}
+                        onPress={() => handleDeleteCustomPattern(pattern.id, pattern.name)}
+                        disabled={clearingShifts}
+                      >
+                        <Text style={styles.patternDeleteButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
         <TouchableOpacity 
           style={styles.signOutButton} 
           onPress={handleSignOut}
@@ -187,6 +347,109 @@ export const ProfileScreen: React.FC = () => {
           <Text style={styles.footerText}>Made with ❤️ for families</Text>
         </View>
       </ScrollView>
+
+      {/* Pattern Details Modal */}
+      <Modal
+        visible={showPatternModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPatternModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowPatternModal(false)}>
+              <Text style={styles.modalCloseButton}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>{selectedPattern?.name}</Text>
+            <View style={{width: 30}} />
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {/* Pattern Info */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Pattern Information</Text>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Mode:</Text>
+                <Text style={styles.infoValue}>
+                  {selectedPattern?.patternMode === 'weekly' ? '📅 Weekly' : '🔄 Repetition'}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Working Days:</Text>
+                <Text style={styles.infoValue}>
+                  {selectedPattern?.cells?.filter((c: any) => c.shiftType !== null).length || 0} / 14
+                </Text>
+              </View>
+            </View>
+
+            {/* Pattern Grid */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Pattern Layout</Text>
+              
+              {/* Week 1 - Always show */}
+              <View style={styles.weekContainer}>
+                <Text style={styles.weekLabel}>Week 1</Text>
+                <View style={styles.patternGridRow}>
+                  {selectedPattern?.cells?.slice(0, 7).map((cell: any, index: number) => {
+                    const dayOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                    const dayName = dayOfWeek[index];
+                    const icon = cell.shiftType ? getShiftTypeIcon(cell.shiftType) : '🚫';
+                    
+                    return (
+                      <View key={index} style={styles.cellPreview}>
+                        <Text style={styles.cellDayLabel}>{dayName}</Text>
+                        <Text style={styles.cellIcon}>{icon}</Text>
+                        {cell.shiftType && (
+                          <>
+                            <Text style={styles.cellTime}>{cell.startTime}</Text>
+                            <Text style={styles.cellTime}>{cell.endTime}</Text>
+                          </>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Week 2 - Only show for Repetition mode */}
+              {selectedPattern?.patternMode === 'repetition' && (
+                <View style={styles.weekContainer}>
+                  <Text style={styles.weekLabel}>Week 2</Text>
+                  <View style={styles.patternGridRow}>
+                    {selectedPattern?.cells?.slice(7, 14).map((cell: any, index: number) => {
+                      const dayOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                      const dayName = dayOfWeek[index];
+                      const icon = cell.shiftType ? getShiftTypeIcon(cell.shiftType) : '🚫';
+                      
+                      return (
+                        <View key={index + 7} style={styles.cellPreview}>
+                          <Text style={styles.cellDayLabel}>{dayName}</Text>
+                          <Text style={styles.cellIcon}>{icon}</Text>
+                          {cell.shiftType && (
+                            <>
+                              <Text style={styles.cellTime}>{cell.startTime}</Text>
+                              <Text style={styles.cellTime}>{cell.endTime}</Text>
+                            </>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Info for Weekly mode */}
+              {selectedPattern?.patternMode === 'weekly' && (
+                <View style={styles.patternModeNote}>
+                  <Text style={styles.patternModeNoteText}>
+                    📅 This weekly pattern repeats every 7 days
+                  </Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -300,6 +563,90 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: '#6B7280',
   },
+  clearShiftsItem: {
+    backgroundColor: '#2D2D3D',
+    borderLeftWidth: 3,
+    borderLeftColor: '#DC2626',
+  },
+  clearShiftsContent: {
+    flex: 1,
+  },
+  clearShiftsHint: {
+    fontSize: typography.caption,
+    color: '#9CA3AF',
+    marginTop: spacing.xs,
+  },
+  customPatternsContainer: {
+    marginTop: spacing.lg,
+    backgroundColor: '#1F1F37',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: '#6366F1',
+  },
+  customPatternsTitle: {
+    fontSize: typography.caption,
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+    fontWeight: '600',
+  },
+  patternItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F0F23',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+  },
+  patternItemLeft: {
+    flex: 1,
+  },
+  patternItemName: {
+    fontSize: typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  patternItemDesc: {
+    fontSize: typography.caption,
+    color: '#9CA3AF',
+  },
+  patternMode: {
+    fontSize: typography.caption,
+    color: '#6366F1',
+    marginTop: spacing.xs,
+    fontWeight: '500',
+  },
+  patternItemRight: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  patternViewButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  patternViewButtonText: {
+    fontSize: typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  patternDeleteButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  patternDeleteButtonText: {
+    fontSize: typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   signOutButton: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.xl,
@@ -332,5 +679,130 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: typography.caption,
     color: '#6B7280',
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#0F0F23',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F1F37',
+  },
+  modalCloseButton: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    width: 30,
+    textAlign: 'center',
+  },
+  modalTitle: {
+    fontSize: typography.title,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  modalContent: {
+    flex: 1,
+    padding: spacing.md,
+  },
+  modalSection: {
+    marginBottom: spacing.lg,
+    backgroundColor: '#1F1F37',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+  },
+  modalSectionTitle: {
+    fontSize: typography.subtitle,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D3D',
+    paddingBottom: spacing.sm,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0F0F23',
+  },
+  infoLabel: {
+    fontSize: typography.body,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  patternGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  weekContainer: {
+    marginBottom: spacing.md,
+  },
+  weekLabel: {
+    fontSize: typography.body,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  patternGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: spacing.md,
+    flexWrap: 'wrap',
+  },
+  cellPreview: {
+    width: '12.5%',
+    backgroundColor: '#0F0F23',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2D2D3D',
+  },
+  cellDayLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  cellIcon: {
+    fontSize: 20,
+    marginVertical: spacing.xs,
+  },
+  cellTime: {
+    fontSize: 9,
+    color: '#9CA3AF',
+    marginTop: spacing.xs,
+    lineHeight: 12,
+  },
+  patternModeNote: {
+    backgroundColor: '#1F2937',
+    borderLeftWidth: 3,
+    borderLeftColor: '#6366F1',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  patternModeNoteText: {
+    fontSize: typography.body,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
 });

@@ -1,24 +1,74 @@
 import {Shift, ShiftType} from '@/types';
 import {isSameDay} from 'date-fns';
 
-// Primary colors for shift types (for current user)
+/**
+ * Enhanced Shift Type Colors
+ * Designed for accessibility (WCAG AA compliant) and visual clarity
+ */
+
+// Primary colors for shift types - User's own shifts
 export const SHIFT_TYPE_COLORS: Record<ShiftType, string> = {
-  days: '#2ECC71',      // Green for user
-  nights: '#E74C3C',    // Red for user
-  afternoons: '#3498DB', // Blue for user
-  morning: '#F39C12',   // Orange
-  evening: '#9B59B6',   // Purple
-  custom: '#95A5A6',    // Gray
+  day: '#4A90E2',        // Blue - Standard day shift
+  night: '#4A4A4A',      // Dark Gray - Night shift
+  twilight: '#9B59B6',   // Purple - Evening/twilight shift
+  split: '#F39C12',      // Orange - Split shift
+  holiday: '#FFD93D',    // Yellow - Holiday/annual leave ⭐ NEW
+  off: '#F5F5F5',        // Light Gray - Scheduled day off ⭐ NEW
+  sick: '#E74C3C',       // Red - Sick leave ⭐ NEW
+  training: '#2ECC71',   // Green - Training day ⭐ NEW
+  custom: '#95A5A6',     // Gray - Custom user-defined
 };
 
-// Colors for OTHER users (not the current user)
+// Display labels for each shift type (shown on calendar)
+export const SHIFT_TYPE_LABELS: Record<ShiftType, string> = {
+  day: 'D',
+  night: 'N',
+  twilight: 'T',
+  split: 'S',
+  holiday: 'HOL',        // ⭐ NEW
+  off: 'OFF',            // ⭐ NEW
+  sick: 'SICK',          // ⭐ NEW
+  training: 'TRN',       // ⭐ NEW
+  custom: 'C',
+};
+
+// Full names for shift types (used in UI)
+export const SHIFT_TYPE_NAMES: Record<ShiftType, string> = {
+  day: 'Day Shift',
+  night: 'Night Shift',
+  twilight: 'Twilight Shift',
+  split: 'Split Shift',
+  holiday: 'Holiday',
+  off: 'Day Off',
+  sick: 'Sick Leave',
+  training: 'Training',
+  custom: 'Custom',
+};
+
+// Emoji icons for shift types (optional, for enhanced UX)
+export const SHIFT_TYPE_ICONS: Record<ShiftType, string> = {
+  day: '☀️',
+  night: '🌙',
+  twilight: '🌆',
+  split: '⏰',
+  holiday: '🏖️',
+  off: '🚫',
+  sick: '🤒',
+  training: '📚',
+  custom: '⚙️',
+};
+
+// Colors for OTHER users (not the current user) - Lighter tints for differentiation
 export const OTHER_USER_COLORS: Record<ShiftType, string> = {
-  days: '#5DADE2',      // Light blue when other user works days
-  nights: '#F4D03F',    // Yellow when other user works nights
-  afternoons: '#AF7AC5', // Light purple when other user works afternoons
-  morning: '#F8B739',   // Lighter orange
-  evening: '#7FB3D5',   // Lighter blue
-  custom: '#AAB7B8',    // Lighter gray
+  day: '#7EB3E0',        // Light blue
+  night: '#6B6B6B',      // Medium gray
+  twilight: '#BB8FCE',   // Light purple
+  split: '#F8B739',      // Light orange
+  holiday: '#FFE67D',    // Light yellow
+  off: '#FAFAFA',        // Very light gray
+  sick: '#F1948A',       // Light red
+  training: '#76D7C4',   // Light green
+  custom: '#B2BABB',     // Light gray
 };
 
 // Color for 3+ people working
@@ -93,17 +143,29 @@ export function analyzeMultiPersonShifts(
   shiftsOnDate: Shift[], 
   currentUserId: string
 ): MultiPersonShiftInfo {
-  // Group shifts by unique user (take first shift per user if multiple)
-  const userShiftMap = new Map<string, Shift>();
+  // Group shifts by unique user (but keep ALL shifts, not just first)
+  const userShiftMap = new Map<string, Shift[]>();
   
   shiftsOnDate.forEach(shift => {
     if (!userShiftMap.has(shift.ownerId)) {
-      userShiftMap.set(shift.ownerId, shift);
+      userShiftMap.set(shift.ownerId, []);
     }
+    userShiftMap.get(shift.ownerId)!.push(shift);
   });
   
   const userCount = userShiftMap.size;
   const colors: string[] = [];
+  
+  console.log('🎨 analyzeMultiPersonShifts:', {
+    totalShifts: shiftsOnDate.length,
+    userCount,
+    shifts: shiftsOnDate.map(s => ({
+      title: s.title,
+      type: s.shiftType,
+      owner: s.ownerId,
+      color: SHIFT_TYPE_COLORS[s.shiftType]
+    }))
+  });
   
   // Determine colors based on number of people working
   if (userCount === 0) {
@@ -115,10 +177,30 @@ export function analyzeMultiPersonShifts(
       workingCount: 0,
     };
   } else if (userCount === 1) {
-    // Single person - show their shift color
-    const shift = Array.from(userShiftMap.values())[0];
-    const isCurrentUser = shift.ownerId === currentUserId;
-    colors.push(getShiftColor(shift, currentUserId, isCurrentUser));
+    // Single person - check if they have multiple shifts (e.g., split shift or day+night)
+    const userShifts = Array.from(userShiftMap.values())[0];
+    const isCurrentUser = userShifts[0].ownerId === currentUserId;
+    
+    if (userShifts.length > 1) {
+      // Multiple shifts for same person - show colors side by side (prioritize latest shift)
+      // Sort by start time and take last shift (most recent/relevant)
+      const sortedShifts = userShifts.sort((a, b) => {
+        const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
+        const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+        return bTime - aTime;
+      });
+      const selectedShift = sortedShifts[0];
+      console.log('📊 Selected shift from multiple:', {
+        totalShifts: userShifts.length,
+        selected: selectedShift.title,
+        type: selectedShift.shiftType,
+        color: getShiftColor(selectedShift, currentUserId, isCurrentUser)
+      });
+      colors.push(getShiftColor(selectedShift, currentUserId, isCurrentUser));
+    } else {
+      // Single shift
+      colors.push(getShiftColor(userShifts[0], currentUserId, isCurrentUser));
+    }
     
     return {
       userCount: 1,
@@ -128,15 +210,27 @@ export function analyzeMultiPersonShifts(
     };
   } else if (userCount === 2) {
     // Two people - show both colors (current user first if present)
-    const shifts = Array.from(userShiftMap.values());
-    const currentUserShift = shifts.find(s => s.ownerId === currentUserId);
-    const otherUserShift = shifts.find(s => s.ownerId !== currentUserId);
+    const allUserShifts = Array.from(userShiftMap.values());
+    const currentUserShifts = allUserShifts.find(shifts => shifts[0].ownerId === currentUserId);
+    const otherUserShifts = allUserShifts.find(shifts => shifts[0].ownerId !== currentUserId);
     
-    if (currentUserShift) {
-      colors.push(getShiftColor(currentUserShift, currentUserId, true));
+    if (currentUserShifts) {
+      // Take latest shift for current user
+      const sortedShifts = currentUserShifts.sort((a, b) => {
+        const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
+        const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+        return bTime - aTime;
+      });
+      colors.push(getShiftColor(sortedShifts[0], currentUserId, true));
     }
-    if (otherUserShift) {
-      colors.push(getShiftColor(otherUserShift, currentUserId, false));
+    if (otherUserShifts) {
+      // Take latest shift for other user
+      const sortedShifts = otherUserShifts.sort((a, b) => {
+        const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
+        const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+        return bTime - aTime;
+      });
+      colors.push(getShiftColor(sortedShifts[0], currentUserId, false));
     }
     
     return {
@@ -165,53 +259,35 @@ export function detectShiftType(startTime: Date, endTime: Date): ShiftType {
   
   // Night shift: starts after 20:00 or ends before 08:00
   if (startHour >= 20 || endHour <= 8 || (startHour < 8 && endHour < 16)) {
-    return 'nights';
+    return 'night';
   }
   
-  // Afternoon/Evening shift: starts after 12:00 and before 20:00
-  if (startHour >= 12 && startHour < 20) {
-    return 'afternoons';
+  // Twilight shift: starts after 14:00 and before 22:00
+  if (startHour >= 14 && startHour < 22) {
+    return 'twilight';
   }
   
-  // Morning/Day shift: starts between 05:00 and 12:00
-  if (startHour >= 5 && startHour < 12) {
-    return 'days';
+  // Day shift: starts between 05:00 and 14:00
+  if (startHour >= 5 && startHour < 14) {
+    return 'day';
   }
   
-  // Default to days for other times
-  return 'days';
+  // Default to day for other times
+  return 'day';
 }
 
 /**
  * Gets a user-friendly display name for shift type
  */
 export function getShiftTypeDisplayName(shiftType: ShiftType): string {
-  const displayNames: Record<ShiftType, string> = {
-    days: 'Day Shift',
-    nights: 'Night Shift',
-    afternoons: 'Afternoon Shift',
-    morning: 'Morning Shift',
-    evening: 'Evening Shift',
-    custom: 'Custom Shift',
-  };
-  
-  return displayNames[shiftType];
+  return SHIFT_TYPE_NAMES[shiftType] || 'Custom Shift';
 }
 
 /**
  * Gets shift type icon/emoji
  */
 export function getShiftTypeIcon(shiftType: ShiftType): string {
-  const icons: Record<ShiftType, string> = {
-    days: '☀️',
-    nights: '🌙',
-    afternoons: '🌅',
-    morning: '🌄',
-    evening: '🌆',
-    custom: '⭐',
-  };
-  
-  return icons[shiftType];
+  return SHIFT_TYPE_ICONS[shiftType] || '⭐';
 }
 
 /**

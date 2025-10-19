@@ -1,0 +1,420 @@
+/**
+ * Custom Pattern Service
+ * Handles saving, loading, and applying user-created shift patterns
+ */
+
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '@/config/firebase.config';
+import { CustomPattern, PatternCell, PatternPreview } from '@/types/customPattern';
+import { ShiftType } from '@/types';
+
+// Re-export for convenience
+export type { PatternCell, CustomPattern, PatternPreview };
+import { shiftService } from './shift.service';
+import { addDays, addMonths, differenceInDays, startOfDay } from 'date-fns';
+
+const COLLECTIONS = {
+  CUSTOM_PATTERNS: 'customPatterns',
+};
+
+export class CustomPatternService {
+  /**
+   * Calculate the actual repeating cycle length of a pattern
+   * E.g., if pattern is [work, work, off, off, off, off, off, work, work, off, off, off, off, off]
+   * This would be a 7-day cycle, not 14
+   * 
+   * For an 8-day cycle like [work, work, work, work, off, off, off, off, work, work, work, work, off, off]
+   * This function will correctly identify it as 8 days
+   */
+  calculateCycleLength(cells: PatternCell[]): number {
+    // Try all possible cycle lengths from 1 to 14
+    // Start with smallest to find the true repeating unit
+    for (let cycleLength = 1; cycleLength <= 14; cycleLength++) {
+      // For each potential cycle, check if entire 14-day pattern repeats correctly
+      let repeats = true;
+      
+      for (let i = 0; i < 14; i++) {
+        const currentCell = cells[i];
+        const referenceCell = cells[i % cycleLength];
+        
+        // Check if shift type matches
+        if (currentCell.shiftType !== referenceCell.shiftType) {
+          repeats = false;
+          break;
+        }
+        
+        // If both have shift times, verify times match exactly
+        if (currentCell.shiftType !== null && referenceCell.shiftType !== null) {
+          if (currentCell.startTime !== referenceCell.startTime ||
+              currentCell.endTime !== referenceCell.endTime) {
+            repeats = false;
+            break;
+          }
+        }
+      }
+      
+      if (repeats) {
+        console.log(`✅ [PATTERN] Detected cycle length: ${cycleLength} days`);
+        return cycleLength; // Found the smallest repeating cycle
+      }
+    }
+    
+    // This should never happen since a 14-day cycle always repeats, but safety default
+    console.log('⚠️ [PATTERN] Could not detect cycle, defaulting to 14 days');
+    return 14;
+  }
+
+  /**
+   * Save a new custom pattern
+   */
+  async savePattern(
+    userId: string,
+    name: string,
+    cells: PatternCell[],
+    householdId?: string,
+    description?: string,
+    patternMode: 'weekly' | 'repetition' = 'repetition'
+  ): Promise<string> {
+    try {
+      // Validate pattern has at least one working day
+      const hasWorkingDay = cells.some(cell => cell.shiftType !== null);
+      if (!hasWorkingDay) {
+        throw new Error('Pattern must have at least one working day');
+      }
+
+      // Validate cells array is exactly 14 days
+      if (cells.length !== 14) {
+        throw new Error('Pattern must have exactly 14 days (2 weeks)');
+      }
+
+      const now = new Date();
+      const patternData = {
+        userId,
+        householdId: householdId || null,
+        name,
+        description: description || '',
+        cells,
+        patternMode,
+        createdAt: now,
+        updatedAt: now,
+        isShared: !!householdId,
+      };
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.CUSTOM_PATTERNS), patternData);
+      
+      console.log('✅ [PATTERN] Saved custom pattern:', docRef.id, name, '- Mode:', patternMode);
+      return docRef.id;
+    } catch (error) {
+      console.error('❌ [PATTERN] Failed to save pattern:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all patterns for a user
+   */
+  async getUserPatterns(userId: string): Promise<CustomPattern[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.CUSTOM_PATTERNS),
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      const patterns: CustomPattern[] = [];
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        patterns.push({
+          id: doc.id,
+          userId: data.userId,
+          householdId: data.householdId,
+          name: data.name,
+          description: data.description,
+          cells: data.cells,
+          patternMode: data.patternMode || 'repetition', // Default to repetition for backward compatibility
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+          isShared: data.isShared || false,
+        });
+      });
+
+      console.log(`✅ [PATTERN] Loaded ${patterns.length} patterns for user:`, userId);
+      return patterns;
+    } catch (error) {
+      console.error('❌ [PATTERN] Failed to load patterns:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific pattern by ID
+   */
+  async getPattern(patternId: string): Promise<CustomPattern | null> {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return null;
+      }
+
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        householdId: data.householdId,
+        name: data.name,
+        description: data.description,
+        cells: data.cells,
+        patternMode: data.patternMode || 'repetition', // Default to repetition for backward compatibility
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+        isShared: data.isShared || false,
+      };
+    } catch (error) {
+      console.error('❌ [PATTERN] Failed to load pattern:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update an existing pattern
+   */
+  async updatePattern(
+    patternId: string,
+    updates: Partial<Pick<CustomPattern, 'name' | 'description' | 'cells' | 'isShared'>>
+  ): Promise<void> {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: new Date(),
+      });
+
+      console.log('✅ [PATTERN] Updated pattern:', patternId);
+    } catch (error) {
+      console.error('❌ [PATTERN] Failed to update pattern:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a pattern
+   */
+  async deletePattern(patternId: string): Promise<void> {
+    try {
+      const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
+      await deleteDoc(docRef);
+
+      console.log('✅ [PATTERN] Deleted pattern:', patternId);
+    } catch (error) {
+      console.error('❌ [PATTERN] Failed to delete pattern:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Preview pattern for next N days
+   */
+  previewPattern(
+    pattern: CustomPattern,
+    startDate: Date,
+    previewDays: number = 28
+  ): PatternPreview[] {
+    const previews: PatternPreview[] = [];
+    const startDay = startOfDay(startDate);
+
+    for (let i = 0; i < previewDays; i++) {
+      const currentDate = addDays(startDay, i);
+      const dayInPattern = i % 14; // 14-day cycle
+      const cell = pattern.cells[dayInPattern];
+
+      if (cell.shiftType !== null) {
+        previews.push({
+          date: currentDate,
+          shiftType: cell.shiftType,
+          startTime: cell.startTime,
+          endTime: cell.endTime,
+        });
+      }
+    }
+
+    return previews;
+  }
+
+  /**
+   * Apply pattern to create shifts
+   */
+  async applyPattern(
+    patternId: string,
+    startDate: Date,
+    durationMonths: number,
+    userId: string,
+    householdId?: string
+  ): Promise<{ success: boolean; shiftsCreated: number; error?: string }> {
+    try {
+      console.log('🔄 [PATTERN] Applying pattern:', patternId, 'for', durationMonths, 'months');
+
+      // Load pattern
+      const pattern = await this.getPattern(patternId);
+      if (!pattern) {
+        return { success: false, shiftsCreated: 0, error: 'Pattern not found' };
+      }
+
+      // Calculate end date
+      const endDate = addMonths(startOfDay(startDate), durationMonths);
+      const totalDays = differenceInDays(endDate, startDate);
+
+      console.log('📅 [PATTERN] Creating shifts from', startDate, 'to', endDate, `(${totalDays} days)`);
+
+      // Determine cycle length based on pattern mode
+      let cycleLength: number;
+      if (pattern.patternMode === 'weekly') {
+        // Weekly mode: Always use 7-day cycle (Mon-Sun repeat)
+        cycleLength = 7;
+        console.log('📅 [PATTERN] Weekly mode - using 7-day cycle');
+      } else {
+        // Repetition mode: Auto-detect the cycle length
+        cycleLength = this.calculateCycleLength(pattern.cells);
+        console.log(`🔄 [PATTERN] Repetition mode - detected ${cycleLength}-day cycle`);
+      }
+
+      // Generate shifts
+      const shiftsToCreate: any[] = [];
+      let currentDate = startOfDay(startDate);
+
+      while (currentDate < endDate) {
+        // Calculate day in pattern using detected cycle length
+        const daysSinceStart = differenceInDays(currentDate, startDate);
+        let dayInPattern = daysSinceStart % cycleLength;
+        
+        // For weekly patterns, offset by start date's day-of-week to respect calendar alignment
+        if (pattern.patternMode === 'weekly') {
+          const startDateDow = startDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+          const startPatternOffset = startDateDow === 0 ? 6 : startDateDow - 1; // Convert to pattern format (0=Mon, ..., 6=Sun)
+          dayInPattern = (daysSinceStart + startPatternOffset) % cycleLength;
+        }
+        
+        // Get cell for this day
+        const cell = pattern.cells[dayInPattern];
+
+        if (cell.shiftType !== null) {
+          // Parse times
+          const [startHour, startMinute] = cell.startTime.split(':').map(Number);
+          const [endHour, endMinute] = cell.endTime.split(':').map(Number);
+
+          const shiftStart = new Date(currentDate);
+          shiftStart.setHours(startHour, startMinute, 0, 0);
+
+          const shiftEnd = new Date(currentDate);
+          shiftEnd.setHours(endHour, endMinute, 0, 0);
+
+          // Handle overnight shifts
+          if (shiftEnd < shiftStart) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+
+          shiftsToCreate.push({
+            ownerId: userId,
+            householdId: householdId,
+            shiftType: cell.shiftType,
+            startTime: shiftStart,
+            endTime: shiftEnd,
+            title: cell.label || this.getShiftTypeLabel(cell.shiftType),
+            notes: `From pattern: ${pattern.name}`,
+          });
+        }
+
+        currentDate = addDays(currentDate, 1);
+      }
+
+      console.log('🚀 [PATTERN] Creating', shiftsToCreate.length, 'shifts...');
+
+      // Batch create shifts
+      await shiftService.createBulkShifts(shiftsToCreate);
+
+      console.log('✅ [PATTERN] Successfully created', shiftsToCreate.length, 'shifts');
+
+      return {
+        success: true,
+        shiftsCreated: shiftsToCreate.length,
+      };
+    } catch (error: any) {
+      console.error('❌ [PATTERN] Failed to apply pattern:', error);
+      return {
+        success: false,
+        shiftsCreated: 0,
+        error: error.message || 'Failed to apply pattern',
+      };
+    }
+  }
+
+  /**
+   * Get label for shift type
+   */
+  private getShiftTypeLabel(shiftType: ShiftType): string {
+    const labels: Record<ShiftType, string> = {
+      day: 'Day Shift',
+      night: 'Night Shift',
+      twilight: 'Twilight Shift',
+      split: 'Split Shift',
+      holiday: 'Holiday',
+      off: 'Day Off',
+      sick: 'Sick Leave',
+      training: 'Training',
+      custom: 'Custom Shift',
+    };
+
+    return labels[shiftType] || 'Shift';
+  }
+
+  /**
+   * Validate pattern cells
+   */
+  validatePattern(cells: PatternCell[]): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (cells.length !== 14) {
+      errors.push('Pattern must have exactly 14 days');
+    }
+
+    const hasWorkingDay = cells.some(cell => cell.shiftType !== null);
+    if (!hasWorkingDay) {
+      errors.push('Pattern must have at least one working day');
+    }
+
+    // Validate times
+    cells.forEach((cell, index) => {
+      if (cell.shiftType !== null) {
+        const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+        if (!timeRegex.test(cell.startTime)) {
+          errors.push(`Day ${index + 1}: Invalid start time format (use HH:mm)`);
+        }
+        if (!timeRegex.test(cell.endTime)) {
+          errors.push(`Day ${index + 1}: Invalid end time format (use HH:mm)`);
+        }
+      }
+    });
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+}
+
+export const customPatternService = new CustomPatternService();

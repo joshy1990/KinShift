@@ -38,13 +38,18 @@ class AuthService {
    */
   async signInWithEmail(email: string, password: string): Promise<User> {
     try {
+      console.log('[AuthService] Starting sign in...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('[AuthService] Firebase Auth sign in successful');
       const uid = userCredential.user.uid;
       try {
+        console.log('[AuthService] Attempting to fetch user data from Firestore...');
         const user = await this.getUserData(uid);
+        console.log('[AuthService] User data loaded successfully');
         return user;
       } catch (e) {
-        // If user doc is missing, create it from Auth and proceed
+        console.warn('[AuthService] Failed to fetch user data, using Firebase Auth fallback');
+        // If user doc is missing or Firestore fails, create it from Auth and proceed
         const fallbackUser: User = {
           id: uid,
           name: userCredential.user.displayName || '',
@@ -54,11 +59,16 @@ class AuthService {
           updatedAt: new Date(),
         };
         try {
+          console.log('[AuthService] Creating user doc from Auth fallback...');
           await setDoc(doc(db, COLLECTIONS.USERS, uid), fallbackUser);
-        } catch {}
+          console.log('[AuthService] User doc created successfully');
+        } catch (setDocError) {
+          console.error('[AuthService] Failed to create user doc:', setDocError);
+        }
         return fallbackUser;
       }
     } catch (error: any) {
+      console.error('[AuthService] Sign in failed:', error);
       throw this.handleAuthError(error);
     }
   }
@@ -94,21 +104,48 @@ class AuthService {
   }
 
   /**
-   * Get user data from Firestore
+   * Get user data from Firestore with retry logic
+   * Uses aggressive timeout to force fallback from WebChannel to long-polling
    */
-  async getUserData(userId: string): Promise<User> {
-    try {
-      const userDocRef = doc(db, COLLECTIONS.USERS, userId);
-      const userDoc = await getDoc(userDocRef);
+  async getUserData(userId: string, retries: number = 5): Promise<User> {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        // Add a timeout wrapper to force fallback faster
+        const timeoutMs = attempt === 0 ? 4000 : 3000; // More time for first attempt (WebChannel -> long-polling)
+        
+        const userDocRef = doc(db, COLLECTIONS.USERS, userId);
+        
+        // Race between getDoc and timeout
+        const userDocPromise = getDoc(userDocRef);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Firestore timeout after ${timeoutMs}ms`)), timeoutMs)
+        );
+        
+        const userDoc = await Promise.race([userDocPromise, timeoutPromise]) as any;
 
-      if (!userDoc.exists()) {
-        throw new Error('User not found');
+        if (!userDoc.exists()) {
+          throw new Error('User not found');
+        }
+
+        console.log(`✅ [AuthService] Successfully loaded user data on attempt ${attempt + 1}`);
+        return userDoc.data() as User;
+      } catch (error: any) {
+        // Exponential backoff: 1s, 2s, 3s, 4s, 5s
+        const delay = 1000 * (attempt + 1);
+        console.warn(`⚠️ [AuthService] Attempt ${attempt + 1}/${retries} failed: ${error.message}`);
+        console.log(`📋 [AuthService] Retrying in ${delay}ms...`);
+        
+        // If this is the last attempt, throw the error
+        if (attempt === retries - 1) {
+          console.error(`❌ [AuthService] All ${retries} retry attempts failed for user ${userId}`);
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-
-      return userDoc.data() as User;
-    } catch (error) {
-      throw new Error('Failed to fetch user data');
     }
+    throw new Error('Failed to fetch user data after all retries');
   }
 
   /**
@@ -308,12 +345,15 @@ class AuthService {
       if (firebaseUser) {
         try {
           console.log('[AuthService] Firebase user detected:', firebaseUser.uid, firebaseUser.email);
+          console.log('[AuthService] Attempting to fetch user data from Firestore...');
           const userData = await this.getUserData(firebaseUser.uid);
-          console.log('[AuthService] User data loaded from Firestore:', userData);
+          console.log('[AuthService] ✅ SUCCESS - User data loaded from Firestore:', userData);
           callback(userData);
-        } catch (error) {
-          console.error('[AuthService] Failed to load user data from Firestore:', error);
-          // If Firestore user document doesn't exist, create basic user object from Firebase Auth
+        } catch (error: any) {
+          console.warn('[AuthService] ⚠️ Failed to load user data from Firestore after all retries:', error.message);
+          console.warn('[AuthService] Falling back to Firebase Auth data...');
+          
+          // Create basic user object from Firebase Auth as fallback
           const basicUserData: User = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || '',
@@ -322,7 +362,7 @@ class AuthService {
             createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
             updatedAt: new Date(),
           };
-          console.log('[AuthService] Using basic user data from Firebase Auth:', basicUserData);
+          console.log('[AuthService] ℹ️ Using basic user data from Firebase Auth:', basicUserData);
           
           // Try to create the missing Firestore document (exclude photoUrl if null)
           try {
@@ -331,15 +371,18 @@ class AuthService {
               delete docData.photoUrl;
             }
             await setDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid), docData);
-            console.log('[AuthService] Created missing Firestore user document');
-          } catch (firestoreError) {
-            console.error('[AuthService] Failed to create Firestore user document:', firestoreError);
+            console.log('[AuthService] ✅ Created Firestore user document');
+          } catch (firestoreError: any) {
+            console.warn('[AuthService] Could not create Firestore document (will retry later):', firestoreError.message);
+            // Continue anyway - app will work with basic data
           }
           
+          // Return the user data (will use Firebase Auth data as fallback)
+          console.log('[AuthService] ✅ Logging user in with fallback data');
           callback(basicUserData);
         }
       } else {
-        console.log('[AuthService] No Firebase user - user is logged out');
+        console.log('[AuthService] ℹ️ No Firebase user - user is logged out');
         callback(null);
       }
     });
