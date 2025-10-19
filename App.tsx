@@ -4,6 +4,7 @@ import {StatusBar, Platform, View, Text} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {AuthProvider} from './src/contexts/AuthContext';
 import {HouseholdProvider} from './src/contexts/HouseholdContext';
+import {SubscriptionProvider} from './src/contexts/SubscriptionContext';
 import {RootNavigator} from './src/navigation/RootNavigator';
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
@@ -38,16 +39,18 @@ export default function App(): React.JSX.Element {
     <ErrorBoundary>
       <SafeAreaProvider>
         <AuthProvider>
-          <HouseholdProvider>
-            <NavigationContainer>
-              <StatusBar
-                barStyle="light-content"
-                backgroundColor="#0F0F23"
-                translucent={Platform.OS === 'android'}
-              />
-              <RootNavigator />
-            </NavigationContainer>
-          </HouseholdProvider>
+          <SubscriptionProvider>
+            <HouseholdProvider>
+              <NavigationContainer>
+                <StatusBar
+                  barStyle="light-content"
+                  backgroundColor="#0F0F23"
+                  translucent={Platform.OS === 'android'}
+                />
+                <RootNavigator />
+              </NavigationContainer>
+            </HouseholdProvider>
+          </SubscriptionProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

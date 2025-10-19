@@ -3,6 +3,7 @@ import {Platform} from 'react-native';
 import {User} from '@/types';
 import {authService} from '@/services/auth.service';
 import {notificationService} from '@/services/notification.service';
+import {revenueCatService} from '@/services/revenueCat.service';
 
 interface AuthContextType {
   user: User | null;
@@ -42,21 +43,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     return unsubscribe;
   }, []);
 
-  // Initialize push notifications when user logs in
+  // Initialize push notifications and RevenueCat when user logs in
   useEffect(() => {
     if (user && Platform.OS !== 'web') {
       notificationService.initialize(user.id).catch(error => {
         console.error('Failed to initialize push notifications:', error);
       });
+      revenueCatService.initialize(user.id).catch(error => {
+        console.error('Failed to initialize RevenueCat:', error);
+      });
     } else if (!user && Platform.OS !== 'web') {
-      // Cleanup when user logs out
-      notificationService.cleanup();
+      // Cleanup is not needed here as services use Firebase auth state
+      revenueCatService.logout();
     }
 
     return () => {
       // Cleanup on unmount
-      if (user && Platform.OS !== 'web') {
-        notificationService.cleanup();
+      if (!user && Platform.OS !== 'web') {
+        revenueCatService.logout();
       }
     };
   }, [user]);
