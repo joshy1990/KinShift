@@ -1,0 +1,244 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the document owner
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Get the household document
+    function getHousehold(householdId) {
+      return get(/databases/$(database)/documents/households/$(householdId)).data;
+    }
+    
+    // Check if user is a household member
+    function isHouseholdMember(householdId) {
+      let household = getHousehold(householdId);
+      return request.auth.uid in household.members;
+    }
+    
+    // Check if user is a household admin
+    function isHouseholdAdmin(householdId) {
+      let household = getHousehold(householdId);
+      return request.auth.uid in household.admins;
+    }
+    
+    // Get the shift document
+    function getShift(shiftId) {
+      return get(/databases/$(database)/documents/shifts/$(shiftId)).data;
+    }
+    
+    // Check if user owns a shift
+    function isShiftOwner(shiftId) {
+      let shift = getShift(shiftId);
+      return request.auth.uid == shift.ownerId;
+    }
+    
+    // Check if user is household member (for household shifts)
+    function canAccessShift(shiftId) {
+      let shift = getShift(shiftId);
+      // Personal shift: only owner
+      if (!('householdId' in shift) || shift.householdId == null || shift.householdId == '') {
+        return request.auth.uid == shift.ownerId;
+      }
+      // Household shift: any member
+      return isHouseholdMember(shift.householdId);
+    }
+    
+    // Check if user can edit shift (respects allowMemberEditOthers setting)
+    function canEditShift(shiftId) {
+      let shift = getShift(shiftId);
+      
+      // Owner can always edit their own shifts
+      if (request.auth.uid == shift.ownerId) {
+        return true;
+      }
+      
+      // Personal shift: only owner can edit
+      if (!('householdId' in shift) || shift.householdId == null || shift.householdId == '') {
+        return false;
+      }
+      
+      // Household shift: check household settings
+      let household = getHousehold(shift.householdId);
+      let isMember = request.auth.uid in household.members;
+      let allowMemberEdit = household.settings.allowMemberEditOthers == true;
+      
+      return isMember && allowMemberEdit;
+    }
+    
+    // ========================================
+    // USERS COLLECTION
+    // ========================================
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isOwner(userId);
+      
+      // Users can write their own profile
+      allow write: if isOwner(userId);
+    }
+    
+    // ========================================
+    // HOUSEHOLDS COLLECTION
+    // ========================================
+    match /households/{householdId} {
+      // Any authenticated user can list households (filtered by members on client)
+      allow read: if isAuthenticated();
+      
+      // Only admins can write to households
+      allow write: if isHouseholdAdmin(householdId);
+      
+      // Subcollections under households
+      match /settings/{settingsDoc} {
+        // Members can read settings
+        allow read: if isHouseholdMember(householdId);
+        
+        // Only admins can write settings
+        allow write: if isHouseholdAdmin(householdId);
+      }
+      
+      match /auditLog/{auditDoc} {
+        // Members can read audit log
+        allow read: if isHouseholdMember(householdId);
+        
+        // Only system (service account) can write
+        // In practice, only backend writes audit logs
+        allow write: if false;
+      }
+    }
+    
+    // ========================================
+    // SHIFTS COLLECTION
+    // ========================================
+    match /shifts/{shiftId} {
+      // Users can read shifts they have access to
+      allow read: if isAuthenticated() && canAccessShift(shiftId);
+      
+      // Shift owners can update their shifts
+      // Non-owners can update if household allows it
+      allow update: if isAuthenticated() && canEditShift(shiftId);
+      
+      // Shift owners can delete their shifts
+      allow delete: if isAuthenticated() && isShiftOwner(shiftId);
+      
+      // Users can create shifts
+      allow create: if isAuthenticated() && 
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.createdAt == request.time;
+    }
+    
+    // ========================================
+    // DAY NOTES COLLECTION
+    // ========================================
+    match /dayNotes/{dayNoteId} {
+      let dayNote = resource.data;
+      
+      // Only document owner can read
+      allow read: if isOwner(dayNote.userId);
+      
+      // Only document owner can write
+      allow write: if isOwner(dayNote.userId);
+    }
+    
+    // ========================================
+    // MESSAGES COLLECTIONS
+    // ========================================
+    match /shiftMessages/{messageId} {
+      let message = resource.data;
+      let shiftId = message.shiftId;
+      
+      // Household members can read messages for shifts in their household
+      allow read: if isAuthenticated() && canAccessShift(shiftId);
+      
+      // Household members can create messages
+      allow create: if isAuthenticated() && 
+        canAccessShift(shiftId) &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.createdAt == request.time;
+      
+      // Users can delete their own messages
+      allow delete: if isOwner(message.authorId);
+    }
+    
+    match /dayMessages/{messageId} {
+      let message = resource.data;
+      let dayNoteId = message.dayNoteId;
+      let dayNote = get(/databases/$(database)/documents/dayNotes/$(dayNoteId)).data;
+      
+      // Only day note owner can read messages
+      allow read: if isOwner(dayNote.userId);
+      
+      // Only day note owner can create/write messages
+      allow create: if isOwner(dayNote.userId) &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.createdAt == request.time;
+      
+      // Only message author can delete
+      allow delete: if isOwner(message.authorId);
+    }
+    
+    // ========================================
+    // INVITATIONS COLLECTION
+    // ========================================
+    match /invitations/{invitationId} {
+      let invitation = resource.data;
+      
+      // Invited user can read their invitations
+      allow read: if isOwner(invitation.invitedUserId);
+      
+      // Household admins can create invitations
+      allow create: if isAuthenticated() && 
+        isHouseholdAdmin(invitation.householdId);
+      
+      // Invited user can update (accept/reject) their invitations
+      allow update: if isOwner(invitation.invitedUserId) &&
+        request.resource.data.status != resource.data.status;
+      
+      // Admins can delete expired invitations
+      allow delete: if isHouseholdAdmin(invitation.householdId);
+    }
+    
+    // ========================================
+    // NOTIFICATIONS COLLECTION
+    // ========================================
+    match /notifications/{notificationId} {
+      let notification = resource.data;
+      
+      // Users can read their own notifications
+      allow read: if isOwner(notification.userId);
+      
+      // Only backend/system can write notifications
+      allow write: if false;
+    }
+    
+    // ========================================
+    // SUBSCRIPTIONS COLLECTION
+    // ========================================
+    match /subscriptions/{subscriptionId} {
+      let subscription = resource.data;
+      
+      // Users can read their own subscriptions
+      allow read: if isOwner(subscription.userId);
+      
+      // Only backend can write subscriptions
+      allow write: if false;
+    }
+    
+    // ========================================
+    // CATCH-ALL: Deny everything else
+    // ========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
