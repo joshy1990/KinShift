@@ -21,6 +21,8 @@ import { db } from '@/config/firebase.config';
 import { Shift, ShiftMessage, DayMessage, User, ShiftType } from '@/types';
 import { BaseService, ServiceError } from './base.service';
 import { householdService } from './household.service';
+import { notificationService } from './notification.service';
+import { authService } from './auth.service';
 import { getShiftTypeColor, getShiftTypeLabel } from '@/utils/shiftTypeHelpers';
 
 export interface CreateShiftData {
@@ -261,10 +263,29 @@ export class ShiftService extends BaseService {
 
       const docRef = await addDoc(collection(db, this.collection), baseShift);
 
-      return {
+      const createdShift = {
         id: docRef.id,
         ...baseShift,
       };
+
+      // Send notifications to household members if this is a household shift
+      if (shiftData.householdId) {
+        try {
+          const household = await householdService.getHousehold(shiftData.householdId);
+          const createdUser = await authService.getUserData(shiftData.ownerId);
+          
+          await notificationService.notifyShiftCreated(
+            createdShift,
+            household,
+            createdUser?.name || 'Team Member'
+          );
+        } catch (notificationError) {
+          // Don't fail the shift creation if notification fails
+          console.warn('[ShiftService] Notification failed but shift created successfully:', notificationError);
+        }
+      }
+
+      return createdShift;
     } catch (error) {
       console.error('[ShiftService] Failed to create shift:', error);
       throw this.handleError(error);

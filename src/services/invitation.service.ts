@@ -1,6 +1,7 @@
 import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Timestamp, writeBatch } from 'firebase/firestore';
 import {Invitation, User} from '@/types';
 import {householdService} from './household.service';
+import {notificationService} from './notification.service';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 
 class InvitationService {
@@ -41,7 +42,30 @@ class InvitationService {
     };
     const invitationsRef = collection(db, COLLECTIONS.INVITATIONS);
     const docRef = await addDoc(invitationsRef, invitation);
-    return { id: docRef.id, ...invitation } as Invitation;
+    const createdInvitation = { id: docRef.id, ...invitation } as Invitation;
+
+    // Send notification if invitee has an account (if lookup is implemented)
+    try {
+      // Try to find user by email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', normalizedEmail));
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const invitedUserId = snapshot.docs[0].id;
+        await notificationService.notifyInvitationAccepted(
+          invitedUserId,
+          householdId,
+          household.name,
+          household.members.length
+        );
+      }
+    } catch (notificationError) {
+      // Don't fail the invitation if notification fails
+      console.warn('[InvitationService] Notification failed but invitation created:', notificationError);
+    }
+
+    return createdInvitation;
   }
 
   async getInvitationByCode(inviteCode: string): Promise<Invitation | null> {
