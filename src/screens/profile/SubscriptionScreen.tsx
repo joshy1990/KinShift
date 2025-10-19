@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import {useAuth} from '@/contexts/AuthContext';
+import {useSubscription} from '@/contexts/SubscriptionContext';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileStackParamList} from '@/types';
@@ -27,6 +28,7 @@ type NavigationProp = NativeStackNavigationProp<ProfileStackParamList, 'Subscrip
 
 export const SubscriptionScreen: React.FC = () => {
   const {user} = useAuth();
+  const subscriptionCtx = useSubscription();
   const navigation = useNavigation<NavigationProp>();
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
