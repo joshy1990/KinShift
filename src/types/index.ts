@@ -217,7 +217,10 @@ export interface Notification {
     | 'message' 
     | 'day_message'
     | 'day_note_added'
-    | 'shift_reminder';
+    | 'shift_reminder'
+    | 'shifts_created'
+    | 'subscription_downgrade'
+    | 'subscription_canceled';
   title: string;
   body: string;
   data?: Record<string, any>; // Additional payload (shiftId, householdId, inviteCode, date, etc.)
