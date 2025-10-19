@@ -88,7 +88,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
           startTime: new Date(startDate.getTime() + 8 * 60 * 60 * 1000),
           endTime: new Date(startDate.getTime() + 16 * 60 * 60 * 1000),
           colorTag: '#2ECC71',
-          shiftType: 'days',
+          shiftType: 'day',
           createdAt: new Date(),
           updatedAt: new Date(),
           lastEditedBy: 'user1',

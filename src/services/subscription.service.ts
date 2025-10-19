@@ -508,13 +508,12 @@ class SubscriptionService {
 
           // Notify all household members about the downgrade
           try {
+            const memberIds = household.members.map(m => m.userId);
             await notificationService.notifyHouseholdDowngrade(
               householdDoc.id,
-              household.name,
+              memberIds,
               previousTier,
-              'free',
-              excessMembers,
-              'Admin' // Using generic name since user is being deleted/downgraded
+              'free'
             );
           } catch (notificationError) {
             console.warn(`⚠️ Failed to notify household members:`, notificationError);
