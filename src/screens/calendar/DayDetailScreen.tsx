@@ -69,7 +69,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             // No date filter - we filter in the callback
           },
           (updatedShifts) => {
-            console.log('📅 Day details: All personal shifts received:', updatedShifts.length);
             // Filter to only THIS DATE
             const shiftsOnThisDate = updatedShifts.filter(shift => {
               const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
@@ -77,7 +76,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 : new Date(shift.startTime);
               return isSameDay(shiftDate, dateObj);
             });
-            console.log('📅 Day details: Shifts on', format(dateObj, 'MMM dd'), ':', shiftsOnThisDate.length);
             setShifts(shiftsOnThisDate);
           }
         );
@@ -89,7 +87,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             // No date filter - we filter in the callback
           },
           (updatedShifts) => {
-            console.log('📅 Day details: All household shifts received:', updatedShifts.length);
             // Filter to only THIS DATE and users in household
             const shiftsOnThisDate = updatedShifts.filter(shift => {
               const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
@@ -97,12 +94,8 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 : new Date(shift.startTime);
               const isOnThisDate = isSameDay(shiftDate, dateObj);
               const isUserInHousehold = !!users[shift.ownerId];
-              if (!isUserInHousehold) {
-                console.log('📅 Filtering out shift from departed user:', shift.ownerId);
-              }
               return isOnThisDate && isUserInHousehold;
             });
-            console.log('📅 Day details: Shifts on', format(dateObj, 'MMM dd'), ':', shiftsOnThisDate.length);
             setShifts(shiftsOnThisDate);
           }
         );
@@ -117,7 +110,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         );
       }
     } catch (error) {
-      console.log('Real-time updates not available, will use polling');
+      console.error('Failed to subscribe to real-time updates:', error);
     }
 
     return () => {
@@ -168,7 +161,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       if (passedShifts && passedShifts.length > 0) {
         // Use passed shifts if available (quick initial load)
         dayShifts = passedShifts;
-        console.log('📊 Using passed shifts:', dayShifts.length, 'shifts');
       } else if (isPersonalMode) {
         // Fallback to loading from DB if no passed shifts
         const result = await shiftService.getShifts({ 
@@ -176,7 +168,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           startDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
           endDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59)
         });
-        console.log('📊 getShifts returned:', result.shifts.length, 'shifts');
         dayShifts = result.shifts;
       } else {
         dayShifts = await shiftService.getHouseholdShifts(
@@ -191,13 +182,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         ? await dayNoteService.getNotesByDate(user.id, dateObj, true) // Personal notes
         : await dayNoteService.getNotesByDate(currentHouseholdId!, dateObj, false); // Household notes
 
-      console.log('Loaded day data:', { 
-        date: dateString, 
-        shifts: dayShifts.length, 
-        notes: dayNotes.length, 
-        personalMode: isPersonalMode,
-        usedPassedShifts: !!passedShifts && passedShifts.length > 0
-      });
       setShifts(dayShifts);
       setNotes(dayNotes);
     } catch (error) {
@@ -351,17 +335,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
                 
                 {/* Display time(s) - different format for split shifts */}
-                {(() => {
-                  console.log('🔍 Shift display data:', {
-                    id: shift.id,
-                    title: shift.title,
-                    shiftType: shift.shiftType,
-                    hasSplitTimes: !!shift.splitTimes,
-                    splitTimesLength: shift.splitTimes?.length,
-                    splitTimes: shift.splitTimes,
-                  });
-                  return null;
-                })()}
                 {shift.shiftType === 'split' && shift.splitTimes && shift.splitTimes.length === 2 ? (
                   // Split shift - show BOTH time ranges
                   <View style={styles.splitTimesContainer}>

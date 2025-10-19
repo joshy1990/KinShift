@@ -34,9 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
 
   useEffect(() => {
     // Listen to auth state changes
-    console.log('[AuthContext] Setting up auth state listener');
     const unsubscribe = authService.onAuthStateChanged(currentUser => {
-      console.log('[AuthContext] Auth state changed:', currentUser ? `User: ${currentUser.id} (${currentUser.email})` : 'No user');
       setUser(currentUser);
       setLoading(false);
     });
@@ -47,7 +45,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
   // Initialize push notifications when user logs in
   useEffect(() => {
     if (user && Platform.OS !== 'web') {
-      console.log('Initializing push notifications for user:', user.id);
       notificationService.initialize(user.id).catch(error => {
         console.error('Failed to initialize push notifications:', error);
       });

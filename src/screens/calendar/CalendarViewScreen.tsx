@@ -114,30 +114,11 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     
     const dayShifts = getShiftsForDate(date);
     
-    // Debug for October 16
-    if (format(date, 'd') === '16' && date.getMonth() === 9) {
-      console.log('🎨 getDateColorIndicators Oct 16:', {
-        shiftsFound: dayShifts.length,
-        shifts: dayShifts.map(s => ({
-          id: s.id,
-          title: s.title,
-          startTime: s.startTime,
-          ownerId: s.ownerId,
-        })),
-        userId: user.id,
-      });
-    }
-    
     if (dayShifts.length === 0) {
       return { colors: [], count: 0 };
     }
     
     const shiftInfo = analyzeMultiPersonShifts(dayShifts, user.id);
-    
-    // Debug for October 16
-    if (format(date, 'd') === '16' && date.getMonth() === 9) {
-      console.log('🎨 shiftInfo result:', shiftInfo);
-    }
     
     return {
       colors: shiftInfo.colors,
@@ -152,7 +133,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     
     // Work in personal mode if no household selected
     if (!currentHouseholdId) {
-      console.log('📅 Personal Mode: Using individual calendar');
       // Set current user as the only user
       if (user) {
         setUsers({
@@ -160,7 +140,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         });
 
         // Set up real-time listener for personal shifts (load all, filter in UI)
-        console.log('📅 Subscribing to all personal shifts for user:', user.id);
         
         try {
           unsubscribeShifts = shiftService.subscribeToShifts(
@@ -169,15 +148,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
               // No date filters - load all shifts and let UI filter by visible dates
             },
             (updatedShifts: Shift[]) => {
-              console.log('📅 Personal shifts updated:', updatedShifts.length, 'shifts');
-              if (updatedShifts.length > 0) {
-                console.log('📊 All shifts:', updatedShifts.map(s => ({
-                  title: s.title,
-                  type: s.shiftType,
-                  start: s.startTime,
-                  id: s.id
-                })));
-              }
               // Ensure all shifts have valid shiftType (set default if missing)
               const shiftsWithTypes = updatedShifts.map(shift => ({
                 ...shift,
@@ -202,9 +172,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
       }
       return;
     }
-
     // Household mode
-    console.log('📅 Household Mode:', currentHouseholdId);
     
     // Load household members and set up shifts listener
     const loadHouseholdData = async () => {
@@ -225,34 +193,16 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         const startDate = viewMode === 'month' ? monthDates[0] : weekDates[0];
         const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
         
-        console.log('📅 Subscribing to household shifts from', startDate, 'to', endDate);
-        console.log('🔍 [CALENDAR] Household ID:', currentHouseholdId);
-        console.log('🔍 [CALENDAR] Household members:', Object.keys(usersMap).length, usersMap);
-        
         try {
           unsubscribeShifts = shiftService.listenToHouseholdShifts(
             currentHouseholdId,
             startDate,
             endDate,
             (updatedShifts: Shift[]) => {
-              console.log('📅 Household shifts updated:', updatedShifts.length, 'shifts');
-              console.log('🔍 [CALENDAR] Raw shifts from Firestore:', updatedShifts.map(s => ({
-                id: s.id,
-                ownerId: s.ownerId,
-                householdId: s.householdId,
-                shiftType: s.shiftType,
-                title: s.title,
-              })));
-              
               // Filter out shifts from users who are no longer in the household
               const filteredShifts = updatedShifts.filter(shift => {
-                const isUserInHousehold = !!usersMap[shift.ownerId];
-                if (!isUserInHousehold) {
-                  console.log('⚠️ [CALENDAR] Filtering out shift from user no longer in household:', shift.ownerId);
-                }
-                return isUserInHousehold;
+                return !!usersMap[shift.ownerId];
               });
-              console.log('✅ [CALENDAR] After filtering:', filteredShifts.length, 'shifts');
               
               // Ensure all shifts have valid shiftType (set default if missing)
               const shiftsWithTypes = filteredShifts.map(shift => ({
@@ -286,7 +236,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         );
         setNoteCounts(counts);
       } catch (error) {
-        console.log('Failed to load note counts:', error);
+        console.error('Failed to load note counts:', error);
       }
     };
     loadNoteCounts();
@@ -331,15 +281,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     const dateString = format(date, 'yyyy-MM-dd');
     const noteCount = noteCounts[dateString] || 0;
     const isCurrentMonth = date.getMonth() === currentDate.getMonth();
-    
-    // Debug logging for October 16
-    if (format(date, 'd') === '16' && isCurrentMonth) {
-      console.log('📅 Month cell Oct 16:', {
-        shifts: dayShifts.length,
-        colorInfo,
-        isCurrentMonth,
-      });
-    }
 
     return (
       <TouchableOpacity

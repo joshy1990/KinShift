@@ -470,8 +470,6 @@ class SubscriptionService {
    */
   private async processSubscriptionDowngrade(userId: string, previousTier: string): Promise<void> {
     try {
-      console.log(`🔄 Processing downgrade workflow for user ${userId}`);
-      
       // Find all households where this user is admin
       const householdsQuery = query(
         collection(db, COLLECTIONS.HOUSEHOLDS),
@@ -481,7 +479,6 @@ class SubscriptionService {
       const householdsSnapshot = await getDocs(householdsQuery);
       
       if (householdsSnapshot.empty) {
-        console.log(`✅ User ${userId} has no households to downgrade`);
         return;
       }
 
@@ -534,7 +531,6 @@ class SubscriptionService {
         }
       }
 
-      console.log(`✅ Downgrade workflow complete for ${userId}: ${affectedHouseholds.length} households affected`);
     } catch (error: any) {
       console.error('Error processing subscription downgrade:', error);
       throw error;

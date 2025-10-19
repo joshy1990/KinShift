@@ -23,9 +23,6 @@ import { BaseService, ServiceError } from './base.service';
 import { householdService } from './household.service';
 import { getShiftTypeColor, getShiftTypeLabel } from '@/utils/shiftTypeHelpers';
 
-console.log('[ShiftService] Module loaded - db instance:', db);
-console.log('[ShiftService] db._settings:', (db as any)._settings);
-
 export interface CreateShiftData {
   householdId?: string; // Optional - for personal mode (individual users)
   ownerId: string;
@@ -172,9 +169,6 @@ export class ShiftService extends BaseService {
    */
   async createShift(shiftData: CreateShiftData): Promise<Shift> {
     try {
-      console.log('[ShiftService] Creating shift with data:', shiftData);
-      console.log('[ShiftService] Firestore db instance:', db);
-
       this.validateRequired(shiftData, ['ownerId', 'title', 'startTime', 'endTime']);
 
       // SECURITY: Validate ownerId matches the current user
@@ -239,7 +233,6 @@ export class ShiftService extends BaseService {
           baseShift.approvalStatus = 'pending';
           baseShift.approvedBy = null;
           baseShift.approvalRejectionReason = null;
-          console.log('[ShiftService] Shift requires approval - setting isApproved to false');
         } else {
           // Shift is automatically approved
           baseShift.isApproved = true;
@@ -264,15 +257,9 @@ export class ShiftService extends BaseService {
       }
       if (shiftData.splitTimes && Array.isArray(shiftData.splitTimes)) {
         baseShift.splitTimes = shiftData.splitTimes;
-        console.log('[ShiftService] Added splitTimes to shift:', shiftData.splitTimes);
       }
 
-      console.log('[ShiftService] Prepared shift object:', baseShift);
-      console.log('[ShiftService] Writing to collection:', this.collection);
-
       const docRef = await addDoc(collection(db, this.collection), baseShift);
-
-      console.log('[ShiftService] Shift created successfully with ID:', docRef.id);
 
       return {
         id: docRef.id,
@@ -361,7 +348,6 @@ export class ShiftService extends BaseService {
     try {
       if (shiftIds.length === 0) return;
 
-      console.log(`[ShiftService] Bulk deleting ${shiftIds.length} shifts...`);
       const batch = writeBatch(db);
       const now = new Date();
 
@@ -374,7 +360,6 @@ export class ShiftService extends BaseService {
       });
 
       await batch.commit();
-      console.log(`[ShiftService] Successfully deleted ${shiftIds.length} shifts in batch`);
     } catch (error) {
       throw this.handleError(error);
     }
@@ -386,8 +371,6 @@ export class ShiftService extends BaseService {
    */
   async deleteUserShiftsInHousehold(householdId: string, userId: string): Promise<void> {
     try {
-      console.log(`🗑️ Deleting all shifts for user ${userId} in household ${householdId}`);
-      
       // Find all shifts for this user in this household
       const q = query(
         collection(db, this.collection),
@@ -397,7 +380,6 @@ export class ShiftService extends BaseService {
       );
       
       const snapshot = await getDocs(q);
-      console.log(`📋 Found ${snapshot.docs.length} shifts to delete`);
       
       // Soft delete all shifts
       if (snapshot.docs.length > 0) {
@@ -412,12 +394,9 @@ export class ShiftService extends BaseService {
         });
         
         await batch.commit();
-        console.log(`✅ Successfully deleted ${snapshot.docs.length} shifts for user ${userId}`);
-      } else {
-        console.log(`ℹ️ No shifts found for user ${userId} in household ${householdId}`);
       }
     } catch (error) {
-      console.error(`❌ Error deleting user shifts in household:`, error);
+      console.error(`Error deleting user shifts in household:`, error);
       throw this.handleError(error);
     }
   }
@@ -539,7 +518,6 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
     return onSnapshot(
       q,
       (querySnapshot) => {
-        console.log('[ShiftService] 📦 Received snapshot:', querySnapshot.size, 'documents');
         const shifts: Shift[] = [];
         
         querySnapshot.forEach((doc) => {
@@ -550,7 +528,6 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
           }
         });
         
-        console.log('[ShiftService] ✅ Loaded', shifts.length, 'shifts (deleted excluded)');
         callback(shifts);
       },
       (error) => {
@@ -591,9 +568,7 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
         shiftIds.push(shiftRef.id);
       });
 
-      console.log(`[ShiftService] Batch creating ${shiftIds.length} shifts...`);
       await batch.commit();
-      console.log(`[ShiftService] Successfully created ${shiftIds.length} shifts in batch`);
       return shiftIds;
     } catch (error) {
       throw this.handleError(error);

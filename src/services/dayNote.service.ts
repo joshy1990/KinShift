@@ -215,7 +215,6 @@ class DayNoteService {
     try {
       // Only works in household mode
       if (!note.householdId) {
-        console.log('Cannot notify members - note is not associated with a household');
         return;
       }
 
@@ -232,7 +231,6 @@ class DayNoteService {
             // Use HouseholdMember objects from service
             const allMemberIds = householdMembers.map((m: any) => m.userId);
             recipientUserIds = new Set(allMemberIds);
-            console.log(`📝 Event notification: Found ${recipientUserIds.size} household members via service`);
             // Don't notify the author
             recipientUserIds.delete(note.authorId);
           }
@@ -245,7 +243,6 @@ class DayNoteService {
             const data = householdDoc.data() as any;
             const allMembers = [...(data.admins || []), ...(data.members || [])];
             recipientUserIds = new Set(allMembers);
-            console.log(`📝 Event notification fallback: Found ${recipientUserIds.size} household members via Firestore`);
             recipientUserIds.delete(note.authorId);
           }
         }
@@ -303,14 +300,6 @@ class DayNoteService {
         });
 
         await batch.commit();
-        
-        if (note.category === 'event') {
-          console.log(`� [EVENT NOTIFICATION] "${note.authorName} has left a note on ${formattedDate}" sent to ${recipientUserIds.size} members: ${recipientList.join(', ')}`);
-        } else {
-          console.log(`�💌 Day note notification sent to ${recipientUserIds.size} members: "${note.authorName} has left a note on ${formattedDate}"`);
-        }
-      } else {
-        console.log(`⚠️ No recipients found for day note (category: ${note.category})`);
       }
     } catch (error) {
       console.error('Failed to send smart notifications:', error);
@@ -326,7 +315,6 @@ class DayNoteService {
     try {
       // Only works in household mode
       if (!note.householdId) {
-        console.log('Cannot notify members - note is not associated with a household');
         return;
       }
 

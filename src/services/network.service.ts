@@ -61,8 +61,6 @@ class NetworkService {
       details: state.details,
     };
 
-    console.log('Network status changed:', this.currentStatus);
-
     // Notify listeners
     this.listeners.forEach(listener => listener(this.currentStatus));
 
@@ -76,8 +74,6 @@ class NetworkService {
    * Handle connection restoration
    */
   private onConnectionRestored(): void {
-    console.log('Connection restored, scheduling sync...');
-    
     // Clear any existing timeout
     if (this.syncTimeoutId) {
       clearTimeout(this.syncTimeoutId);
@@ -85,7 +81,6 @@ class NetworkService {
 
     // Wait a bit for connection to stabilize, then sync
     this.syncTimeoutId = setTimeout(() => {
-      console.log('Attempting sync after connection restoration');
       offlineEditQueueService.attemptSync();
     }, 2000); // 2 second delay
   }
@@ -154,8 +149,6 @@ class NetworkService {
   async forceSyncIfOnline(): Promise<void> {
     if (this.isOnline()) {
       await offlineEditQueueService.attemptSync();
-    } else {
-      console.log('Device is offline, cannot force sync');
     }
   }
 

@@ -119,14 +119,12 @@ class HouseholdService {
         }
         
         // Members can always remove themselves
-        console.log('✅ [PERMISSIONS] Member can leave household (removing self)');
         return {allowed: true};
       }
 
       // CASE 2: User is removing someone else
       // Only admins can remove other members
       if (!household.admins.includes(userId)) {
-        console.log('❌ [PERMISSIONS] Non-admin cannot remove other members');
         return {
           allowed: false,
           reason: 'Only admins can remove other members from the household',
@@ -134,7 +132,6 @@ class HouseholdService {
       }
 
       // Admin is removing another member - allowed
-      console.log('✅ [PERMISSIONS] Admin can remove member');
       return {allowed: true};
     } catch (error: any) {
       return {
@@ -285,7 +282,6 @@ class HouseholdService {
       });
 
       // MIGRATION: Update user's personal shifts to household mode
-      console.log('📦 Migrating personal shifts to household:', householdId);
       await this.migratePersonalShiftsToHousehold(userId, householdId);
 
       return {
@@ -308,36 +304,24 @@ class HouseholdService {
    */
   private async migratePersonalShiftsToHousehold(userId: string, householdId: string): Promise<void> {
     try {
-      console.log('🔍 [MIGRATION] Starting shift migration for user:', userId, 'to household:', householdId);
-      
       // Get all personal shifts (where householdId is undefined or empty)
       const shiftsQuery = query(
         collection(db, COLLECTIONS.SHIFTS),
         where('ownerId', '==', userId)
       );
       
-      console.log('🔍 [MIGRATION] Querying Firestore for shifts where ownerId ==', userId);
       const shiftsSnapshot = await getDocs(shiftsQuery);
-      console.log('🔍 [MIGRATION] Found', shiftsSnapshot.size, 'total shifts for this user');
       
       if (shiftsSnapshot.empty) {
-        console.log('⚠️ [MIGRATION] No shifts found - user might not have created any shifts yet');
         return;
       }
 
       // Use batch to update all shifts
       const batch = writeBatch(db);
       let migratedCount = 0;
-      let alreadyMigratedCount = 0;
 
       shiftsSnapshot.docs.forEach((shiftDoc) => {
         const shift = shiftDoc.data();
-        console.log('🔍 [MIGRATION] Checking shift:', shiftDoc.id, {
-          shiftType: shift.shiftType,
-          hasHouseholdId: !!shift.householdId,
-          currentHouseholdId: shift.householdId,
-          targetHouseholdId: householdId,
-        });
         
         // Only migrate if shift doesn't already have a householdId
         if (!shift.householdId) {
@@ -346,19 +330,11 @@ class HouseholdService {
             updatedAt: new Date(),
           });
           migratedCount++;
-          console.log('✅ [MIGRATION] Queued shift', shiftDoc.id, 'for migration');
-        } else {
-          alreadyMigratedCount++;
-          console.log('⏭️ [MIGRATION] Skipping shift', shiftDoc.id, '- already has householdId:', shift.householdId);
         }
       });
 
       if (migratedCount > 0) {
-        console.log('🚀 [MIGRATION] Committing batch update for', migratedCount, 'shifts...');
         await batch.commit();
-        console.log(`✅ [MIGRATION SUCCESS] Migrated ${migratedCount} personal shifts to household ${householdId}`);
-      } else {
-        console.log('ℹ️ [MIGRATION] All', alreadyMigratedCount, 'shifts already in household mode');
       }
     } catch (error) {
       console.error('❌ [MIGRATION ERROR] Failed to migrate personal shifts:', error);
@@ -405,7 +381,6 @@ class HouseholdService {
       await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
 
       // MIGRATION: Update user's personal shifts to household mode
-      console.log('📦 Migrating personal shifts to household:', householdId);
       await this.migratePersonalShiftsToHousehold(userId, householdId);
     } catch (error: any) {
       throw new Error(error.message || 'Failed to add member to household');

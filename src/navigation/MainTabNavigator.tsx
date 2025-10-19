@@ -58,7 +58,6 @@ export const MainTabNavigator: React.FC = () => {
     // Set up real-time listener for unread notifications
     // Skip for web platform since React Native Firebase doesn't work on web
     if (Platform.OS === 'web') {
-      console.log('Notification service disabled on web platform');
       setUnreadCount(0);
       return;
     }

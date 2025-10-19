@@ -105,8 +105,6 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
         try {
           const auth = getAuth();
           await sendPasswordResetEmail(auth, email);
-          console.log('✅ Password reset email sent to:', email);
-          console.log('📧 Check the Firebase Emulator terminal for the reset link');
           showSuccess('Password reset email sent! Check the Firebase Emulator console for the link.');
         } catch (error: any) {
           console.error('❌ Password reset error:', error);

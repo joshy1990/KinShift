@@ -57,7 +57,6 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   // Load shifts for the 14-day period
   useEffect(() => {
     if (!currentHouseholdId) {
-      console.log('No household selected');
       return;
     }
 
@@ -77,7 +76,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
         if (unsubscribe) unsubscribe();
       };
     } catch (error) {
-      console.log('Firebase not available, using sample data');
+      // Firebase not available, using sample data
       
       // Sample shifts for demo
       const sampleShifts: Shift[] = [

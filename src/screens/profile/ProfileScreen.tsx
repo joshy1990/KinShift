@@ -80,30 +80,39 @@ export const ProfileScreen: React.FC = () => {
       async () => {
         setClearingShifts(true);
         try {
-          // Get all shifts for this user
-          const result = await shiftService.getShifts(
-            {
-              ownerId: user?.id,
-            },
-            {
-              pageSize: 1000, // Get all shifts
-            }
-          );
+          // Get ALL shifts for this user with pagination
+          let allShifts: any[] = [];
+          let hasMore = true;
+          let lastDoc: any = null;
+          
+          while (hasMore) {
+            const result = await shiftService.getShifts(
+              {
+                ownerId: user?.id, // Only this user's shifts
+              },
+              {
+                pageSize: 500, // Fetch in batches of 500
+                cursor: lastDoc,
+              }
+            );
 
-          if (result.shifts.length === 0) {
+            allShifts = allShifts.concat(result.shifts);
+            hasMore = result.hasMore;
+            lastDoc = result.cursor;
+          }
+
+          if (allShifts.length === 0) {
             showAlert('No Shifts', 'You have no shifts to clear.');
             setClearingShifts(false);
             return;
           }
 
           // Delete all shifts using bulk delete
-          const shiftIds = result.shifts.map(shift => shift.id);
-          console.log(`🗑️ Clearing ${shiftIds.length} shifts for user ${user?.id}`);
+          const shiftIds = allShifts.map(shift => shift.id);
           
           await shiftService.deleteBulkShifts(shiftIds);
           
-          console.log('✅ All shifts cleared successfully');
-          showSuccess(`Deleted ${result.shifts.length} shift${result.shifts.length !== 1 ? 's' : ''}. Your schedule is now clear.`);
+          showSuccess(`Deleted ${allShifts.length} shift${allShifts.length !== 1 ? 's' : ''}. Your schedule is now clear.`);
         } catch (error) {
           console.error('Failed to clear shifts:', error);
           showError('Failed to clear shifts. Please try again.');
@@ -127,7 +136,6 @@ export const ProfileScreen: React.FC = () => {
         try {
           setClearingShifts(true);
           await customPatternService.deletePattern(patternId);
-          console.log('✅ Pattern deleted:', patternId);
           // Reload patterns list
           if (user) {
             const patterns = await customPatternService.getUserPatterns(user.id);
@@ -151,7 +159,6 @@ export const ProfileScreen: React.FC = () => {
       try {
         const patterns = await customPatternService.getUserPatterns(user.id);
         setCustomPatterns(patterns);
-        console.log('📋 Loaded', patterns.length, 'custom patterns');
       } catch (error) {
         console.error('Failed to load custom patterns:', error);
       }

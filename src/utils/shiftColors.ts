@@ -156,17 +156,6 @@ export function analyzeMultiPersonShifts(
   const userCount = userShiftMap.size;
   const colors: string[] = [];
   
-  console.log('🎨 analyzeMultiPersonShifts:', {
-    totalShifts: shiftsOnDate.length,
-    userCount,
-    shifts: shiftsOnDate.map(s => ({
-      title: s.title,
-      type: s.shiftType,
-      owner: s.ownerId,
-      color: SHIFT_TYPE_COLORS[s.shiftType]
-    }))
-  });
-  
   // Determine colors based on number of people working
   if (userCount === 0) {
     // No one working
@@ -190,12 +179,6 @@ export function analyzeMultiPersonShifts(
         return bTime - aTime;
       });
       const selectedShift = sortedShifts[0];
-      console.log('📊 Selected shift from multiple:', {
-        totalShifts: userShifts.length,
-        selected: selectedShift.title,
-        type: selectedShift.shiftType,
-        color: getShiftColor(selectedShift, currentUserId, isCurrentUser)
-      });
       colors.push(getShiftColor(selectedShift, currentUserId, isCurrentUser));
     } else {
       // Single shift

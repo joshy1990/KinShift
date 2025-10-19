@@ -258,7 +258,7 @@ export type MainTabsParamList = {
 export type CalendarStackParamList = {
   CalendarView: undefined;
   ShiftDetail: {shiftId: string};
-  AddShift: {date?: Date};
+  AddShift: {date?: Date; preSelectPattern?: any}; // preSelectPattern for auto-selecting newly created pattern
   AddShiftPattern: undefined;
   EditShift: {shiftId: string};
   DayDetail: {date: string; shifts?: Shift[]}; // YYYY-MM-DD format, optional pre-loaded shifts

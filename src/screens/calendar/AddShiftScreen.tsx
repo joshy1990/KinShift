@@ -147,7 +147,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       try {
         const patterns = await customPatternService.getUserPatterns(user.id);
         setCustomPatterns(patterns);
-        console.log('📋 Loaded', patterns.length, 'custom patterns');
       } catch (error) {
         console.error('Failed to load custom patterns:', error);
       }
@@ -162,13 +161,25 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       try {
         const patterns = await customPatternService.getUserPatterns(user.id);
         setCustomPatterns(patterns);
-        console.log('🔄 Reloaded', patterns.length, 'custom patterns');
       } catch (error) {
         console.error('Failed to reload custom patterns:', error);
       }
     });
     return unsubscribe;
   }, [navigation, user]);
+
+  // Auto-select pattern if passed from PatternBuilder
+  useEffect(() => {
+    if (route.params?.preSelectPattern) {
+      const pattern = route.params.preSelectPattern;
+      setSelectedCustomPattern(pattern);
+      setSelectedPattern(pattern.id);
+      setUsePattern(true); // Enable pattern mode
+      
+      // Clear the param so it doesn't trigger again
+      navigation.setParams({ preSelectPattern: undefined });
+    }
+  }, [route.params?.preSelectPattern, navigation]);
 
   // Smart time input formatting - handles "0455" → "04:55", "455" → "04:55", "4:55" → "04:55"
   const formatTimeInput = (input: string): string => {
@@ -456,13 +467,11 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       }
       
       if (repeats) {
-        console.log(`✅ [PATTERN] Detected cycle length: ${cycleLength} days`);
         return cycleLength; // Found the smallest repeating cycle
       }
     }
     
     // Fallback (should never happen since 14-day always repeats)
-    console.log('⚠️ [PATTERN] Could not detect cycle, defaulting to 14 days');
     return 14;
   };
 
@@ -490,9 +499,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     const endOfDay = new Date(shiftDate);
     endOfDay.setHours(23, 59, 59, 999);
     
-    console.log('🔍 Checking conflicts for:', format(shiftDate, 'MMM dd, yyyy'));
-    console.log('📅 Date range:', format(startOfDay, 'yyyy-MM-dd HH:mm'), 'to', format(endOfDay, 'yyyy-MM-dd HH:mm'));
-    
     try {
       // Get shifts for this date range
       const result = await shiftService.getShifts({
@@ -501,22 +507,15 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         endDate: endOfDay,
       });
       
-      console.log('📊 Total shifts found:', result.shifts.length);
-      
       // Filter to only current user's shifts on this specific day
       const userShifts = result.shifts.filter(shift => {
         const shiftStart = shift.startTime instanceof Date ? shift.startTime : new Date(shift.startTime);
         const isUserShift = shift.ownerId === user.id;
         const isOnThisDay = shiftStart >= startOfDay && shiftStart <= endOfDay;
         
-        if (isUserShift && isOnThisDay) {
-          console.log('✅ Found conflict:', shift.title, format(shiftStart, 'MMM dd HH:mm'));
-        }
-        
         return isUserShift && isOnThisDay;
       });
       
-      console.log('⚠️ User conflicts:', userShifts.length);
       return userShifts;
     } catch (error) {
       console.error('Error checking for conflicts:', error);
@@ -540,7 +539,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       // SPECIAL CASE: OFF shift type just deletes existing shifts (no new shift created)
       if (!usePattern && shiftType === 'off') {
         const selectedDate = route.params?.date || startTime;
-        console.log('🗑️ OFF type selected - deleting existing shifts on:', format(selectedDate, 'MMM dd, yyyy'));
         
         // Get all shifts for this user on this date
         const result = await shiftService.getShifts(
@@ -559,8 +557,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             : new Date(shift.startTime);
           return isSameDay(shiftDate, selectedDate);
         });
-        
-        console.log('🗑️ Found', shiftsOnDate.length, 'shift(s) to delete');
         
         // Delete all shifts on this date
         for (const shift of shiftsOnDate) {
@@ -584,41 +580,90 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
         // Check if custom pattern is selected
         if (selectedCustomPattern) {
-          console.log('📅 Custom Pattern creation:', {
-            patternName: selectedCustomPattern.name,
-            patternMode: selectedCustomPattern.patternMode,
-            startDate: format(startTime, 'MMM dd, yyyy'),
-            dayOfWeekStart: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][startTime.getDay()],
-            endDate: format(endDate, 'MMM dd, yyyy'),
-            months: patternMonths,
-            cellsTotal: selectedCustomPattern.cells.length,
-          });
-
           // Determine cycle length based on pattern mode
           let cycleLength: number;
           if (selectedCustomPattern.patternMode === 'weekly') {
             // Weekly mode: Always use 7-day cycle (Mon-Sun repeat)
             cycleLength = 7;
-            console.log('📅 Weekly mode - using 7-day cycle');
           } else {
             // Repetition mode: Auto-detect the cycle length
             cycleLength = calculatePatternCycleLength(selectedCustomPattern.cells);
-            console.log(`🔄 Repetition mode - detected ${cycleLength}-day cycle`);
           }
 
-          let currentDate = new Date(startTime);
+          // Determine actual start date based on pattern mode
+          let currentDate: Date;
+          let patternStartDate: Date; // Track where the pattern actually starts for repetition mode
           
-          // Initialize dayInPattern based on pattern mode
-          let dayInPattern: number = 0;
           if (selectedCustomPattern.patternMode === 'weekly') {
-            // In weekly mode, always use 7-day cycle, starting from day 0 of the pattern
-            console.log(`📅 Weekly mode - using fixed 7-day cycle starting from pattern day 0`);
+            // WEEKLY MODE: Find the next occurrence of the first configured day in the pattern
+            // Pattern cells are [Mon, Tue, Wed, Thu, Fri, Sat, Sun] (indices 0-6)
+            
+            // Find first non-null cell (first working day in pattern)
+            let firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
+            if (firstWorkingDayIndex === -1) {
+              showError('Pattern has no working days configured');
+              setLoading(false);
+              return;
+            }
+            
+            // Convert pattern index to day-of-week (0=Monday → 1=Monday in JS, 6=Sunday → 0=Sunday in JS)
+            const targetDayOfWeek = firstWorkingDayIndex === 6 ? 0 : firstWorkingDayIndex + 1;
+            
+            // Find next occurrence of that day from startTime
+            currentDate = new Date(startTime);
+            const currentDayOfWeek = currentDate.getDay();
+            
+            if (currentDayOfWeek !== targetDayOfWeek) {
+              // Advance to next occurrence of target day
+              let daysToAdd = targetDayOfWeek - currentDayOfWeek;
+              if (daysToAdd <= 0) daysToAdd += 7; // If target is earlier in week, go to next week
+              currentDate.setDate(currentDate.getDate() + daysToAdd);
+            }
+            
+            patternStartDate = new Date(currentDate); // For weekly, start is the adjusted date
           } else {
-            // In repetition mode, start at day 0 and auto-detect the cycle length
-            console.log(`🔄 Repetition mode - will auto-detect cycle length`);
+            // REPETITION MODE: Find first working day in the pattern and start from there
+            let firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
+            if (firstWorkingDayIndex === -1) {
+              showError('Pattern has no working days configured');
+              setLoading(false);
+              return;
+            }
+            
+            // For repetition mode with 14 cells, map to day-of-week
+            // Pattern cells 0-6 = Week 1 (Mon-Sun), 7-13 = Week 2 (Mon-Sun)
+            // Find which day of week the first working cell represents
+            const cellDayOfWeek = (firstWorkingDayIndex % 7); // 0=Mon, 1=Tue, ..., 6=Sun in pattern
+            const targetDayOfWeek = cellDayOfWeek === 6 ? 0 : cellDayOfWeek + 1; // Convert to JS (0=Sun, 1=Mon)
+            
+            // Find next occurrence of that day from startTime
+            currentDate = new Date(startTime);
+            const currentDayOfWeek = currentDate.getDay();
+            
+            if (currentDayOfWeek !== targetDayOfWeek) {
+              // Advance to next occurrence of target day
+              let daysToAdd = targetDayOfWeek - currentDayOfWeek;
+              if (daysToAdd <= 0) daysToAdd += 7;
+              currentDate.setDate(currentDate.getDate() + daysToAdd);
+            }
+            
+            patternStartDate = new Date(currentDate); // For repetition, this is where pattern starts
           }
 
           while (currentDate <= endDate) {
+            // Calculate which pattern cell to use
+            let dayInPattern: number;
+            
+            if (selectedCustomPattern.patternMode === 'weekly') {
+              // Weekly: Use day-of-week to pick cell
+              const dayOfWeek = currentDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+              dayInPattern = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to pattern index (0=Mon, 6=Sun)
+            } else {
+              // Repetition: Use cycle position from the pattern start date
+              const daysSinceStart = Math.floor((currentDate.getTime() - patternStartDate.getTime()) / (1000 * 60 * 60 * 24));
+              dayInPattern = daysSinceStart % cycleLength;
+            }
+            
             const cell = selectedCustomPattern.cells[dayInPattern];
 
             // Only create shift if this day has a shift type (not a day off)
@@ -653,33 +698,14 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             dayInPattern = (dayInPattern + 1) % cycleLength; // Use detected cycle length
           }
 
-          // Log the shifts that were created for debugging
-          console.log(`✅ Custom pattern loop complete. Created ${shiftsToCreate.length} shift entries:`);
-          shiftsToCreate.slice(0, 10).forEach((s, i) => {
-            console.log(`  [${i}] ${format(s.startTime, 'MMM dd (EEE)')}: ${s.shiftType}`);
-          });
-          if (shiftsToCreate.length > 10) {
-            console.log(`  ... and ${shiftsToCreate.length - 10} more shifts`);
-          }
-
         } else {
           // Simple pattern (existing code)
           const pattern = SIMPLE_PATTERNS[selectedPattern as keyof typeof SIMPLE_PATTERNS];
           let currentDate = new Date(startTime);
-          
-          console.log('📅 Pattern creation:', {
-            pattern: selectedPattern,
-            patternName: pattern.name,
-            startDate: format(startTime, 'MMM dd, yyyy'),
-            endDate: format(endDate, 'MMM dd, yyyy'),
-            months: patternMonths,
-          });
         
           if ('workDays' in pattern) {
             // Simple work/rest pattern (e.g., 4 on 4 off)
             let isWorkPeriod = true;
-            
-            console.log('🔄 Starting pattern loop with', pattern.workDays, 'work days,', pattern.restDays, 'rest days');
             
             while (currentDate <= endDate) {
               const daysInPeriod = isWorkPeriod ? pattern.workDays : pattern.restDays;
@@ -717,13 +743,10 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
               
               isWorkPeriod = !isWorkPeriod;
             }
-            
-            console.log('✅ Pattern loop complete. Created', shiftsToCreate.length, 'shift entries');
           }
         }
         
         // CLEANUP: Delete existing shifts on dates where pattern will create shifts
-        console.log('🧹 Cleaning up existing shifts before pattern creation...');
         try {
           const allExistingShifts = await shiftService.getShifts(
             {
@@ -749,12 +772,8 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           });
           
           if (shiftsToDelete.length > 0) {
-            console.log(`🗑️ Deleting ${shiftsToDelete.length} existing shift(s) that conflict with pattern using BULK delete...`);
             const shiftIdsToDelete = shiftsToDelete.map(s => s.id);
             await shiftService.deleteBulkShifts(shiftIdsToDelete);
-            console.log('✅ Bulk cleanup complete - ready to create pattern');
-          } else {
-            console.log('✅ No conflicts found - proceeding with pattern creation');
           }
         } catch (cleanupError) {
           console.error('❌ Pattern cleanup failed:', cleanupError);
@@ -762,11 +781,9 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         }
         
         // Create all shifts in batch (MUCH FASTER!)
-        console.log(`Creating ${shiftsToCreate.length} shifts using batch write...`);
         const startBatch = Date.now();
         await shiftService.createBulkShifts(shiftsToCreate);
         const batchTime = Date.now() - startBatch;
-        console.log(`✅ Batch creation completed in ${batchTime}ms (${(batchTime / shiftsToCreate.length).toFixed(1)}ms per shift)`);
         
         // Send ONE notification for all pattern shifts created
         if (currentHouseholdId) {
@@ -809,22 +826,12 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           // For split shifts, use the first shift's times as the main times
           shiftData.startTime = split1StartTime;
           shiftData.endTime = split2EndTime; // Overall end time
-          
-          console.log('💾 Saving split shift with data:', {
-            shiftType: shiftData.shiftType,
-            splitTimes: shiftData.splitTimes,
-            mainStartTime: shiftData.startTime,
-            mainEndTime: shiftData.endTime,
-          });
         }
 
         const newShift = await shiftService.createShift(shiftData);
         
-        console.log('✅ New shift created:', newShift.id);
-        
         // CLEANUP: Ensure only ONE shift per THIS USER per day
         // (Other household members' shifts are NOT affected)
-        console.log('🧹 Cleaning up duplicate shifts for user:', user.id);
         const selectedDate = route.params?.date || startTime;
         
         // Query all shifts for this user (with error handling)
@@ -838,26 +845,13 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             }
           );
           
-          console.log('✅ Cleanup query successful - got', allShifts.shifts.length, 'total shifts');
-          
           // Filter to only shifts on this date (still only THIS user)
           const shiftsOnDate = allShifts.shifts.filter(shift => {
             const shiftDate = shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime
               ? new Date((shift.startTime as any).seconds * 1000)
               : new Date(shift.startTime);
-            const matches = isSameDay(shiftDate, selectedDate);
-            if (matches) {
-              console.log('  → Shift on this date:', {
-                id: shift.id,
-                title: shift.title,
-                startTime: shiftDate,
-                createdAt: shift.createdAt,
-              });
-            }
-            return matches;
+            return isSameDay(shiftDate, selectedDate);
           });
-          
-          console.log('📊 Total shifts for THIS USER on', format(selectedDate, 'MMM dd'), ':', shiftsOnDate.length);
           
           // If there's more than one shift, keep only the NEWEST one (by createdAt)
           if (shiftsOnDate.length > 1) {
@@ -876,16 +870,9 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             const newestShift = sortedShifts[0];
             const oldShifts = sortedShifts.slice(1);
             
-            console.log('🗑️ Keeping newest shift:', newestShift.id, 'Deleting', oldShifts.length, 'old shift(s) FOR THIS USER');
-            
             for (const oldShift of oldShifts) {
-              console.log('  Deleting old shift:', oldShift.id, oldShift.title, 'Owner:', oldShift.ownerId);
               await shiftService.deleteShift(oldShift.id, user.id);
             }
-            
-            console.log('✅ Cleanup complete - Only 1 shift remains FOR THIS USER (other members unaffected)');
-          } else {
-            console.log('✅ No cleanup needed - only 1 shift on this date');
           }
         } catch (cleanupError) {
           console.error('❌ CLEANUP FAILED:', cleanupError);
@@ -938,21 +925,23 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
         </View>
 
-        {/* Date Display */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Date</Text>
-          <TouchableOpacity 
-            style={styles.dateBox}
-            onPress={() => {
-              // Could add DatePicker here for native platforms
-              showAlert('Date Selection', 'Tap on a date in the calendar to create a shift for that day, or manually adjust the date below.');
-            }}>
-            <Text style={styles.dateText}>
-              📅 {format(startTime, 'EEEE, MMMM d, yyyy')}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.helperText}>Shifts are created for the selected calendar date</Text>
-        </View>
+        {/* Date Display - Hidden only when custom pattern is actively selected */}
+        {(!usePattern || !selectedCustomPattern) && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Date</Text>
+            <TouchableOpacity 
+              style={styles.dateBox}
+              onPress={() => {
+                // Could add DatePicker here for native platforms
+                showAlert('Date Selection', 'Tap on a date in the calendar to create a shift for that day, or manually adjust the date below.');
+              }}>
+              <Text style={styles.dateText}>
+                📅 {format(startTime, 'EEEE, MMMM d, yyyy')}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.helperText}>Shifts are created for the selected calendar date</Text>
+          </View>
+        )}
 
         {/* Shift Type - Now with smart auto-fill */}
         <View style={styles.section}>
@@ -1205,7 +1194,14 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             </View>
             <Switch
               value={usePattern}
-              onValueChange={setUsePattern}
+              onValueChange={(value) => {
+                setUsePattern(value);
+                // Clear pattern selection when toggled off
+                if (!value) {
+                  setSelectedCustomPattern(null);
+                  setSelectedPattern('4on4off');
+                }
+              }}
               trackColor={{false: '#374151', true: '#6366F1'}}
               thumbColor={'#FFFFFF'}
             />

@@ -39,8 +39,6 @@ class AuditService {
       };
 
       await addDoc(collection(db, this.collection), auditLog);
-
-      console.log(`✓ Audit log recorded: ${action} on ${resourceType}/${resourceId} by ${userId}`);
     } catch (error) {
       console.error('Failed to log audit action:', error);
       // Don't throw - audit logging failures shouldn't break functionality

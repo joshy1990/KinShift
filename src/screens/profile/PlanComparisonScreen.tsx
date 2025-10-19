@@ -64,19 +64,15 @@ export const PlanComparisonScreen: React.FC = () => {
 
   const loadCurrentSubscription = async () => {
     if (!user) {
-      console.log('No user found');
       setLoading(false);
       return;
     }
     
     try {
-      console.log('Loading subscription for user:', user.id);
       const subscription = await subscriptionService.getUserSubscription(user.id);
-      console.log('Loaded subscription:', subscription);
       if (subscription) {
         // Handle both 'tier' and 'plan' properties (service may return either)
         const tierValue = (subscription as any).tier || (subscription as any).plan || 'free';
-        console.log('Setting current tier to:', tierValue);
         setCurrentTier(tierValue as SubscriptionTier);
       }
     } catch (error) {
@@ -137,9 +133,6 @@ export const PlanComparisonScreen: React.FC = () => {
   ];
 
   const handleSelectPlan = async (plan: PricingInfo) => {
-    console.log('[PlanComparison] Button pressed for plan:', plan.tier);
-    console.log('[PlanComparison] Current tier:', currentTier);
-    
     if (!user) {
       showAlert('Error', 'You must be logged in to change subscription plans.');
       return;
@@ -147,7 +140,6 @@ export const PlanComparisonScreen: React.FC = () => {
     
     // Check if this is the current plan
     if (plan.tier === currentTier) {
-      console.log('[PlanComparison] This is current plan, showing alert');
       showAlert('Current Plan', 'This is your current subscription plan.');
       return;
     }
@@ -157,23 +149,18 @@ export const PlanComparisonScreen: React.FC = () => {
     const isUpgrade = tierOrder[plan.tier] > tierOrder[currentTier];
     const isDowngrade = tierOrder[plan.tier] < tierOrder[currentTier];
     
-    console.log('[PlanComparison] isUpgrade:', isUpgrade, 'isDowngrade:', isDowngrade);
-    
     if (isDowngrade) {
       // Handle downgrade - FREE (no payment processing needed)
-      console.log('[PlanComparison] Showing downgrade confirmation');
       showConfirm(
         'Downgrade Plan',
         `Are you sure you want to downgrade to ${plan.name}?\n\nYou'll lose access to some features at the end of your billing period.\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
         async () => {
           try {
-            console.log('[PlanComparison] User confirmed downgrade, updating Firestore...');
             setLoading(true);
             
             // Update subscription in Firestore
             await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
             
-            console.log('[PlanComparison] Downgrade successful, reloading subscription...');
             await loadCurrentSubscription();
             
             showAlert(
@@ -190,8 +177,6 @@ export const PlanComparisonScreen: React.FC = () => {
       );
     } else if (isUpgrade) {
       // Handle upgrade - REQUIRES PAYMENT
-      console.log('[PlanComparison] Showing upgrade confirmation');
-      
       const monthlyPrice = plan.priceMonthly.toFixed(2);
       const yearlyPrice = plan.priceYearly.toFixed(2);
       
@@ -200,7 +185,6 @@ export const PlanComparisonScreen: React.FC = () => {
         `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year (save 16%)\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}\n\n⚠️ PAYMENT PROCESSING NOT YET INTEGRATED\nThis is a test - no charges will be made.`,
         async () => {
           try {
-            console.log('[PlanComparison] User confirmed upgrade, processing...');
             setLoading(true);
             
             // TODO: CRITICAL - Integrate payment processor here
@@ -211,7 +195,6 @@ export const PlanComparisonScreen: React.FC = () => {
             console.warn('[PlanComparison] ⚠️ UPGRADING WITHOUT PAYMENT - TESTING ONLY');
             await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
             
-            console.log('[PlanComparison] Upgrade successful, reloading subscription...');
             await loadCurrentSubscription();
             
             showAlert(
@@ -230,7 +213,6 @@ export const PlanComparisonScreen: React.FC = () => {
   };
 
   const getButtonText = (planTier: SubscriptionTier): string => {
-    console.log('getButtonText - planTier:', planTier, 'currentTier:', currentTier);
     if (planTier === currentTier) return 'Current Plan';
     
     const tierOrder = {free: 0, standard: 1, premium: 2};
@@ -241,7 +223,6 @@ export const PlanComparisonScreen: React.FC = () => {
   };
 
   const getButtonStyle = (planTier: SubscriptionTier) => {
-    console.log('getButtonStyle - planTier:', planTier, 'currentTier:', currentTier);
     if (planTier === currentTier) return styles.currentPlanButton;
     
     const tierOrder = {free: 0, standard: 1, premium: 2};

@@ -38,14 +38,10 @@ class AuthService {
    */
   async signInWithEmail(email: string, password: string): Promise<User> {
     try {
-      console.log('[AuthService] Starting sign in...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('[AuthService] Firebase Auth sign in successful');
       const uid = userCredential.user.uid;
       try {
-        console.log('[AuthService] Attempting to fetch user data from Firestore...');
         const user = await this.getUserData(uid);
-        console.log('[AuthService] User data loaded successfully');
         return user;
       } catch (e) {
         console.warn('[AuthService] Failed to fetch user data, using Firebase Auth fallback');
@@ -59,9 +55,7 @@ class AuthService {
           updatedAt: new Date(),
         };
         try {
-          console.log('[AuthService] Creating user doc from Auth fallback...');
           await setDoc(doc(db, COLLECTIONS.USERS, uid), fallbackUser);
-          console.log('[AuthService] User doc created successfully');
         } catch (setDocError) {
           console.error('[AuthService] Failed to create user doc:', setDocError);
         }
@@ -127,13 +121,11 @@ class AuthService {
           throw new Error('User not found');
         }
 
-        console.log(`✅ [AuthService] Successfully loaded user data on attempt ${attempt + 1}`);
         return userDoc.data() as User;
       } catch (error: any) {
         // Exponential backoff: 1s, 2s, 3s, 4s, 5s
         const delay = 1000 * (attempt + 1);
         console.warn(`⚠️ [AuthService] Attempt ${attempt + 1}/${retries} failed: ${error.message}`);
-        console.log(`📋 [AuthService] Retrying in ${delay}ms...`);
         
         // If this is the last attempt, throw the error
         if (attempt === retries - 1) {
@@ -344,10 +336,7 @@ class AuthService {
     return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         try {
-          console.log('[AuthService] Firebase user detected:', firebaseUser.uid, firebaseUser.email);
-          console.log('[AuthService] Attempting to fetch user data from Firestore...');
           const userData = await this.getUserData(firebaseUser.uid);
-          console.log('[AuthService] ✅ SUCCESS - User data loaded from Firestore:', userData);
           callback(userData);
         } catch (error: any) {
           console.warn('[AuthService] ⚠️ Failed to load user data from Firestore after all retries:', error.message);
@@ -362,7 +351,6 @@ class AuthService {
             createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
             updatedAt: new Date(),
           };
-          console.log('[AuthService] ℹ️ Using basic user data from Firebase Auth:', basicUserData);
           
           // Try to create the missing Firestore document (exclude photoUrl if null)
           try {
@@ -371,18 +359,15 @@ class AuthService {
               delete docData.photoUrl;
             }
             await setDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid), docData);
-            console.log('[AuthService] ✅ Created Firestore user document');
           } catch (firestoreError: any) {
             console.warn('[AuthService] Could not create Firestore document (will retry later):', firestoreError.message);
             // Continue anyway - app will work with basic data
           }
           
           // Return the user data (will use Firebase Auth data as fallback)
-          console.log('[AuthService] ✅ Logging user in with fallback data');
           callback(basicUserData);
         }
       } else {
-        console.log('[AuthService] ℹ️ No Firebase user - user is logged out');
         callback(null);
       }
     });

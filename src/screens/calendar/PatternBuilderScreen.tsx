@@ -154,7 +154,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
     setSaving(true);
     try {
-      await customPatternService.savePattern(
+      const savedPattern = await customPatternService.savePattern(
         user.id,
         patternName.trim(),
         cells,
@@ -163,16 +163,11 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         patternMode // Pass the current mode!
       );
 
-      Alert.alert(
-        'Pattern Saved!',
-        `"${patternName}" has been saved. You can now use it when creating shifts.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
+      // Navigate back to AddShift with the newly created pattern pre-selected
+      navigation.navigate('AddShift', {
+        date: new Date(), // Pass current date (will be hidden for custom patterns)
+        preSelectPattern: savedPattern, // Pass the entire pattern object
+      });
     } catch (error) {
       console.error('Failed to save pattern:', error);
       Alert.alert('Save Failed', 'Could not save pattern. Please try again.');

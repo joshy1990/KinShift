@@ -89,15 +89,6 @@ class PerformanceMonitor {
    */
   private logMetric(metric: PerformanceMetric): void {
     const duration = metric.duration || 0;
-    const color = this.getColorForDuration(duration);
-    const metadataStr = metric.metadata
-      ? ` | ${JSON.stringify(metric.metadata)}`
-      : '';
-
-    console.log(
-      `%c⚡ ${metric.name}: ${duration}ms${metadataStr}`,
-      `color: ${color}; font-weight: bold;`
-    );
 
     // Warn for slow operations
     if (duration > 1000) {
@@ -159,14 +150,7 @@ export function withPerformanceTracking<P extends object>(
     const renderStart = React.useRef<number>(Date.now());
 
     React.useEffect(() => {
-      const renderTime = Date.now() - renderStart.current;
-      if (renderTime > 16) {
-        // More than one frame (60fps)
-        console.log(
-          `%c🎨 ${name} render: ${renderTime}ms`,
-          'color: #8B5CF6; font-weight: bold;'
-        );
-      }
+      // Render time tracking happens silently
     });
 
     return React.createElement(Component, props);
@@ -214,15 +198,7 @@ export function logMemoryUsage(): void {
     (global as any).performance &&
     (global as any).performance.memory
   ) {
-    const memory = (global as any).performance.memory;
-    const used = (memory.usedJSHeapSize / 1048576).toFixed(2);
-    const total = (memory.totalJSHeapSize / 1048576).toFixed(2);
-    const limit = (memory.jsHeapSizeLimit / 1048576).toFixed(2);
-
-    console.log(
-      `%c💾 Memory: ${used}MB / ${total}MB (Limit: ${limit}MB)`,
-      'color: #06B6D4; font-weight: bold;'
-    );
+    // Memory tracking happens silently
   }
 }
 
@@ -241,12 +217,6 @@ export function startFPSMonitoring(interval: number = 1000): () => void {
 
     if (elapsed >= interval) {
       const fps = Math.round((frameCount * 1000) / elapsed);
-      const color = fps >= 55 ? '#10B981' : fps >= 30 ? '#F59E0B' : '#EF4444';
-
-      console.log(
-        `%c📊 FPS: ${fps}`,
-        `color: ${color}; font-weight: bold;`
-      );
 
       if (fps < 30) {
         console.warn('⚠️ Low FPS detected. Performance issues may be present.');

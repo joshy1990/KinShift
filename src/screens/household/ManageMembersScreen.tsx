@@ -34,13 +34,10 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
     try {
       setLoading(true);
       const householdMembers = await householdService.getHouseholdMembers(householdId);
-      console.log(`📋 Loaded ${householdMembers.length} members for household ${householdId}:`, householdMembers);
-      console.log(`👤 Current user ID: ${user?.id}`);
       setMembers(householdMembers);
 
       if (user?.id) {
         const adminStatus = await householdService.isHouseholdAdmin(householdId, user.id);
-        console.log(`🔐 Admin status: ${adminStatus}`);
         setIsAdmin(adminStatus);
       }
     } catch (error) {
@@ -56,7 +53,6 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
   };
 
   const handleRemoveMember = (member: HouseholdMember) => {
-    console.log('🟢 [REMOVE BUTTON CLICKED] Remove button pressed for member:', member.name);
     if (!user?.id) return;
 
     const message = `Are you sure you want to remove ${member.name} from the household?${
@@ -108,10 +104,6 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
   };
 
   const handleLeaveHousehold = () => {
-    console.log('🔴 [LEAVE BUTTON CLICKED] Leave button pressed!');
-    console.log('User ID:', user?.id);
-    console.log('Household ID:', householdId);
-    
     if (!user?.id) {
       console.error('User ID is missing, cannot leave household');
       return;
@@ -119,10 +111,8 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
 
     // On web platform, use window.confirm instead of Alert.alert
     if (Platform.OS === 'web' && typeof globalThis !== 'undefined') {
-      console.log('🌐 Using web confirm dialog');
       const confirmed = (globalThis as any).confirm?.('Are you sure you want to leave this household?');
       if (!confirmed) {
-        console.log('User cancelled leave action');
         return;
       }
       performLeaveHousehold();
@@ -132,7 +122,7 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
         'Leave Household',
         'Are you sure you want to leave this household?',
         [
-          {text: 'Cancel', style: 'cancel', onPress: () => console.log('Cancel pressed')},
+          {text: 'Cancel', style: 'cancel'},
           {
             text: 'Leave',
             style: 'destructive',
@@ -147,10 +137,8 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
     if (!user?.id) return;
     
     try {
-      console.log(`🚪 Initiating leave for user ${user.id} from household ${householdId}`);
       setActionInProgress('leave');
       await householdService.leaveHousehold(householdId, user.id);
-      console.log(`✅ Successfully left household ${householdId}`);
       
       // On web, use alert for success, then navigate
       if (Platform.OS === 'web' && typeof globalThis !== 'undefined') {

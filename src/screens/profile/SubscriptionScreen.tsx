@@ -41,17 +41,13 @@ export const SubscriptionScreen: React.FC = () => {
 
   const loadSubscription = async () => {
     if (!user) {
-      console.log('No user found, cannot load subscription');
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Loading subscription for user:', user.id);
-      console.log('subscriptionService methods:', typeof subscriptionService.getSubscriptionDisplayInfo);
       const sub = await subscriptionService.getUserSubscription(user.id);
-      console.log('Subscription loaded:', sub);
       setSubscription(sub);
 
       if (sub) {
@@ -79,7 +75,6 @@ export const SubscriptionScreen: React.FC = () => {
           canUpgradeToPremium: sub.tier === 'free' || sub.tier === 'standard',
         };
         
-        console.log('Display info:', info);
         setDisplayInfo(info);
       } else {
         console.error('No subscription returned from service');

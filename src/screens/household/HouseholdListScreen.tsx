@@ -18,7 +18,6 @@ export const HouseholdListScreen: React.FC<Props> = ({navigation}) => {
 
     try {
       const userHouseholds = await householdService.getUserHouseholds(user.id);
-      console.log('Loaded households:', userHouseholds);
       setHouseholds(userHouseholds);
     } catch (error) {
       console.error('Failed to load households:', error);

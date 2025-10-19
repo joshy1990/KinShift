@@ -73,8 +73,6 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
         }
       );
 
-      console.log('Household created successfully:', household);
-
       // Show success message with join code
       showAlert(
         'Success!',

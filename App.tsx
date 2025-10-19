@@ -34,8 +34,6 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
 }
 
 export default function App(): React.JSX.Element {
-  console.log('App starting...');
-  
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

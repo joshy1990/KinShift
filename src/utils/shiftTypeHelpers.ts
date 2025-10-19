@@ -77,7 +77,6 @@ export function getAllShiftTypes(): ShiftType[] {
  */
 export function getQuickShiftTypes(): ShiftType[] {
   const types: ShiftType[] = ['day', 'night', 'twilight'];
-  console.log('🔍 getQuickShiftTypes called, returning:', types);
   return types;
 }
 

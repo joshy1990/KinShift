@@ -125,7 +125,6 @@ class OfflineEditQueueService {
       const netInfo = await NetInfo.fetch();
       
       if (!netInfo.isConnected) {
-        console.log('Device is offline, skipping sync');
         return;
       }
 
@@ -133,11 +132,8 @@ class OfflineEditQueueService {
       const pendingEdits = queue.filter(edit => !edit.synced);
 
       if (pendingEdits.length === 0) {
-        console.log('No pending edits to sync');
         return;
       }
-
-      console.log(`Syncing ${pendingEdits.length} offline edits...`);
 
       let hasChanges = false;
       
@@ -148,7 +144,6 @@ class OfflineEditQueueService {
           if (result.success) {
             edit.synced = true;
             hasChanges = true;
-            console.log(`Successfully synced ${edit.operation} on ${edit.collection}/${edit.documentId}`);
           } else {
             edit.retryCount++;
             hasChanges = true;

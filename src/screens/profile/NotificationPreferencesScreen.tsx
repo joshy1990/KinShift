@@ -121,7 +121,6 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
       }, { merge: true }); // merge: true ensures we don't overwrite other user data
       
       setPreferences(newPreferences);
-      console.log('Preferences saved successfully:', newPreferences);
     } catch (error) {
       console.error('Error saving preferences:', error);
       showError('Failed to save notification preferences');
@@ -329,15 +328,6 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
           )}
         </View>
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.debugTitle}>Debug Info</Text>
-        <View style={styles.debugCard}>
-          <Text style={styles.debugText}>Permission: {permissionStatus}</Text>
-          <Text style={styles.debugText}>Platform: {Platform.OS}</Text>
-          <Text style={styles.debugText}>Push Enabled: {preferences.pushNotifications ? 'Yes' : 'No'}</Text>
-        </View>
-      </View>
     </ScrollView>
   );
 };
@@ -486,25 +476,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7F8C8D',
     fontStyle: 'italic',
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#7F8C8D',
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  debugCard: {
-    backgroundColor: '#F8F9FA',
-    marginHorizontal: 16,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 2,
   },
 });

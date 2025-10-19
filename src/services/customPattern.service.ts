@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/config/firebase.config';
 import { CustomPattern, PatternCell, PatternPreview } from '@/types/customPattern';
+import { format } from 'date-fns';
 import { ShiftType } from '@/types';
 
 // Re-export for convenience
@@ -66,13 +67,11 @@ export class CustomPatternService {
       }
       
       if (repeats) {
-        console.log(`✅ [PATTERN] Detected cycle length: ${cycleLength} days`);
         return cycleLength; // Found the smallest repeating cycle
       }
     }
     
     // This should never happen since a 14-day cycle always repeats, but safety default
-    console.log('⚠️ [PATTERN] Could not detect cycle, defaulting to 14 days');
     return 14;
   }
 
@@ -98,7 +97,6 @@ export class CustomPatternService {
       if (cells.length !== 14) {
         throw new Error('Pattern must have exactly 14 days (2 weeks)');
       }
-
       const now = new Date();
       const patternData = {
         userId,
@@ -114,10 +112,9 @@ export class CustomPatternService {
 
       const docRef = await addDoc(collection(db, COLLECTIONS.CUSTOM_PATTERNS), patternData);
       
-      console.log('✅ [PATTERN] Saved custom pattern:', docRef.id, name, '- Mode:', patternMode);
       return docRef.id;
     } catch (error) {
-      console.error('❌ [PATTERN] Failed to save pattern:', error);
+      console.error('Failed to save pattern:', error);
       throw error;
     }
   }
@@ -152,10 +149,9 @@ export class CustomPatternService {
         });
       });
 
-      console.log(`✅ [PATTERN] Loaded ${patterns.length} patterns for user:`, userId);
       return patterns;
     } catch (error) {
-      console.error('❌ [PATTERN] Failed to load patterns:', error);
+      console.error('Failed to load patterns:', error);
       return [];
     }
   }
@@ -186,7 +182,7 @@ export class CustomPatternService {
         isShared: data.isShared || false,
       };
     } catch (error) {
-      console.error('❌ [PATTERN] Failed to load pattern:', error);
+      console.error('Failed to load pattern:', error);
       return null;
     }
   }
@@ -204,10 +200,8 @@ export class CustomPatternService {
         ...updates,
         updatedAt: new Date(),
       });
-
-      console.log('✅ [PATTERN] Updated pattern:', patternId);
     } catch (error) {
-      console.error('❌ [PATTERN] Failed to update pattern:', error);
+      console.error('Failed to update pattern:', error);
       throw error;
     }
   }
@@ -219,10 +213,8 @@ export class CustomPatternService {
     try {
       const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
       await deleteDoc(docRef);
-
-      console.log('✅ [PATTERN] Deleted pattern:', patternId);
     } catch (error) {
-      console.error('❌ [PATTERN] Failed to delete pattern:', error);
+      console.error('Failed to delete pattern:', error);
       throw error;
     }
   }
@@ -267,8 +259,6 @@ export class CustomPatternService {
     householdId?: string
   ): Promise<{ success: boolean; shiftsCreated: number; error?: string }> {
     try {
-      console.log('🔄 [PATTERN] Applying pattern:', patternId, 'for', durationMonths, 'months');
-
       // Load pattern
       const pattern = await this.getPattern(patternId);
       if (!pattern) {
@@ -279,18 +269,14 @@ export class CustomPatternService {
       const endDate = addMonths(startOfDay(startDate), durationMonths);
       const totalDays = differenceInDays(endDate, startDate);
 
-      console.log('📅 [PATTERN] Creating shifts from', startDate, 'to', endDate, `(${totalDays} days)`);
-
       // Determine cycle length based on pattern mode
       let cycleLength: number;
       if (pattern.patternMode === 'weekly') {
         // Weekly mode: Always use 7-day cycle (Mon-Sun repeat)
         cycleLength = 7;
-        console.log('📅 [PATTERN] Weekly mode - using 7-day cycle');
       } else {
         // Repetition mode: Auto-detect the cycle length
         cycleLength = this.calculateCycleLength(pattern.cells);
-        console.log(`🔄 [PATTERN] Repetition mode - detected ${cycleLength}-day cycle`);
       }
 
       // Generate shifts
@@ -298,15 +284,19 @@ export class CustomPatternService {
       let currentDate = startOfDay(startDate);
 
       while (currentDate < endDate) {
-        // Calculate day in pattern using detected cycle length
-        const daysSinceStart = differenceInDays(currentDate, startDate);
-        let dayInPattern = daysSinceStart % cycleLength;
+        let dayInPattern: number;
         
-        // For weekly patterns, offset by start date's day-of-week to respect calendar alignment
         if (pattern.patternMode === 'weekly') {
-          const startDateDow = startDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-          const startPatternOffset = startDateDow === 0 ? 6 : startDateDow - 1; // Convert to pattern format (0=Mon, ..., 6=Sun)
-          dayInPattern = (daysSinceStart + startPatternOffset) % cycleLength;
+          // WEEKLY MODE: Pattern cells are Monday-Sunday (0-6)
+          // Map current date's day-of-week to pattern cell
+          const currentDayOfWeek = currentDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+          // Convert Sunday=0 to pattern index 6, Monday=1 to index 0, etc.
+          dayInPattern = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1;
+        } else {
+          // REPETITION MODE: Pattern starts from cell[0] on start date
+          // and repeats the detected cycle
+          const daysSinceStart = differenceInDays(currentDate, startDate);
+          dayInPattern = daysSinceStart % cycleLength;
         }
         
         // Get cell for this day
@@ -342,12 +332,8 @@ export class CustomPatternService {
         currentDate = addDays(currentDate, 1);
       }
 
-      console.log('🚀 [PATTERN] Creating', shiftsToCreate.length, 'shifts...');
-
       // Batch create shifts
       await shiftService.createBulkShifts(shiftsToCreate);
-
-      console.log('✅ [PATTERN] Successfully created', shiftsToCreate.length, 'shifts');
 
       return {
         success: true,
