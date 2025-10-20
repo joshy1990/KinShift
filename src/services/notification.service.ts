@@ -20,7 +20,7 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase.config';
-import { Notification } from '@/types';
+import { Notification, Shift } from '@/types';
 import {
   shiftCreatedTemplate,
   shiftUpdatedTemplate,
@@ -276,14 +276,61 @@ const sendPushNotificationToUser = async (
   payload: NotificationPayload
 ): Promise<boolean> => {
   try {
-    // In a production app, you would:
-    // 1. Call your backend API
-    // 2. Backend uses expo-server-sdk to send push via Expo's service
-    // 3. Or use Firebase Cloud Messaging
-    // 
-    // For now, we log that we would send it
-    // The notification has already been saved to Firestore via createNotification()
-    
+    // Get all registered push tokens for the user
+    const tokens = await getUserTokens(userId);
+
+    if (!tokens || tokens.length === 0) {
+      console.log(`No push tokens registered for user ${userId}. Notification saved to Firestore.`);
+      return true; // Still return true since notification was created in Firestore
+    }
+
+    // Prepare message for Expo push service
+    const messages = tokens
+      .filter((token) => token && typeof token === 'string')
+      .map((token) => ({
+        to: token,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+        badge: 1,
+        priority: 'high',
+      }));
+
+    if (messages.length === 0) {
+      console.log(`No valid push tokens for user ${userId}`);
+      return true;
+    }
+
+    // Send to Expo push service
+    // In production, this should be sent from your backend server for security
+    // This is a simplified client-side implementation
+    const expoApiUrl = 'https://exp.host/--/api/v2/push/send';
+
+    for (const message of messages) {
+      try {
+        const response = await fetch(expoApiUrl, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(message),
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+          console.warn('Expo push error:', result.errors);
+        } else {
+          console.log('✅ Push sent via Expo to token:', message.to.substring(0, 10) + '...');
+        }
+      } catch (error) {
+        console.error('Error sending individual push notification:', error);
+      }
+    }
+
     return true;
   } catch (error) {
     console.error('Error sending push notification:', error);
@@ -368,6 +415,60 @@ const notifyMultipleShiftsCreated = async (
     }
   } catch (error) {
     console.error('Error notifying multiple shifts created:', error);
+  }
+};
+
+/**
+ * Notify household members about a deleted shift
+ */
+const notifyShiftDeleted = async (
+  params: {
+    householdId: string;
+    shift: Pick<Shift, 'id' | 'shiftType' | 'startTime'>;
+    deleterId: string;
+    deleterName: string;
+  }
+): Promise<void> => {
+  const {householdId, shift, deleterId, deleterName} = params;
+
+  try {
+    const householdDoc = await getDoc(doc(db, 'households', householdId));
+    const household = householdDoc.data();
+
+    if (!household) {
+      console.warn('Household not found for shift deletion notification:', householdId);
+      return;
+    }
+
+    const shiftType = shift.shiftType || 'custom';
+    const shiftTypeLabel = `${shiftType.charAt(0).toUpperCase()}${shiftType.slice(1)}`;
+    const dateString = new Date(shift.startTime).toLocaleDateString();
+    const payload = shiftDeletedTemplate(
+      deleterName,
+      shiftTypeLabel,
+      dateString,
+      household.name || 'Household'
+    );
+
+    for (const memberId of household.members || []) {
+      if (memberId === deleterId) {
+        continue;
+      }
+
+      const notification = templateToNotification(
+        memberId,
+        householdId,
+        payload,
+        'shift_deleted'
+      );
+      const notificationId = await createNotification(notification);
+
+      if (notificationId) {
+        await sendPushNotificationToUser(memberId, payload);
+      }
+    }
+  } catch (error) {
+    console.error('Error notifying shift deleted:', error);
   }
 };
 
@@ -514,4 +615,5 @@ export const notificationService = {
   sendNotification,
   notifyShiftCreated,
   notifyMultipleShiftsCreated,
+  notifyShiftDeleted,
 };

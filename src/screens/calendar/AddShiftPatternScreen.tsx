@@ -6,24 +6,20 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Dimensions,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList } from '@/types';
 import { addDays, format, startOfToday } from 'date-fns';
 import { 
   detectShiftPattern, 
-  getSuggestedPatterns, 
   quickPatternCheck,
   ShiftEntry,
   ShiftPattern,
   COMMON_PATTERNS 
 } from '@/utils/shiftPatterns';
-import { spacing, typography, borderRadius, getResponsiveValue } from '@/utils/responsive';
+import { spacing, typography, borderRadius } from '@/utils/responsive';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'AddShiftPattern'>;
-
-const { width } = Dimensions.get('window');
 
 export const AddShiftPatternScreen: React.FC<Props> = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState<'choose' | 'input' | 'confirm'>('choose');

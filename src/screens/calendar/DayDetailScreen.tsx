@@ -20,7 +20,7 @@ import { householdService } from '@/services/household.service';
 import { getShiftTypeIcon, SHIFT_TYPE_COLORS } from '@/utils/shiftColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentHouseholdId } from '@/contexts/HouseholdContext';
-import { showAlert, showError, showSuccess, showConfirm } from '@/utils/alert';
+import { showError, showSuccess, showConfirm } from '@/utils/alert';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'DayDetail'>;
 
@@ -35,6 +35,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [noteTime, setNoteTime] = useState<Date | null>(null);
+  const [noteTimeText, setNoteTimeText] = useState<string>(''); // Web input text for time
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [noteCategory, setNoteCategory] = useState<DayNote['category']>('other');
   const [notifyWorking, setNotifyWorking] = useState(true);
@@ -117,6 +118,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       if (unsubscribeShifts) unsubscribeShifts();
       if (unsubscribeNotes) unsubscribeNotes();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, currentHouseholdId, user]);
 
   const loadDayData = async () => {
@@ -221,6 +223,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       // Reset form
       setNoteContent('');
       setNoteTime(null);
+  setNoteTimeText('');
       setNoteCategory('other');
       setNotifyWorking(true);
       setShowAddNote(false);
@@ -432,26 +435,66 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <TextInput
                 style={styles.textInput}
                 placeholder="e.g., 18:00 or 6:00 PM"
-                value={noteTime ? format(noteTime, 'HH:mm') : ''}
+                value={noteTimeText}
                 onChangeText={(text) => {
-                  if (!text) {
+                  const input = (text || '');
+                  setNoteTimeText(input);
+                  const trimmed = input.trim();
+                  if (!trimmed) {
                     setNoteTime(null);
                     return;
                   }
-                  // Parse time input (supports HH:mm format)
-                  const match = text.match(/^(\d{1,2}):(\d{2})$/);
-                  if (match) {
-                    const [, hours, minutes] = match;
-                    const h = parseInt(hours, 10);
-                    const m = parseInt(minutes, 10);
-                    if (h >= 0 && h < 24 && m >= 0 && m < 60) {
-                      const date = new Date();
-                      date.setHours(h, m, 0, 0);
-                      setNoteTime(date);
+
+                  // Helper: try to parse a flexible time string
+                  const trySetTime = (h: number, m: number) => {
+                    if (Number.isNaN(h) || Number.isNaN(m)) return false;
+                    if (h < 0 || h > 23 || m < 0 || m > 59) return false;
+                    const d = new Date();
+                    d.setHours(h, m, 0, 0);
+                    setNoteTime(d);
+                    return true;
+                  };
+
+                  const lower = trimmed.toLowerCase();
+
+                  // 1) AM/PM formats: "6pm", "6 pm", "6:30pm", "6:30 pm", "12am", etc.
+                  const ampm = lower.match(/^(\d{1,2})(?::|\.|\s)?(\d{2})?\s*(am|pm)$/i);
+                  if (ampm) {
+                    const hour = parseInt(ampm[1], 10);
+                    const minute = ampm[2] ? parseInt(ampm[2], 10) : 0;
+                    const meridiem = ampm[3];
+                    if (hour >= 1 && hour <= 12 && minute >= 0 && minute < 60) {
+                      let h24 = hour % 12; // 12am -> 0
+                      if (meridiem === 'pm') h24 += 12; // add 12 for pm (12pm stays 12)
+                      if (trySetTime(h24, minute)) return;
                     }
                   }
+
+                  // 2) 24-hour with separator: "18:00", "6:30", also allow dot or space
+                  const sep24 = lower.match(/^(\d{1,2})(?::|\.|\s)(\d{2})$/);
+                  if (sep24) {
+                    const h = parseInt(sep24[1], 10);
+                    const m = parseInt(sep24[2], 10);
+                    if (trySetTime(h, m)) return;
+                  }
+
+                  // 3) 4-digit military: "1830"
+                  const mil = lower.match(/^(\d{4})$/);
+                  if (mil) {
+                    const h = parseInt(mil[1].slice(0, 2), 10);
+                    const m = parseInt(mil[1].slice(2, 4), 10);
+                    if (trySetTime(h, m)) return;
+                  }
+
+                  // 4) Hour only: "6" or "18" (assume :00)
+                  const hourOnly = lower.match(/^(\d{1,2})$/);
+                  if (hourOnly) {
+                    const h = parseInt(hourOnly[1], 10);
+                    if (trySetTime(h, 0)) return;
+                  }
+
+                  // If nothing matched, don't update noteTime (allows user to keep typing)
                 }}
-                maxLength={5}
               />
             ) : (
               // Native: Use DateTimePicker
@@ -479,6 +522,8 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                       setShowTimePicker(Platform.OS === 'ios');
                       if (selectedDate) {
                         setNoteTime(selectedDate);
+                        // Keep web text in sync if user switches platforms (no-op on native web separation)
+                        setNoteTimeText(format(selectedDate, 'HH:mm'));
                       }
                     }}
                   />

@@ -248,6 +248,7 @@ export type RootStackParamList = {
   MainTabs: undefined;
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
+  PolicyWebView: { htmlAsset: 'privacy' | 'terms' };
 };
 
 export type MainTabsParamList = {

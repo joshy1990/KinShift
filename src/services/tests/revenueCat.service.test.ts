@@ -8,13 +8,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Mock RevenueCat
 jest.mock('react-native-purchases', () => ({
-  setup: jest.fn(),
-  configure: jest.fn(),
-  getCustomerInfo: jest.fn(),
-  purchasePackage: jest.fn(),
-  restorePurchases: jest.fn(),
-  getOfferings: jest.fn(),
-  addEventListener: jest.fn(),
+  __esModule: true,
+  default: {
+    setup: jest.fn(),
+    configure: jest.fn(),
+    setAttributes: jest.fn(),
+    getCustomerInfo: jest.fn(),
+    purchasePackage: jest.fn(),
+    restorePurchases: jest.fn(),
+    getOfferings: jest.fn(),
+    addEventListener: jest.fn(),
+    addCustomerInfoUpdateListener: jest.fn(),
+    logOut: jest.fn(),
+  },
 }));
 
 // Mock AsyncStorage

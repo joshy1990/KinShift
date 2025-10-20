@@ -5,6 +5,7 @@
 
 import React, {createContext, useContext, useState, useEffect, ReactNode} from 'react';
 import {householdService} from '@/services/household.service';
+import { subscriptionService } from '@/services/subscription.service';
 import {Household} from '@/types';
 import {useAuth} from './AuthContext';
 
@@ -32,18 +33,7 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user's households on mount and when user changes
-  useEffect(() => {
-    if (user) {
-      loadHouseholds();
-    } else {
-      setHouseholds([]);
-      setCurrentHousehold(null);
-      setLoading(false);
-    }
-  }, [user]);
-
-  const loadHouseholds = async () => {
+  const loadHouseholds = React.useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
@@ -54,21 +44,36 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
       setHouseholds(userHouseholds);
 
       // Auto-select first household if none selected
-      if (!currentHousehold && userHouseholds.length > 0) {
-        setCurrentHousehold(userHouseholds[0]);
-      }
+      setCurrentHousehold((current) => {
+        if (!current && userHouseholds.length > 0) {
+          return userHouseholds[0];
+        }
 
-      // If current household is no longer in list, clear it
-      if (currentHousehold && !userHouseholds.find(h => h.id === currentHousehold.id)) {
-        setCurrentHousehold(userHouseholds[0] || null);
-      }
+        // If current household is no longer in list, clear it
+        if (current && !userHouseholds.find(h => h.id === current.id)) {
+          return userHouseholds[0] || null;
+        }
+
+        return current;
+      });
     } catch (err) {
       console.error('Failed to load households:', err);
       setError('Failed to load households');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  // Load user's households on mount and when user changes
+  useEffect(() => {
+    if (user) {
+      loadHouseholds();
+    } else {
+      setHouseholds([]);
+      setCurrentHousehold(null);
+      setLoading(false);
+    }
+  }, [user, loadHouseholds]);
 
   const refreshHouseholds = async () => {
     await loadHouseholds();
@@ -77,6 +82,13 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
   const createHousehold = async (name: string, settings?: any): Promise<Household> => {
     if (!user) {
       throw new Error('Must be logged in to create household');
+    }
+
+    // Enforce subscription tier: check if user can add a household
+    const limitCheck = await subscriptionService.canAddHousehold(user.id);
+    if (!limitCheck.allowed) {
+      const msg = limitCheck.reason || 'Your subscription does not allow creating another household';
+      throw new Error(msg);
     }
 
     const household = await householdService.createHousehold(name, user.id, settings);

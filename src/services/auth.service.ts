@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, User as FirebaseUser, onAuthStateChanged, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import {User} from '@/types/index';
 import { auth, db, COLLECTIONS } from '@/config/firebase.config';
 import { householdService } from './household.service';
@@ -43,7 +43,7 @@ class AuthService {
       try {
         const user = await this.getUserData(uid);
         return user;
-      } catch (e) {
+      } catch {
         console.warn('[AuthService] Failed to fetch user data, using Firebase Auth fallback');
         // If user doc is missing or Firestore fails, create it from Auth and proceed
         const fallbackUser: User = {
@@ -165,7 +165,7 @@ class AuthService {
           await updateProfile(currentUser, profileUpdates);
         }
       }
-    } catch (error) {
+    } catch {
       throw new Error('Failed to update profile');
     }
   }
@@ -299,20 +299,20 @@ class AuthService {
       if (householdsToDowngrade.length > 0) {
         (async () => {
           try {
-            for (const {householdId, householdData, newAdminId} of householdsToDowngrade) {
+            for (const {householdId, newAdminId} of householdsToDowngrade) {
               try {
                 await householdService.handleAdminPromotionAndDowngrade(
                   householdId,
                   newAdminId,
                   userId // Previous admin
                 );
-              } catch (downgradeError) {
-                console.warn(`⚠️ Failed to handle downgrade for household ${householdId}:`, downgradeError);
+              } catch {
+                console.warn(`⚠️ Failed to handle downgrade for household ${householdId}`);
                 // Continue with other households
               }
             }
-          } catch (error) {
-            console.warn('⚠️ Failed to process household downgrades:', error);
+          } catch {
+            console.warn('⚠️ Failed to process household downgrades');
           }
         })();
       }

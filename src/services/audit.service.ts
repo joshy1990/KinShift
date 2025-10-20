@@ -1,5 +1,5 @@
 import { collection, addDoc, query, where, orderBy, getDocs } from 'firebase/firestore';
-import { COLLECTIONS, db } from '@/config/firebase.config';
+import { db } from '@/config/firebase.config';
 
 export interface AuditLog {
   id: string;

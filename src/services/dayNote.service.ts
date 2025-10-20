@@ -11,6 +11,7 @@ import {
   limit,
   onSnapshot,
   writeBatch,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase.config';
 import { DayNote } from '@/types';
@@ -18,6 +19,7 @@ import { COLLECTIONS } from '@/config/firebase.config';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { shiftService } from './shift.service';
 import { householdService } from './household.service';
+import { rbacService, AuditAction } from './rbac.service';
 
 /**
  * Service for managing day notes - household plans and events
@@ -140,34 +142,104 @@ class DayNoteService {
 
   /**
    * Update an existing note
+   * RBAC: Only author or household admin can update
    */
   async updateNote(
     noteId: string,
+    userId: string,
+    householdId: string | undefined,
     updates: Partial<Omit<DayNote, 'id' | 'createdAt' | 'householdId' | 'authorId'>>
   ): Promise<void> {
     try {
-      await updateDoc(doc(db, COLLECTIONS.DAY_NOTES, noteId), {
+      // Get the existing note to check permissions
+      const noteRef = doc(db, COLLECTIONS.DAY_NOTES, noteId);
+      const noteDoc = await getDoc(noteRef);
+
+      if (!noteDoc.exists()) {
+        throw new Error('Note not found');
+      }
+
+      const note = noteDoc.data() as DayNote;
+
+      // RBAC: Check authorization
+      if (householdId) {
+        // Household note: author or admin can update
+        const permissionResult = await rbacService.enforceAdminOrOwner(
+          householdId,
+          userId,
+          note.authorId,
+          AuditAction.DAYNOTE_UPDATE
+        );
+
+        if (!permissionResult.allowed) {
+          throw new Error(permissionResult.reason || 'Unauthorized');
+        }
+      } else {
+        // Personal note: only author can update
+        if (userId !== note.authorId) {
+          throw new Error('Unauthorized: Only the note author can update personal notes');
+        }
+      }
+
+      // Update the note
+      await updateDoc(noteRef, {
         ...updates,
         updatedAt: new Date(),
       });
     } catch (error) {
       console.error('Failed to update note:', error);
-      throw new Error('Failed to update note');
+      throw error instanceof Error ? error : new Error('Failed to update note');
     }
   }
 
   /**
    * Delete a note (soft delete)
+   * RBAC: Only author or household admin can delete
    */
-  async deleteNote(noteId: string): Promise<void> {
+  async deleteNote(
+    noteId: string,
+    userId: string,
+    householdId: string | undefined
+  ): Promise<void> {
     try {
-      await updateDoc(doc(db, COLLECTIONS.DAY_NOTES, noteId), {
+      // Get the existing note to check permissions
+      const noteRef = doc(db, COLLECTIONS.DAY_NOTES, noteId);
+      const noteDoc = await getDoc(noteRef);
+
+      if (!noteDoc.exists()) {
+        throw new Error('Note not found');
+      }
+
+      const note = noteDoc.data() as DayNote;
+
+      // RBAC: Check authorization
+      if (householdId) {
+        // Household note: author or admin can delete
+        const permissionResult = await rbacService.enforceAdminOrOwner(
+          householdId,
+          userId,
+          note.authorId,
+          AuditAction.DAYNOTE_DELETE
+        );
+
+        if (!permissionResult.allowed) {
+          throw new Error(permissionResult.reason || 'Unauthorized');
+        }
+      } else {
+        // Personal note: only author can delete
+        if (userId !== note.authorId) {
+          throw new Error('Unauthorized: Only the note author can delete personal notes');
+        }
+      }
+
+      // Perform soft delete
+      await updateDoc(noteRef, {
         isDeleted: true,
         updatedAt: new Date(),
       });
     } catch (error) {
       console.error('Failed to delete note:', error);
-      throw new Error('Failed to delete note');
+      throw error instanceof Error ? error : new Error('Failed to delete note');
     }
   }
 

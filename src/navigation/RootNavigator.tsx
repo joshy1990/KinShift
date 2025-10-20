@@ -11,6 +11,7 @@ import {SignupScreen} from '@/screens/auth/SignupScreen';
 import {PrivacyPolicyScreen} from '@/screens/profile/PrivacyPolicyScreen';
 import {TermsOfServiceScreen} from '@/screens/profile/TermsOfServiceScreen';
 import {MainTabNavigator} from './MainTabNavigator';
+import {PolicyWebViewScreen} from '@/screens/profile/PolicyWebViewScreen';
 import {ActivityIndicator, View, StyleSheet} from 'react-native';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -28,12 +29,13 @@ export const RootNavigator: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <Stack.Navigator screenOptions={{headerShown: false}}>
+  <Stack.Navigator id={undefined} screenOptions={{headerShown: false}}>
         {user ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabNavigator} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+            <Stack.Screen name="PolicyWebView" component={PolicyWebViewScreen} />
           </>
         ) : (
           <>

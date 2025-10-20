@@ -30,6 +30,7 @@ export const SubscriptionManagementScreen: React.FC<
 
   useEffect(() => {
     loadSubscription();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSubscription = async () => {

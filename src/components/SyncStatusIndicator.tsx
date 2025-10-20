@@ -13,7 +13,7 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
   showDetails = false,
   onPress,
 }) => {
-  const {network, sync, isFullyOnline, canSync} = useConnectivity();
+  const {network, sync, canSync} = useConnectivity();
 
   const getStatusColor = () => {
     if (!network.isConnected) return '#E74C3C'; // Red for offline

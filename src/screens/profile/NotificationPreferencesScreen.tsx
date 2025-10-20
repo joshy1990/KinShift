@@ -64,6 +64,7 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
   useEffect(() => {
     loadPreferences();
     checkPermissionStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPreferences = async () => {
@@ -169,6 +170,8 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
         value={preferences[key] as boolean}
         onValueChange={(value) => handleToggle(key, value)}
         disabled={disabled || !preferences.pushNotifications}
+        trackColor={{ false: '#374151', true: '#6366F1' }}
+        thumbColor={'#FFFFFF'}
       />
     </View>
   );
@@ -335,45 +338,37 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 50,
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   section: {
     marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '600',
+    color: '#FFFFFF',
     marginHorizontal: 16,
     marginBottom: 12,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     marginHorizontal: 16,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#1F1F3F',
   },
   statusCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     marginHorizontal: 16,
     borderRadius: 12,
     padding: 16,
     borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   statusHeader: {
     flexDirection: 'row',
@@ -388,15 +383,15 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   statusDescription: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     lineHeight: 20,
   },
   enableButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -414,7 +409,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#1F1F3F',
   },
   disabledRow: {
     opacity: 0.5,
@@ -425,15 +420,15 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
     marginBottom: 2,
   },
   rowDescription: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   disabledText: {
-    color: '#BDC3C7',
+    color: '#6B7280',
   },
   reminderOptions: {
     flexDirection: 'column',
@@ -445,36 +440,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#F8F9FA',
+    borderColor: '#374151',
+    backgroundColor: '#0F0F23',
   },
   selectedOption: {
-    borderColor: '#3498DB',
-    backgroundColor: '#EBF3FD',
+    borderColor: '#6366F1',
+    backgroundColor: '#1F2336',
   },
   optionText: {
     fontSize: 14,
-    color: '#2C3E50',
+    color: '#E5E7EB',
     textAlign: 'center',
   },
   selectedOptionText: {
-    color: '#3498DB',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   quietHoursSettings: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#1F1F3F',
   },
   quietHoursLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
     marginBottom: 4,
   },
   quietHoursNote: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     fontStyle: 'italic',
   },
 });

@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -27,11 +27,7 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
   const [declining, setDeclining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadInvitation();
-  }, [inviteCode]);
-
-  const loadInvitation = async () => {
+  const loadInvitation = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -60,7 +56,11 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [inviteCode]);
+
+  useEffect(() => {
+    loadInvitation();
+  }, [loadInvitation]);
 
   const acceptInvitation = async () => {
     if (!invitation || !user) return;
@@ -70,12 +70,13 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
       
       await invitationService.acceptInvitation(inviteCode, user);
       
-      // Send notification to household members about the new member
+      // Optionally notify invitee (or inviter) - using available helper signature
       try {
         await notificationService.notifyInvitationAccepted(
+          user.id,
           invitation.householdId,
-          user.name || 'A new member',
-          invitation.householdName
+          invitation.householdName,
+          0
         );
       } catch (notificationError) {
         console.warn('Failed to send acceptance notification:', notificationError);
@@ -102,11 +103,8 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
   };
 
   const declineInvitation = async () => {
+    setDeclining(true);
     try {
-      setDeclining(true);
-      
-      await invitationService.declineInvitation(inviteCode);
-      
       Alert.alert(
         'Invitation Declined',
         'You have declined this invitation.',
@@ -117,9 +115,6 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
           }
         ]
       );
-      
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to decline invitation');
     } finally {
       setDeclining(false);
     }
@@ -252,25 +247,25 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
     padding: 20,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   errorIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FADBD8',
+    backgroundColor: '#1F1F3F',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -280,20 +275,20 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#E74C3C',
+    fontWeight: '700',
+    color: '#F87171',
     marginBottom: 12,
     textAlign: 'center',
   },
   errorMessage: {
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 30,
   },
   backButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -306,13 +301,13 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     padding: 30,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F0F23',
   },
   inviteIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#1F1F3F',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -322,48 +317,45 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 22,
   },
   invitationCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     margin: 16,
     borderRadius: 12,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#1F1F3F',
   },
   householdInfo: {
     alignItems: 'center',
     marginBottom: 24,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
+    borderBottomColor: '#1F1F3F',
   },
   householdName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   inviterInfo: {
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginBottom: 4,
   },
   roleInfo: {
     fontSize: 14,
-    color: '#3498DB',
+    color: '#6366F1',
     fontWeight: '600',
   },
   detailsSection: {
@@ -371,13 +363,13 @@ const styles = StyleSheet.create({
   },
   detailsTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
   detailsText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -386,24 +378,24 @@ const styles = StyleSheet.create({
   },
   featureItem: {
     fontSize: 14,
-    color: '#34495E',
+    color: '#E5E7EB',
     lineHeight: 20,
   },
   adminNotice: {
-    backgroundColor: '#FFF3CD',
+    backgroundColor: '#1F2336',
     borderRadius: 8,
     padding: 16,
     marginTop: 16,
   },
   adminNoticeTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#856404',
+    fontWeight: '700',
+    color: '#FDE68A',
     marginBottom: 4,
   },
   adminNoticeText: {
     fontSize: 14,
-    color: '#856404',
+    color: '#E5E7EB',
     lineHeight: 18,
   },
   actions: {
@@ -411,7 +403,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   acceptButton: {
-    backgroundColor: '#27AE60',
+    backgroundColor: '#10B981',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -424,9 +416,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   declineButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#E74C3C',
+    backgroundColor: '#1A1A2E',
+    borderWidth: 1,
+    borderColor: '#1F1F3F',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -434,7 +426,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   declineButtonText: {
-    color: '#E74C3C',
+    color: '#F87171',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -447,7 +439,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    color: '#95A5A6',
+    color: '#9CA3AF',
     textAlign: 'center',
   },
 });

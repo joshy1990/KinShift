@@ -56,7 +56,7 @@ describe('DayDetailScreen', () => {
       startTime: new Date('2025-10-16T08:00:00'),
       endTime: new Date('2025-10-16T16:00:00'),
       colorTag: '#2ECC71',
-      shiftType: 'days' as const,
+      shiftType: 'day' as const,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastEditedBy: 'josh-id',

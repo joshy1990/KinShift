@@ -15,7 +15,6 @@ import {
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
-import {showError} from '@/utils/alert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 

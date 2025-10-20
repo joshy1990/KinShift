@@ -16,6 +16,7 @@ const Stack = createNativeStackNavigator<ProfileStackParamList>();
 export const ProfileStack: React.FC = () => {
   return (
     <Stack.Navigator
+      id={undefined}
       screenOptions={{
         headerStyle: {
           backgroundColor: '#0F0F23',

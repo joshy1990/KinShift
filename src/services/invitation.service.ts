@@ -2,6 +2,8 @@ import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Time
 import {Invitation, User} from '@/types';
 import {householdService} from './household.service';
 import {notificationService} from './notification.service';
+import {rbacService, AuditAction} from './rbac.service';
+import {auditService} from './audit.service';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 
 class InvitationService {
@@ -20,12 +22,25 @@ class InvitationService {
   }
 
   async createInvitation(householdId: string, emailOrPhone: string, inviterUser: User, inviteeName?: string, role: 'member' | 'admin' = 'member'): Promise<Invitation> {
+    // RBAC Enforcement: Only admins can send invitations
+    const adminCheck = await rbacService.enforceAdminOnly(householdId, inviterUser.id, AuditAction.MEMBER_INVITE);
+    if (!adminCheck.allowed) {
+      throw new Error(adminCheck.reason || 'Unauthorized to send invitations');
+    }
+
     const household = await householdService.getHousehold(householdId);
     if (!household) throw new Error('Household not found');
-    if (!household.admins.includes(inviterUser.id)) throw new Error('Only household admins can send invitations');
+    
     const normalizedEmail = emailOrPhone.toLowerCase().trim();
     if (!this.validateEmail(normalizedEmail)) throw new Error('Invalid email address');
-    let inviteCode = this.generateInviteCode();
+    
+    // Prevent self-invites
+    if (normalizedEmail === inviterUser.email) {
+      await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, false, 'Cannot invite self');
+      throw new Error('Cannot send invitation to yourself');
+    }
+
+    const inviteCode = this.generateInviteCode();
     const inviterName = (inviterUser as any).displayName || inviterUser.email;
     const invitation: any = {
       code: inviteCode,
@@ -43,6 +58,9 @@ class InvitationService {
     const invitationsRef = collection(db, COLLECTIONS.INVITATIONS);
     const docRef = await addDoc(invitationsRef, invitation);
     const createdInvitation = { id: docRef.id, ...invitation } as Invitation;
+
+    // Log successful invitation creation
+    await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, true);
 
     // Send notification if invitee has an account (if lookup is implemented)
     try {
@@ -98,9 +116,17 @@ class InvitationService {
     const invitationSnap = await getDoc(invitationRef);
     if (!invitationSnap.exists()) throw new Error('Invitation not found');
     const invitation = invitationSnap.data() as Invitation;
-    const household = await householdService.getHousehold(invitation.householdId);
-    if (!household.admins.includes(cancellingUserId)) throw new Error('Only household admins can cancel invitations');
+    
+    // RBAC Enforcement: Only admins can cancel invitations
+    const adminCheck = await rbacService.enforceAdminOnly(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE);
+    if (!adminCheck.allowed) {
+      throw new Error(adminCheck.reason || 'Unauthorized to cancel invitations');
+    }
+    
     await updateDoc(invitationRef, { status: 'cancelled', cancelledAt: Timestamp.now(), cancelledByUserId: cancellingUserId });
+    
+    // Log successful cancellation
+    await auditService.logHouseholdAction(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE, true);
   }
 }
 

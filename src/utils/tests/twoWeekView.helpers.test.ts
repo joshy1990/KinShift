@@ -13,7 +13,7 @@ describe('Two Week View Helpers', () => {
     id: string,
     ownerId: string,
     startTime: Date,
-    shiftType: ShiftType = 'days'
+  shiftType: ShiftType = 'day'
   ): Shift => ({
     id,
     title: `${shiftType} Shift`,
@@ -57,8 +57,8 @@ describe('Two Week View Helpers', () => {
     it('should handle multiple shifts for same user on same day', () => {
       const date = new Date('2024-01-15T08:00:00');
       const shifts = [
-        createShift('1', 'user1', date, 'days'),
-        createShift('2', 'user1', new Date('2024-01-15T20:00:00'), 'nights'),
+        createShift('1', 'user1', date, 'day'),
+        createShift('2', 'user1', new Date('2024-01-15T20:00:00'), 'night'),
       ];
 
       const result = getShiftsForUserAndDate(shifts, 'user1', date);
@@ -111,8 +111,8 @@ describe('Two Week View Helpers', () => {
     it('should count unique users correctly', () => {
       const date = new Date('2024-01-15T08:00:00');
       const shifts = [
-        createShift('1', 'user1', date, 'days'),
-        createShift('2', 'user1', new Date('2024-01-15T20:00:00'), 'nights'),
+        createShift('1', 'user1', date, 'day'),
+        createShift('2', 'user1', new Date('2024-01-15T20:00:00'), 'night'),
         createShift('3', 'user2', date),
       ];
 

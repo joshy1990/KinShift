@@ -103,6 +103,109 @@ interface BatchShiftResult {
 
 class ShiftPatternService {
   /**
+   * Validate a pattern definition
+   */
+  validatePattern(patternKey: PatternTemplateKey | 'custom', custom?: PatternRule): { valid: boolean; error?: string } {
+    if (patternKey !== 'custom') {
+      return PATTERN_TEMPLATES[patternKey] ? { valid: true } : { valid: false, error: 'Invalid pattern' };
+    }
+    if (!custom) return { valid: false, error: 'Missing custom pattern' };
+    if (custom.type === 'rotation') {
+      const work = custom.workDays ?? 0;
+      const rest = custom.restDays ?? 0;
+      if (!work || work < 0) return { valid: false, error: 'Work days must be > 0' };
+      if (rest < 0) return { valid: false, error: 'Rest days must be >= 0' };
+      return { valid: true };
+    }
+    if (custom.type === 'fixed_weekly') {
+      const schedule = custom.weeklySchedule || {} as any;
+      const hasWork = Object.values(schedule).some(Boolean);
+      if (!hasWork) return { valid: false, error: 'At least one work day must be selected' };
+      return { valid: true };
+    }
+    return { valid: false, error: 'Unsupported pattern type' };
+  }
+
+  /**
+   * Preview dates a pattern would produce over previewDays days
+   */
+  previewPattern(
+    patternKey: PatternTemplateKey | 'custom',
+    startDate: Date,
+    previewDays: number,
+    custom?: PatternRule
+  ): Date[] {
+    const dates: Date[] = [];
+    const start = startOfDay(startDate);
+    if (patternKey === 'custom' && custom) {
+      if (custom.type === 'rotation') {
+        const work = custom.workDays ?? 0;
+        const rest = custom.restDays ?? 0;
+        let isWork = true;
+        let dayCount = 0;
+        let current = new Date(start);
+        for (let i = 0; i < previewDays; i++) {
+          if (isWork) dates.push(startOfDay(current));
+          dayCount++;
+          if ((isWork && dayCount >= work) || (!isWork && dayCount >= rest)) {
+            isWork = !isWork;
+            dayCount = 0;
+          }
+          current = addDays(current, 1);
+        }
+        return dates;
+      }
+    }
+    const template = PATTERN_TEMPLATES[patternKey as PatternTemplateKey];
+    if (!template) return dates;
+    let current = new Date(start);
+    if (template.type === 'rotation') {
+      const work = (template as any).workDays as number;
+      const rest = (template as any).restDays as number;
+      let dayCount = 0;
+      let isWork = true;
+      for (let i = 0; i < previewDays; i++) {
+        if (isWork) dates.push(startOfDay(current));
+        dayCount++;
+        if ((isWork && dayCount >= work) || (!isWork && dayCount >= rest)) {
+          isWork = !isWork;
+          dayCount = 0;
+        }
+        current = addDays(current, 1);
+      }
+    } else {
+      const weekly = (template as any).weeklySchedule as Record<string, boolean>;
+      const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+      for (let i = 0; i < previewDays; i++) {
+        const d = startOfDay(addDays(start, i));
+        if (weekly[dayNames[d.getDay()]]) dates.push(d);
+      }
+    }
+    return dates;
+  }
+
+  /**
+   * Calculate approximate number of work days within durationMonths months
+   */
+  calculateShiftCount(
+    patternKey: PatternTemplateKey | 'custom',
+    startDate: Date,
+    durationMonths: number,
+    custom?: PatternRule
+  ): number {
+    const days = this.previewPattern(patternKey, startDate, Math.max(1, durationMonths) * 30, custom);
+    return days.length;
+  }
+
+  /**
+   * Get pattern template info safely
+   */
+  getPatternInfo(patternKey: PatternTemplateKey): { name: string; description: string } | null {
+    const template = PATTERN_TEMPLATES[patternKey];
+    if (!template) return null;
+    return { name: template.name, description: template.description };
+  }
+  /**
    * Generate shifts from a pattern template
    */
   async generateShiftsFromPattern(
@@ -271,16 +374,7 @@ class ShiftPatternService {
   /**
    * Get pattern information
    */
-  getPatternInfo(patternKey: PatternTemplateKey): {
-    name: string;
-    description: string;
-  } {
-    const template = PATTERN_TEMPLATES[patternKey];
-    return {
-      name: template.name,
-      description: template.description,
-    };
-  }
+  // getAvailablePatterns remains unchanged
 
   /**
    * Get all available pattern templates

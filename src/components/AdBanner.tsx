@@ -8,11 +8,8 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { getBottomSpacingConfig } from '@/utils/bottomSpacing';
 
 interface AdBannerProps {
-  /** Safe area insets bottom */
-  safeAreaBottom?: number;
   /** Whether to show placeholder */
   showPlaceholder?: boolean;
 }
@@ -38,13 +35,11 @@ interface AdBannerProps {
  * ```
  */
 export const AdBanner: React.FC<AdBannerProps> = ({ 
-  safeAreaBottom = 0, 
   showPlaceholder = true 
 }) => {
   const { width } = Dimensions.get('window');
   const isMobile = width < 768;
   const isTablet = width >= 768 && width < 1024;
-  const isDesktop = width >= 1024;
   
   // Responsive ad height
   const adHeight = isMobile ? 50 : isTablet ? 60 : 70;

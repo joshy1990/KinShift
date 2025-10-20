@@ -258,7 +258,7 @@ export const ConflictResolutionScreen: React.FC<ConflictResolutionScreenProps> =
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
   },
   centerContainer: {
     flex: 1,
@@ -268,25 +268,25 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F0F23',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#1F1F3F',
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     lineHeight: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   emptyIcon: {
     fontSize: 48,
@@ -294,19 +294,19 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
   },
   backButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -320,16 +320,11 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   editCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#FFE5E5',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#1F1F3F',
   },
   editHeader: {
     flexDirection: 'row',
@@ -352,20 +347,20 @@ const styles = StyleSheet.create({
   editTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   editSubtitle: {
     fontSize: 12,
-    color: '#E74C3C',
+    color: '#F87171',
     marginBottom: 4,
   },
   editTimestamp: {
     fontSize: 11,
-    color: '#95A5A6',
+    color: '#9CA3AF',
   },
   editBadge: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: '#DC2626',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -382,24 +377,24 @@ const styles = StyleSheet.create({
   editDataTitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginBottom: 8,
   },
   editDataScroll: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
     borderRadius: 6,
     padding: 12,
     maxHeight: 120,
   },
   editDataText: {
     fontSize: 11,
-    color: '#2C3E50',
+    color: '#E5E7EB',
     fontFamily: 'monospace',
   },
   editActions: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#1F1F3F',
   },
   actionButton: {
     flex: 1,
@@ -412,26 +407,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   retryButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     borderBottomLeftRadius: 12,
   },
   retryButtonText: {
     color: '#FFFFFF',
   },
   discardButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     borderBottomRightRadius: 12,
     borderLeftWidth: 1,
-    borderLeftColor: '#F0F0F0',
+    borderLeftColor: '#1F1F3F',
   },
   discardButtonText: {
-    color: '#E74C3C',
+    color: '#F87171',
   },
   footer: {
     padding: 20,
   },
   clearAllButton: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: '#DC2626',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

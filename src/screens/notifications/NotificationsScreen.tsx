@@ -61,6 +61,7 @@ export const NotificationsScreen: React.FC<Props> = ({navigation}) => {
     return () => {
       unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   // Memoize refresh handler

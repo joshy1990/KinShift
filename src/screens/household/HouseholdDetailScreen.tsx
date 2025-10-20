@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -34,11 +34,7 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [leavingInProgress, setLeavingInProgress] = useState(false);
 
-  useEffect(() => {
-    loadHouseholdData();
-  }, [householdId]);
-
-  const loadHouseholdData = async () => {
+  const loadHouseholdData = useCallback(async () => {
     setLoading(true);
     try {
       const householdData = await householdService.getHousehold(householdId);
@@ -66,7 +62,11 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [householdId, user?.id]);
+
+  useEffect(() => {
+    loadHouseholdData();
+  }, [loadHouseholdData]);
 
   const shareJoinCode = async () => {
     if (!household) return;

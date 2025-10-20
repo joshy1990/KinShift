@@ -96,6 +96,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
       ];
       setShifts(sampleShifts);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate]);
   
   // Get shifts for a specific user and date

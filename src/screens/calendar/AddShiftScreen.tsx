@@ -16,7 +16,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, ShiftType} from '@/types';
-import {format, isSameDay} from 'date-fns';
+import {format, isSameDay, addDays, startOfDay, differenceInDays} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
 import {notificationService} from '@/services/notification.service';
 import {useAuth} from '@/contexts/AuthContext';
@@ -221,7 +221,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     if (!timeParts) return;
     
     let hours = parseInt(timeParts[1]);
-    let minutes = timeParts[2] ? parseInt(timeParts[2]) : 0;
+    const minutes = timeParts[2] ? parseInt(timeParts[2]) : 0;
     
     // Handle 12hr format with AM/PM
     if (!is24HourFormat) {
@@ -599,7 +599,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             // Pattern cells are [Mon, Tue, Wed, Thu, Fri, Sat, Sun] (indices 0-6)
             
             // Find first non-null cell (first working day in pattern)
-            let firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
+            const firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
             if (firstWorkingDayIndex === -1) {
               showError('Pattern has no working days configured');
               setLoading(false);
@@ -610,20 +610,16 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             const targetDayOfWeek = firstWorkingDayIndex === 6 ? 0 : firstWorkingDayIndex + 1;
             
             // Find next occurrence of that day from startTime
-            currentDate = new Date(startTime);
+            currentDate = startOfDay(new Date(startTime));
             const currentDayOfWeek = currentDate.getDay();
+            // Move to the most recent occurrence of the target day (on or before start)
+            const daysToSubtract = (currentDayOfWeek - targetDayOfWeek + 7) % 7;
+            currentDate = addDays(currentDate, -daysToSubtract);
             
-            if (currentDayOfWeek !== targetDayOfWeek) {
-              // Advance to next occurrence of target day
-              let daysToAdd = targetDayOfWeek - currentDayOfWeek;
-              if (daysToAdd <= 0) daysToAdd += 7; // If target is earlier in week, go to next week
-              currentDate.setDate(currentDate.getDate() + daysToAdd);
-            }
-            
-            patternStartDate = new Date(currentDate); // For weekly, start is the adjusted date
+            patternStartDate = startOfDay(new Date(currentDate)); // For weekly, start is the adjusted date
           } else {
             // REPETITION MODE: Find first working day in the pattern and start from there
-            let firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
+            const firstWorkingDayIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
             if (firstWorkingDayIndex === -1) {
               showError('Pattern has no working days configured');
               setLoading(false);
@@ -637,17 +633,19 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             const targetDayOfWeek = cellDayOfWeek === 6 ? 0 : cellDayOfWeek + 1; // Convert to JS (0=Sun, 1=Mon)
             
             // Find next occurrence of that day from startTime
-            currentDate = new Date(startTime);
+            currentDate = startOfDay(new Date(startTime));
             const currentDayOfWeek = currentDate.getDay();
+            // Move to the most recent occurrence of the target day (on or before start)
+            const daysToSubtract = (currentDayOfWeek - targetDayOfWeek + 7) % 7;
+            currentDate = addDays(currentDate, -daysToSubtract);
             
-            if (currentDayOfWeek !== targetDayOfWeek) {
-              // Advance to next occurrence of target day
-              let daysToAdd = targetDayOfWeek - currentDayOfWeek;
-              if (daysToAdd <= 0) daysToAdd += 7;
-              currentDate.setDate(currentDate.getDate() + daysToAdd);
-            }
-            
-            patternStartDate = new Date(currentDate); // For repetition, this is where pattern starts
+            patternStartDate = startOfDay(new Date(currentDate)); // For repetition, this is where pattern starts
+          }
+          
+          // Store for indexing offset inside loop
+          let repetitionFirstIndex = 0;
+          if (selectedCustomPattern.patternMode === 'repetition') {
+            repetitionFirstIndex = selectedCustomPattern.cells.findIndex(c => c.shiftType !== null);
           }
 
           while (currentDate <= endDate) {
@@ -656,15 +654,19 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             
             if (selectedCustomPattern.patternMode === 'weekly') {
               // Weekly: Use day-of-week to pick cell
-              const dayOfWeek = currentDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+              const dayOfWeek = startOfDay(currentDate).getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
               dayInPattern = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to pattern index (0=Mon, 6=Sun)
             } else {
               // Repetition: Use cycle position from the pattern start date
-              const daysSinceStart = Math.floor((currentDate.getTime() - patternStartDate.getTime()) / (1000 * 60 * 60 * 24));
+              const daysSinceStart = differenceInDays(startOfDay(currentDate), startOfDay(patternStartDate));
               dayInPattern = daysSinceStart % cycleLength;
             }
             
-            const cell = selectedCustomPattern.cells[dayInPattern];
+            // For repetition mode, offset into the 14-day cells with the first working index
+            const cellIndex = selectedCustomPattern.patternMode === 'weekly'
+              ? dayInPattern
+              : (repetitionFirstIndex + dayInPattern) % 14;
+            const cell = selectedCustomPattern.cells[cellIndex];
 
             // Only create shift if this day has a shift type (not a day off)
             if (cell.shiftType !== null) {
@@ -694,14 +696,13 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             }
 
             // Move to next day
-            currentDate.setDate(currentDate.getDate() + 1);
-            dayInPattern = (dayInPattern + 1) % cycleLength; // Use detected cycle length
+            currentDate = addDays(startOfDay(currentDate), 1);
           }
 
         } else {
           // Simple pattern (existing code)
           const pattern = SIMPLE_PATTERNS[selectedPattern as keyof typeof SIMPLE_PATTERNS];
-          let currentDate = new Date(startTime);
+          const currentDate = new Date(startTime);
         
           if ('workDays' in pattern) {
             // Simple work/rest pattern (e.g., 4 on 4 off)

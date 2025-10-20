@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   FlatList,
   Dimensions,
 } from 'react-native';
@@ -38,9 +37,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
   const [lastTapDate, setLastTapDate] = useState<Date | null>(null);
   const [lastTapTime, setLastTapTime] = useState<number>(0);
   
-  // Use personal mode when no household is selected
-  const isPersonalMode = !currentHouseholdId;
-
   // Memoize expensive date calculations
   const weekDates = useMemo(() => {
     const start = startOfWeek(currentDate, {weekStartsOn: 1}); // Monday = 1
@@ -49,7 +45,6 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
 
   const monthDates = useMemo(() => {
     const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
     const startDate = startOfWeek(start, {weekStartsOn: 1});
     const endDate = addDays(startDate, 41); // 6 weeks = 42 days
     
@@ -61,19 +56,8 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     [viewMode, monthDates, weekDates]
   );
 
-  // Memoize user initials calculation
-  const getUserInitials = useCallback((userId: string): string => {
-    const user = users[userId];
-    if (!user) return '?';
-    
-    const names = user.name.split(' ');
-    if (names.length >= 2) {
-      return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-    }
-    return names[0][0].toUpperCase();
-  }, [users]);
-
-  // Memoize navigation function
+  // Memoize user initials calculation (used internally)
+    // Memoize navigation function
   const navigateWeek = useCallback((direction: 'prev' | 'next') => {
     if (viewMode === 'month') {
       // Navigate by month
@@ -306,34 +290,73 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
           )}
         </View>
         
-        {/* Shift indicators */}
+        {/* Shift indicators (dense): show up to 2 owner dots, and a small digit for total if > 2 */}
         {colorInfo.count > 0 && (
           <View style={styles.monthShiftIndicators}>
-            {colorInfo.displayStrategy === 'multi' ? (
-              // Show purple badge with count for 3+ people
-              <View style={[styles.multiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
-                <Text style={styles.multiPersonBadgeText}>{colorInfo.count}</Text>
-              </View>
-            ) : dayShifts.length === 1 && dayShifts[0].label ? (
-              // Show shift label for single shift (HOL, OFF, etc.)
-              <View style={[styles.shiftLabelBadge, { backgroundColor: colorInfo.colors[0] || '#6366F1' }]}>
-                <Text style={styles.shiftLabelText}>{dayShifts[0].label}</Text>
-              </View>
-            ) : (
-              // Show color blocks for multiple shifts or no label
-              <View style={styles.colorBlocksRow}>
-                {colorInfo.colors.map((color: string, index: number) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.colorBlock,
-                      { backgroundColor: color },
-                      colorInfo.colors.length === 1 && styles.colorBlockFull,
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
+            {(() => {
+              // If exactly one shift with a label, keep the label badge
+              if (dayShifts.length === 1 && dayShifts[0].label) {
+                const isCurrent = dayShifts[0].ownerId === user?.id;
+                const badgeColor = getShiftColor(dayShifts[0], user?.id || '', isCurrent);
+                return (
+                  <View style={[styles.shiftLabelBadge, { backgroundColor: badgeColor || '#6366F1' }]}>
+                    <Text style={styles.shiftLabelText}>{dayShifts[0].label}</Text>
+                  </View>
+                );
+              }
+
+              // Build owner -> latest shift map
+              const owners = workingUsers;
+              const byOwner: Record<string, Shift | undefined> = {};
+              owners.forEach(ownerId => {
+                const ownerShifts = dayShifts.filter(s => s.ownerId === ownerId);
+                ownerShifts.sort((a, b) => {
+                  const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
+                  const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+                  return bTime - aTime;
+                });
+                byOwner[ownerId] = ownerShifts[0];
+              });
+
+              // Choose up to two owners, prioritizing current user
+              const ownersToDisplay: string[] = [];
+              const currentUserId = user?.id;
+              if (currentUserId && owners.includes(currentUserId)) {
+                ownersToDisplay.push(currentUserId);
+              }
+              for (const ownerId of owners) {
+                if (ownersToDisplay.length >= 2) break;
+                if (!currentUserId || ownerId !== currentUserId) {
+                  ownersToDisplay.push(ownerId);
+                }
+              }
+
+              const totalOwners = owners.length;
+
+              return (
+                <View style={styles.monthOwnerDotsRow}>
+                  {ownersToDisplay.map((ownerId, idx) => {
+                    const latest = byOwner[ownerId];
+                    if (!latest) return null;
+                    const isCurrent = ownerId === currentUserId;
+                    const color = getShiftColor(latest, currentUserId || '', isCurrent);
+                    return (
+                      <View
+                        key={`${ownerId}-${idx}`}
+                        style={[
+                          styles.monthOwnerDot,
+                          { backgroundColor: color },
+                          isCurrent && styles.monthOwnerDotOwn,
+                        ]}
+                      />
+                    );
+                  })}
+                  {totalOwners > 2 && (
+                    <Text style={styles.monthCountDigit}>{totalOwners}</Text>
+                  )}
+                </View>
+              );
+            })()}
           </View>
         )}
       </TouchableOpacity>
@@ -342,12 +365,22 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
 
   const renderDayColumn = ({item: date}: {item: Date}) => {
     const dayShifts = getShiftsForDate(date);
-    const workingUsers = getUsersWorkingOnDate(date);
     const colorInfo = getDateColorIndicators(date);
     const isSelected = isSameDay(date, selectedDate);
     const isCurrentDay = isToday(date);
     const dateString = format(date, 'yyyy-MM-dd');
     const noteCount = noteCounts[dateString] || 0;
+
+    // Helper to get user initials for display
+    const getUserInitialsForShift = (shiftOwnerId: string): string => {
+      const ownerUser = users[shiftOwnerId];
+      if (!ownerUser) return '?';
+      const names = ownerUser.name.split(' ');
+      if (names.length >= 2) {
+        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+      }
+      return names[0].slice(0, 2).toUpperCase();
+    };
 
     return (
       <TouchableOpacity
@@ -387,27 +420,64 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
               <Text style={styles.emptyDayText}>No shifts</Text>
             </View>
           ) : colorInfo.displayStrategy === 'multi' ? (
-            // Show purple badge with count for 3+ people
+            // Show compact badge with just the total count for 3+ people
             <View style={styles.weekMultiPersonContainer}>
               <View style={[styles.weekMultiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
-                <Text style={styles.weekMultiPersonText}>
-                  {colorInfo.count} working
-                </Text>
+                <Text style={styles.weekMultiPersonText}>{colorInfo.count}</Text>
               </View>
             </View>
           ) : (
-            // Show color blocks for 1-2 people
+            // Show up to 2 owner blocks with initials (deduplicated per owner)
             <View style={styles.weekColorBlocks}>
-              {colorInfo.colors.map((color: string, index: number) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.weekColorBlock,
-                    { backgroundColor: color },
-                    colorInfo.colors.length === 1 && styles.colorBlockFull,
-                  ]}
-                />
-              ))}
+              {(() => {
+                const owners = getUsersWorkingOnDate(date);
+                // Build owner -> latest shift
+                const byOwner: Record<string, Shift | undefined> = {};
+                owners.forEach(ownerId => {
+                  const ownerShifts = dayShifts.filter(s => s.ownerId === ownerId);
+                  ownerShifts.sort((a, b) => {
+                    const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
+                    const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+                    return bTime - aTime;
+                  });
+                  byOwner[ownerId] = ownerShifts[0];
+                });
+
+                const ownersToDisplay: string[] = [];
+                const currentUserId = user?.id;
+                if (currentUserId && owners.includes(currentUserId)) {
+                  ownersToDisplay.push(currentUserId);
+                }
+                for (const ownerId of owners) {
+                  if (ownersToDisplay.length >= 2) break;
+                  if (!currentUserId || ownerId !== currentUserId) {
+                    ownersToDisplay.push(ownerId);
+                  }
+                }
+
+                return ownersToDisplay.map((ownerId, index) => {
+                  const latest = byOwner[ownerId];
+                  if (!latest) return null;
+                  const isCurrent = ownerId === currentUserId;
+                  const color = getShiftColor(latest, currentUserId || '', isCurrent);
+                  return (
+                    <View
+                      key={`${ownerId}-${index}`}
+                      style={[
+                        styles.weekColorBlockWithInitials,
+                        { backgroundColor: color },
+                        ownersToDisplay.length === 1 && styles.colorBlockFull,
+                      ]}>
+                      <Text style={styles.shiftInitials}>
+                        {getUserInitialsForShift(ownerId)}
+                      </Text>
+                      {isCurrent && (
+                        <View style={styles.ownShiftIndicator} />
+                      )}
+                    </View>
+                  );
+                });
+              })()}
             </View>
           )}
         </View>
@@ -669,6 +739,27 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
     width: '100%',
+  },
+  weekColorBlockWithInitials: {
+    height: 60,
+    borderRadius: 8,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  shiftInitials: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  ownShiftIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+    marginLeft: 'auto',
   },
   weekMultiPersonContainer: {
     flex: 1,
@@ -937,6 +1028,26 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: '#A1A1AA',
     fontWeight: '600',
+  },
+  monthOwnerDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  monthOwnerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  monthOwnerDotOwn: {
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  monthCountDigit: {
+    marginLeft: 4,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E5E7EB',
   },
   shiftLabelBadge: {
     paddingHorizontal: 6,

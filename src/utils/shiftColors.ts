@@ -6,17 +6,17 @@ import {isSameDay} from 'date-fns';
  * Designed for accessibility (WCAG AA compliant) and visual clarity
  */
 
-// Primary colors for shift types - User's own shifts
+// Primary colors for shift types - User's own shifts (optimized for dark theme)
 export const SHIFT_TYPE_COLORS: Record<ShiftType, string> = {
-  day: '#4A90E2',        // Blue - Standard day shift
-  night: '#4A4A4A',      // Dark Gray - Night shift
-  twilight: '#9B59B6',   // Purple - Evening/twilight shift
-  split: '#F39C12',      // Orange - Split shift
-  holiday: '#FFD93D',    // Yellow - Holiday/annual leave ⭐ NEW
-  off: '#F5F5F5',        // Light Gray - Scheduled day off ⭐ NEW
-  sick: '#E74C3C',       // Red - Sick leave ⭐ NEW
-  training: '#2ECC71',   // Green - Training day ⭐ NEW
-  custom: '#95A5A6',     // Gray - Custom user-defined
+  day: '#60A5FA',        // Bright Blue (dark theme friendly)
+  night: '#34D399',      // Teal - Night shift (high contrast)
+  twilight: '#C084FC',   // Vibrant Purple
+  split: '#FBBF24',      // Amber - Split shift
+  holiday: '#FCD34D',    // Bright Yellow
+  off: '#6B7280',        // Medium Gray (darker for visibility)
+  sick: '#F87171',       // Bright Red
+  training: '#10B981',   // Emerald Green
+  custom: '#8B5CF6',     // Bright Purple for custom
 };
 
 // Display labels for each shift type (shown on calendar)
@@ -58,21 +58,21 @@ export const SHIFT_TYPE_ICONS: Record<ShiftType, string> = {
   custom: '⚙️',
 };
 
-// Colors for OTHER users (not the current user) - Lighter tints for differentiation
+// Colors for OTHER users (not the current user) - Muted but visible for differentiation
 export const OTHER_USER_COLORS: Record<ShiftType, string> = {
-  day: '#7EB3E0',        // Light blue
-  night: '#6B6B6B',      // Medium gray
-  twilight: '#BB8FCE',   // Light purple
-  split: '#F8B739',      // Light orange
-  holiday: '#FFE67D',    // Light yellow
-  off: '#FAFAFA',        // Very light gray
-  sick: '#F1948A',       // Light red
-  training: '#76D7C4',   // Light green
-  custom: '#B2BABB',     // Light gray
+  day: '#3B82F6',        // Medium Blue (muted but visible)
+  night: '#06B6D4',      // Cyan (muted)
+  twilight: '#9333EA',   // Muted Purple
+  split: '#D97706',      // Darker Orange
+  holiday: '#EAB308',    // Darker Yellow
+  off: '#4B5563',        // Darker gray (still visible)
+  sick: '#DC2626',       // Darker Red
+  training: '#059669',   // Darker Green
+  custom: '#7C3AED',     // Darker Purple
 };
 
-// Color for 3+ people working
-export const MULTI_PERSON_COLOR = '#8B5CF6'; // Purple
+// Color for 3+ people working (brighter for visibility on dark theme)
+export const MULTI_PERSON_COLOR = '#A78BFA'; // Light Purple (stands out on dark)
 
 // Pattern templates that users can easily select
 export const SHIFT_PATTERNS = {

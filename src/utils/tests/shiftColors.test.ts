@@ -7,7 +7,7 @@ describe('Multi-Person Shift Visualization', () => {
   const createShift = (
     id: string,
     ownerId: string,
-    shiftType: ShiftType = 'days',
+    shiftType: ShiftType = 'day',
     startTime: Date = new Date('2024-01-15T08:00:00')
   ): Shift => ({
     id,
@@ -26,7 +26,7 @@ describe('Multi-Person Shift Visualization', () => {
   describe('analyzeMultiPersonShifts', () => {
     it('should detect single person working', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days'),
+        createShift('shift1', 'user1', 'day'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -39,8 +39,8 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should detect two people working and suggest split display', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days'),
-        createShift('shift2', 'user2', 'nights'),
+        createShift('shift1', 'user1', 'day'),
+        createShift('shift2', 'user2', 'night'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -52,9 +52,9 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should detect three or more people and suggest multi display', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days'),
-        createShift('shift2', 'user2', 'nights'),
-        createShift('shift3', 'user3', 'afternoons'),
+        createShift('shift1', 'user1', 'day'),
+        createShift('shift2', 'user2', 'night'),
+        createShift('shift3', 'user3', 'twilight'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -65,9 +65,9 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should handle multiple shifts from same user correctly', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days', new Date('2024-01-15T08:00:00')),
-        createShift('shift2', 'user1', 'nights', new Date('2024-01-15T20:00:00')),
-        createShift('shift3', 'user2', 'days'),
+        createShift('shift1', 'user1', 'day', new Date('2024-01-15T08:00:00')),
+        createShift('shift2', 'user1', 'night', new Date('2024-01-15T20:00:00')),
+        createShift('shift3', 'user2', 'day'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -79,8 +79,8 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should assign correct colors based on ownership', () => {
       const shifts = [
-        createShift('shift1', currentUserId, 'days'),
-        createShift('shift2', 'other-user', 'nights'),
+        createShift('shift1', currentUserId, 'day'),
+        createShift('shift2', 'other-user', 'night'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -101,10 +101,10 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should handle four people working', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days'),
-        createShift('shift2', 'user2', 'nights'),
-        createShift('shift3', 'user3', 'afternoons'),
-        createShift('shift4', 'user4', 'evening'),
+        createShift('shift1', 'user1', 'day'),
+        createShift('shift2', 'user2', 'night'),
+        createShift('shift3', 'user3', 'twilight'),
+        createShift('shift4', 'user4', 'custom'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);
@@ -115,8 +115,8 @@ describe('Multi-Person Shift Visualization', () => {
 
     it('should handle same shift type for multiple users', () => {
       const shifts = [
-        createShift('shift1', 'user1', 'days'),
-        createShift('shift2', 'user2', 'days'),
+        createShift('shift1', 'user1', 'day'),
+        createShift('shift2', 'user2', 'day'),
       ];
 
       const result = analyzeMultiPersonShifts(shifts, currentUserId);

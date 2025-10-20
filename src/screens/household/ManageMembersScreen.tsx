@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -26,11 +26,7 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadMembers();
-  }, []);
-
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     try {
       setLoading(true);
       const householdMembers = await householdService.getHouseholdMembers(householdId);
@@ -50,7 +46,11 @@ export const ManageMembersScreen: React.FC<Props> = ({route, navigation}) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [householdId, user?.id]);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
 
   const handleRemoveMember = (member: HouseholdMember) => {
     if (!user?.id) return;

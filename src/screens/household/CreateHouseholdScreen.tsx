@@ -82,7 +82,16 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
       navigation.navigate('HouseholdDetail', {householdId: household.id});
     } catch (error: any) {
       console.error('Failed to create household:', error);
-      showError('Failed to create household: ' + (error.message || 'Please try again'));
+      // Tailored feedback for subscription limit issues
+      const msg = String(error?.message || '')
+      if (msg.includes('subscription') || msg.includes('limit') || msg.includes('household')) {
+        showAlert(
+          'Household Limit Reached',
+          `${msg}\n\nUpgrade to Standard or Premium to create additional households.`
+        );
+      } else {
+        showError('Failed to create household: ' + (error.message || 'Please try again'));
+      }
     } finally {
       setLoading(false);
     }

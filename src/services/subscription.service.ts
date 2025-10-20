@@ -1,6 +1,9 @@
 import { collection, query, where, getDocs, doc, setDoc, updateDoc, addDoc, getDoc } from 'firebase/firestore';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 import { notificationService } from './notification.service';
+import { rbacService, AuditAction } from './rbac.service';
+import { auditService } from './audit.service';
+import { track } from '@/utils/telemetry';
 
 /**
  * Subscription Service
@@ -119,7 +122,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enterprise household management',
           'Real-time sync',
-          'Calendar export (coming next update)',
+          'Calendar export (coming soon)',
           'Early access to new features',
         ],
       },
@@ -284,6 +287,7 @@ class SubscriptionService {
       return {allowed: true, currentUsage: currentCount, limit: limits.maxHouseholds};
     } catch (error) {
       console.error('Failed to check household limit:', error);
+      track('tier_check_fail_open', { scope: 'households', error: String(error) }, 'warn');
       return {allowed: true}; // Fail open - allow on error
     }
   }
@@ -328,6 +332,7 @@ class SubscriptionService {
       return {allowed: true, currentUsage: currentCount, limit: limits.maxMembersPerHousehold};
     } catch (error) {
       console.error('Failed to check member limit:', error);
+      track('tier_check_fail_open', { scope: 'members', householdId, error: String(error) }, 'warn');
       return {allowed: true}; // Fail open - allow on error
     }
   }
@@ -360,16 +365,26 @@ class SubscriptionService {
 
   /**
    * Upgrade/change user subscription tier
+   * Note: User can only change their own subscription, or household admin can trigger for their household
    */
   async changeSubscriptionTier(
     userId: string,
     newTier: SubscriptionTier,
-    paymentMethod?: string
+    paymentMethod?: string,
+    householdId?: string
   ): Promise<Subscription> {
     try {
       const currentSubscription = await this.getUserSubscription(userId);
       if (!currentSubscription) {
         throw new Error('No subscription found');
+      }
+
+      // If householdId provided, verify the requester is admin before allowing change
+      if (householdId) {
+        const adminCheck = await rbacService.enforceAdminOnly(householdId, userId, AuditAction.SUBSCRIPTION_UPGRADE);
+        if (!adminCheck.allowed) {
+          throw new Error(adminCheck.reason || 'Unauthorized to change subscription tier');
+        }
       }
 
       const now = new Date();
@@ -388,6 +403,12 @@ class SubscriptionService {
         doc(db, COLLECTIONS.SUBSCRIPTIONS, currentSubscription.id),
         updatedSubscription
       );
+
+      // Log subscription change to audit trail
+      if (householdId) {
+        const actionType = newTier === 'free' ? AuditAction.SUBSCRIPTION_CANCEL : AuditAction.SUBSCRIPTION_UPGRADE;
+        await auditService.logHouseholdAction(householdId, userId, actionType, true);
+      }
 
       return {
         ...currentSubscription,
@@ -422,12 +443,21 @@ class SubscriptionService {
 
   /**
    * Cancel subscription (mark for end of period)
+   * Only the subscription owner can cancel their own subscription
    */
-  async cancelSubscription(userId: string): Promise<Subscription> {
+  async cancelSubscription(userId: string, householdId?: string): Promise<Subscription> {
     try {
       const currentSubscription = await this.getUserSubscription(userId);
       if (!currentSubscription) {
         throw new Error('No subscription found');
+      }
+
+      // If householdId provided, verify the requester is admin
+      if (householdId) {
+        const adminCheck = await rbacService.enforceAdminOnly(householdId, userId, AuditAction.SUBSCRIPTION_CANCEL);
+        if (!adminCheck.allowed) {
+          throw new Error(adminCheck.reason || 'Unauthorized to cancel subscription');
+        }
       }
 
       const now = new Date();
@@ -442,6 +472,11 @@ class SubscriptionService {
         doc(db, COLLECTIONS.SUBSCRIPTIONS, currentSubscription.id),
         updatedSubscription
       );
+
+      // Log subscription cancellation
+      if (householdId) {
+        await auditService.logHouseholdAction(householdId, userId, AuditAction.SUBSCRIPTION_CANCEL, true);
+      }
 
       // Trigger downgrade workflow asynchronously
       // This notifies all household members about potential downgrades
@@ -572,7 +607,7 @@ class SubscriptionService {
           'Up to 12 members per household',
           'Completely ad-free',
           'Priority support',
-          'Calendar export',
+          'Calendar export (coming soon)',
         ];
         break;
       

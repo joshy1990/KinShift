@@ -1,9 +1,9 @@
 /**
  * Subscription Screen
- * Displays subscription plans and handles purchases
+ * Displays subscription plans and handles purchases with smooth animations
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -15,6 +15,8 @@ import {
   Linking,
   SafeAreaView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { revenueCatService } from '@/services/revenueCat.service';
@@ -25,10 +27,33 @@ export const SubscriptionScreen: React.FC = () => {
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const successFade = useRef(new Animated.Value(0)).current;
 
   // Load offerings on mount
   useEffect(() => {
+    // Animate in
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     loadOfferings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadOfferings = async () => {
@@ -58,7 +83,23 @@ export const SubscriptionScreen: React.FC = () => {
       const success = await subscription.purchaseSubscription(selectedPackageId);
 
       if (success) {
-        Alert.alert('Success', 'Subscription activated! Welcome to premium features.');
+        // Show success message with animation
+        setSuccessMessage('🎉 Welcome to Premium!');
+        Animated.sequence([
+          Animated.timing(successFade, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.delay(2000),
+          Animated.timing(successFade, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start(() => setSuccessMessage(null));
+
+        Alert.alert('Success', 'Subscription activated! Enjoy premium features.');
       } else {
         Alert.alert('Cancelled', 'Purchase was cancelled.');
       }
@@ -68,7 +109,7 @@ export const SubscriptionScreen: React.FC = () => {
     } finally {
       setPurchasing(false);
     }
-  }, [selectedPackageId, subscription]);
+  }, [selectedPackageId, subscription, successFade]);
 
   const handleRestore = async () => {
     try {
@@ -110,7 +151,28 @@ export const SubscriptionScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        style={{
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }}
+      >
+        {/* Success Message */}
+        {successMessage && (
+          <Animated.View
+            style={[
+              styles.successBanner,
+              {
+                opacity: successFade,
+              },
+            ]}
+          >
+            <Text style={styles.successText}>{successMessage}</Text>
+          </Animated.View>
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.crown}>👑</Text>
@@ -251,10 +313,9 @@ export const SubscriptionScreen: React.FC = () => {
           </Text>
           .
         </Text>
-      </ScrollView>
 
-      {/* Action Buttons */}
-      <View style={styles.footer}>
+        {/* Footer with action buttons */}
+        <View style={styles.footer}>
         {!subscription.hasActiveSubscription && (
           <TouchableOpacity
             style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
@@ -286,6 +347,7 @@ export const SubscriptionScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </View>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 };
@@ -376,6 +438,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  successBanner: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  successText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   header: {
     alignItems: 'center',

@@ -33,6 +33,7 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
   useEffect(() => {
     loadMembers();
     checkAdminStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadMembers = async () => {

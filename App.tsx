@@ -6,6 +6,7 @@ import {AuthProvider} from './src/contexts/AuthContext';
 import {HouseholdProvider} from './src/contexts/HouseholdContext';
 import {SubscriptionProvider} from './src/contexts/SubscriptionContext';
 import {RootNavigator} from './src/navigation/RootNavigator';
+import {notificationLinkingConfiguration} from './src/utils/notificationHandlers';
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
   constructor(props: any) {
@@ -41,7 +42,7 @@ export default function App(): React.JSX.Element {
         <AuthProvider>
           <SubscriptionProvider>
             <HouseholdProvider>
-              <NavigationContainer>
+              <NavigationContainer linking={notificationLinkingConfiguration}>
                 <StatusBar
                   barStyle="light-content"
                   backgroundColor="#0F0F23"

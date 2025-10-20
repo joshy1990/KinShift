@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Shift, ShiftMessage, DayMessage } from '@/types';
+import { Shift, ShiftMessage } from '@/types';
 import { shiftService, ShiftFilters, CreateShiftData, UpdateShiftData } from '@/services/shift.service';
 import { ServiceError } from '@/services/base.service';
 import { useAuth } from '@/contexts/AuthContext';
@@ -120,6 +120,7 @@ export const useShifts = (options: UseShiftsOptions): UseShiftsResult => {
     if (!options.realtime && options.householdId) {
       loadShifts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadShifts, options.realtime]);
 
   // Auto refresh
@@ -276,6 +277,7 @@ export const useShiftMessages = (options: UseShiftMessagesOptions): UseShiftMess
     if (options.shiftId) {
       loadMessages();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadMessages]);
 
   const addMessage = useCallback(async (message: string, isPrivate = false): Promise<ShiftMessage> => {

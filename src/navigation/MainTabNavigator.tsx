@@ -1,11 +1,13 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {Platform, Dimensions, StatusBar, View, Text} from 'react-native';
+import {Platform, Dimensions, View, Text} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {MainTabsParamList} from '@/types';
-import Icon from 'react-native-vector-icons/Ionicons';
 import {useAuth} from '@/contexts/AuthContext';
 import {notificationService} from '@/services/notification.service';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useHousehold } from '@/contexts/HouseholdContext';
+import { subscriptionService } from '@/services/subscription.service';
 
 // Import screen stacks (we'll create these)
 import {CalendarStack} from './CalendarStack';
@@ -18,7 +20,7 @@ const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 // Responsive navigation sizing
 const getNavBarDimensions = (insets: any) => {
-  const {width, height} = Dimensions.get('window');
+  const {width} = Dimensions.get('window');
   const isTablet = width >= 768;
   const isMobile = width < 768;
   
@@ -48,6 +50,25 @@ export const MainTabNavigator: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const insets = useSafeAreaInsets();
   const navDimensions = useMemo(() => getNavBarDimensions(insets), [insets]);
+  const { currentTier } = useSubscription();
+  const { households } = useHousehold();
+
+  // Determine if current user is an admin of any household
+  const isAdminOfAnyHousehold = useMemo(() => {
+    if (!user?.id || !households || households.length === 0) return false;
+    return households.some(h => Array.isArray(h.admins) && h.admins.includes(user.id));
+  }, [households, user?.id]);
+
+  // Decide whether to show ads based on tier and role
+  const shouldShowAdBanner = useMemo(() => {
+    try {
+      // Use service logic to avoid divergence from business rules
+      return subscriptionService.shouldShowAds({ tier: currentTier } as any, isAdminOfAnyHousehold);
+    } catch {
+      // Fail-safe: show ads only for free users by default
+      return currentTier === 'free';
+    }
+  }, [currentTier, isAdminOfAnyHousehold]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -89,7 +110,7 @@ export const MainTabNavigator: React.FC = () => {
         <Tab.Navigator
           id={undefined}
           screenOptions={({route}) => ({
-        tabBarIcon: ({focused, color, size}) => {
+        tabBarIcon: ({focused}) => {
           let icon: React.ReactNode;
 
           // Modern icon rendering with proper styling
@@ -269,18 +290,19 @@ export const MainTabNavigator: React.FC = () => {
     </Tab.Navigator>
       </View>
 
-    {/* Ad Banner - positioned directly above nav bar with no gap */}
-    <View style={{
-      width: '100%',
-      height: navDimensions.adBannerHeight,
-      zIndex: 5,
-      marginTop: 0,
-    }}>
-      <AdBanner 
-        safeAreaBottom={0}
-        showPlaceholder={true}
-      />
-    </View>
+    {/* Ad Banner - respect subscription tier & role */}
+    {shouldShowAdBanner && (
+      <View style={{
+        width: '100%',
+        height: navDimensions.adBannerHeight,
+        zIndex: 5,
+        marginTop: 0,
+      }}>
+        <AdBanner 
+          showPlaceholder={true}
+        />
+      </View>
+    )}
     </View>
   );
 };

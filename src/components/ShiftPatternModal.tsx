@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { format, addDays, startOfToday } from 'date-fns';
-import { spacing, typography, borderRadius, getResponsiveValue } from '@/utils/responsive';
+import { spacing, typography, borderRadius } from '@/utils/responsive';
 
 interface ShiftType {
   id: string;
@@ -90,15 +90,15 @@ export const ShiftPatternModal: React.FC<Props> = ({
   existingPattern,
 }) => {
   const [currentStep, setCurrentStep] = useState<'template' | 'customize' | 'schedule' | 'preview'>('template');
-  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [patternName, setPatternName] = useState('');
   const [patternDescription, setPatternDescription] = useState('');
-  const [shiftTypes, setShiftTypes] = useState<ShiftType[]>(DEFAULT_SHIFT_TYPES);
   const [customCycle, setCustomCycle] = useState<(string | null)[]>([]);
   const [cycleDays, setCycleDays] = useState(7);
   const [startDate, setStartDate] = useState(startOfToday());
   const [repeatForever, setRepeatForever] = useState(true);
   const [rotationWeeks, setRotationWeeks] = useState(4);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const shiftTypes = DEFAULT_SHIFT_TYPES;
 
   useEffect(() => {
     if (existingPattern) {

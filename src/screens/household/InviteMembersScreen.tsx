@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {useAuth} from '@/contexts/AuthContext';
 import {invitationService} from '@/services/invitation.service';
 import {householdService} from '@/services/household.service';
 import {notificationService} from '@/services/notification.service';
+import {deepLinkService} from '@/utils/deepLink.service';
 import {showAlert, showError, showSuccess, showConfirm} from '@/utils/alert';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'InviteMembers'>;
@@ -47,12 +48,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [pendingInvitation, setPendingInvitation] = useState<Invitation | null>(null);
 
-  useEffect(() => {
-    loadHousehold();
-    loadInvitations();
-  }, [householdId]);
-
-  const loadHousehold = async () => {
+  const loadHousehold = useCallback(async () => {
     try {
       const householdData = await householdService.getHousehold(householdId);
       setHousehold(householdData);
@@ -60,9 +56,9 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       console.error('Error loading household:', error);
       showError('Failed to load household details');
     }
-  };
+  }, [householdId]);
 
-  const loadInvitations = async () => {
+  const loadInvitations = useCallback(async () => {
     try {
       setLoadingInvites(true);
       const invites = await invitationService.getHouseholdInvitations(householdId);
@@ -72,7 +68,12 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
     } finally {
       setLoadingInvites(false);
     }
-  };
+  }, [householdId]);
+
+  useEffect(() => {
+    loadHousehold();
+    loadInvitations();
+  }, [loadHousehold, loadInvitations]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -81,7 +82,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       newErrors.emailOrPhone = 'Email or phone number is required';
     } else {
       const isEmail = form.emailOrPhone.includes('@');
-      const isPhone = /^\+?[\d\s\-\(\)]+$/.test(form.emailOrPhone);
+      const isPhone = /^\+?[\d\s\-() ]+$/.test(form.emailOrPhone);
       
       if (!isEmail && !isPhone) {
         newErrors.emailOrPhone = 'Please enter a valid email or phone number';
@@ -110,18 +111,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       setPendingInvitation(invitation);
       setShowShareModal(true);
 
-      // Send notification to the invited user (if they are already registered)
-      try {
-        await notificationService.notifyInvitationSent(
-          invitation.inviteCode,
-          household.name,
-          user.name || 'A user',
-          form.name // invitee name
-        );
-      } catch (notificationError) {
-        // Log but don't fail if notification doesn't work
-        console.warn('Failed to send invitation notification:', notificationError);
-      }
+      // Optionally notify user if they already have an account (not implemented here)
 
       // Reset form and reload invitations
       setForm({
@@ -154,20 +144,27 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
+  // Build a shareable message for an invitation
+  const buildInvitationMessage = (inv: Invitation): string => {
+    const code = (inv as any).inviteCode || (inv as any).code || '';
+    const link = code ? deepLinkService.generateInvitationLink(code) : '';
+    const hhName = (inv as any).householdName || household?.name || 'our household';
+    return `You're invited to join ${hhName} on LinkShift.\n\nUse this link to accept: ${link}`;
+  };
+
   const sendViaEmail = async (invitation: Invitation) => {
     try {
-      const isEmail = invitation.emailOrPhone.includes('@');
+      const isEmail = (invitation as any).emailOrPhone?.includes('@');
       if (!isEmail) {
         showAlert('Email Required', 'This invitation is for a phone number. Please use the standard share option.');
         return;
       }
 
-      const emailLink = invitationService.generateEmailLink(
-        invitation,
-        invitation.emailOrPhone
-      );
+      const subject = `Join ${household?.name || 'our household'} on LinkShift`;
+      const body = buildInvitationMessage(invitation);
+      const mailto = `mailto:${encodeURIComponent((invitation as any).emailOrPhone)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-      await Linking.openURL(emailLink);
+      await Linking.openURL(mailto);
       setShowShareModal(false);
       showSuccess('Email client opened');
     } catch (error) {
@@ -178,7 +175,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
 
   const shareViaApp = async (invitation: Invitation) => {
     try {
-      const message = invitationService.generateInvitationMessage(invitation);
+      const message = buildInvitationMessage(invitation);
       await shareInvitation(message);
       setShowShareModal(false);
     } catch (error) {
@@ -188,7 +185,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
 
   const resendInvitation = async (invitation: Invitation) => {
     try {
-      const message = invitationService.generateInvitationMessage(invitation);
+      const message = buildInvitationMessage(invitation);
       await shareInvitation(message);
       showSuccess('The invitation has been shared again');
     } catch (error) {
@@ -435,29 +432,26 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     marginHorizontal: 16,
     marginVertical: 8,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#1F1F3F',
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   sectionDescription: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginBottom: 20,
     lineHeight: 20,
   },
@@ -467,23 +461,24 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#374151',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F0F23',
+    color: '#E5E7EB',
   },
   inputError: {
     borderColor: '#E74C3C',
   },
   errorText: {
-    color: '#E74C3C',
+    color: '#F87171',
     fontSize: 12,
     marginTop: 4,
   },
@@ -499,15 +494,15 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
   },
   switchDescription: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginTop: 2,
   },
   sendButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -515,7 +510,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   sendButtonDisabled: {
-    backgroundColor: '#BDC3C7',
+    backgroundColor: '#4B5563',
   },
   sendButtonText: {
     color: '#FFFFFF',
@@ -528,7 +523,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 8,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -536,19 +531,20 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#BDC3C7',
+    color: '#6B7280',
   },
   invitationCard: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#1F1F3F',
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
+    backgroundColor: '#0F0F23',
   },
   invitationHeader: {
     flexDirection: 'row',
@@ -562,16 +558,16 @@ const styles = StyleSheet.create({
   invitationEmail: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
   },
   invitationName: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginTop: 2,
   },
   invitationRole: {
     fontSize: 12,
-    color: '#95A5A6',
+    color: '#9CA3AF',
     marginTop: 4,
   },
   statusBadge: {
@@ -592,7 +588,7 @@ const styles = StyleSheet.create({
   },
   invitationDate: {
     fontSize: 12,
-    color: '#95A5A6',
+    color: '#9CA3AF',
   },
   invitationActions: {
     flexDirection: 'row',
@@ -602,7 +598,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
   },
   actionButtonText: {
     fontSize: 12,
@@ -610,7 +606,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cancelButton: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: '#DC2626',
   },
   cancelButtonText: {
     color: '#FFFFFF',
@@ -621,7 +617,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A2E',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -635,20 +631,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#1F1F3F',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2C3E50',
+    color: '#FFFFFF',
   },
   modalClose: {
     fontSize: 24,
-    color: '#95A5A6',
+    color: '#9CA3AF',
     fontWeight: '300',
   },
   invitationDetails: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
     borderRadius: 8,
     padding: 16,
     marginBottom: 20,
@@ -656,7 +652,7 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#7F8C8D',
+    color: '#9CA3AF',
     marginTop: 12,
     marginBottom: 4,
   },
@@ -669,7 +665,7 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 14,
-    color: '#2C3E50',
+    color: '#E5E7EB',
   },
   shareOptions: {
     marginBottom: 20,
@@ -677,12 +673,12 @@ const styles = StyleSheet.create({
   shareOptionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F0F23',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#1F1F3F',
   },
   shareOptionEmoji: {
     fontSize: 32,
@@ -694,15 +690,15 @@ const styles = StyleSheet.create({
   shareOptionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: '#E5E7EB',
     marginBottom: 2,
   },
   shareOptionDescription: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: '#9CA3AF',
   },
   dismissButton: {
-    backgroundColor: '#3498DB',
+    backgroundColor: '#6366F1',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

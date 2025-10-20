@@ -8,7 +8,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  Dimensions,
 } from 'react-native';
 import { format, addDays, startOfToday } from 'date-fns';
 import { spacing, typography, borderRadius } from '@/utils/responsive';
@@ -166,9 +165,6 @@ export const SimplePatternModal: React.FC<Props> = ({ visible, onClose, onSave }
   };
 
   const renderShiftRow = (shift: SimpleShift, index: number) => {
-    const shiftType = SHIFT_TYPES.find(t => t.id === shift.type);
-    const day = DAYS.find(d => d.id === shift.day);
-
     return (
       <View key={index} style={styles.shiftRow}>
         <Text style={styles.shiftNumber}>{index + 1}</Text>

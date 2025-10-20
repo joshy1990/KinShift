@@ -14,11 +14,9 @@ import {
   query,
   where,
   orderBy,
-  Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase.config';
 import { CustomPattern, PatternCell, PatternPreview } from '@/types/customPattern';
-import { format } from 'date-fns';
 import { ShiftType } from '@/types';
 
 // Re-export for convenience
@@ -42,21 +40,38 @@ export class CustomPatternService {
   calculateCycleLength(cells: PatternCell[]): number {
     // Try all possible cycle lengths from 1 to 14
     // Start with smallest to find the true repeating unit
-    for (let cycleLength = 1; cycleLength <= 14; cycleLength++) {
+  for (let cycleLength = 1; cycleLength <= 14; cycleLength++) {
       // For each potential cycle, check if entire 14-day pattern repeats correctly
       let repeats = true;
+
+      // Additional guard: within the first cycle window, the same shiftType
+      // should not have conflicting time windows. If times differ within the
+      // first cycle for the same shiftType, this cycleLength is invalid.
+      const timeSetByType: Record<string, Set<string>> = {};
+      for (let j = 0; j < Math.min(cycleLength, cells.length); j++) {
+        const c = cells[j];
+        if (c.shiftType !== null) {
+          const key = c.shiftType;
+          const timeKey = `${c.startTime}-${c.endTime}`;
+          timeSetByType[key] = timeSetByType[key] || new Set<string>();
+          timeSetByType[key].add(timeKey);
+        }
+      }
+      if (Object.values(timeSetByType).some(set => set.size > 1)) {
+        repeats = false;
+      }
       
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i < 14 && repeats; i++) {
         const currentCell = cells[i];
         const referenceCell = cells[i % cycleLength];
         
-        // Check if shift type matches
+        // Check if shift type matches exactly (including null)
         if (currentCell.shiftType !== referenceCell.shiftType) {
           repeats = false;
           break;
         }
         
-        // If both have shift times, verify times match exactly
+        // If both are work days, times must also match exactly for a repeat
         if (currentCell.shiftType !== null && referenceCell.shiftType !== null) {
           if (currentCell.startTime !== referenceCell.startTime ||
               currentCell.endTime !== referenceCell.endTime) {
@@ -67,12 +82,14 @@ export class CustomPatternService {
       }
       
       if (repeats) {
+        // If a 7-day repeat was detected but there is a difference between week 1 and week 2 times,
+        // the above check already prevented it. So we can safely return.
         return cycleLength; // Found the smallest repeating cycle
       }
     }
     
-    // This should never happen since a 14-day cycle always repeats, but safety default
-    return 14;
+  // No smaller repeating cycle found, default to full 14-day cycle
+  return 14;
   }
 
   /**
@@ -267,7 +284,6 @@ export class CustomPatternService {
 
       // Calculate end date
       const endDate = addMonths(startOfDay(startDate), durationMonths);
-      const totalDays = differenceInDays(endDate, startDate);
 
       // Determine cycle length based on pattern mode
       let cycleLength: number;

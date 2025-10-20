@@ -16,7 +16,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.linkshift.app"
+      "bundleIdentifier": "com.linkshift.app",
+      "infoPlist": {
+        "NSUserNotificationUsageDescription": "LinkShift uses notifications to inform you about shift updates, changes, and schedule conflicts in your households.",
+        "NSLocationWhenInUseUsageDescription": "Your location is not used by LinkShift but is required by some system features.",
+        "UIBackgroundModes": ["remote-notification"],
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
       "backgroundColor": "#0F0F23",

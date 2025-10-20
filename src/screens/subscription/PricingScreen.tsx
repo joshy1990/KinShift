@@ -25,6 +25,7 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
 
   useEffect(() => {
     loadPricingData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPricingData = async () => {

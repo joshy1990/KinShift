@@ -11,14 +11,12 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Modal, 
-  ScrollView,
-  Dimensions 
+  ScrollView
 } from 'react-native';
 import { colors, spacing, borderRadius } from '@/styles/theme';
 import { ShiftType } from '@/types';
 import { 
   getShiftTypeColor, 
-  getShiftTypeLabel, 
   getShiftTypeName,
   getShiftTypeEmoji,
   getQuickShiftTypes,

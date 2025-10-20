@@ -120,12 +120,12 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
             // Send deletion notification to household members
             if (shift.householdId) {
               try {
-                await notificationService.notifyShiftDeleted(
-                  shift.householdId,
-                  shift.title,
-                  user.name || 'Someone',
-                  user.id
-                );
+                await notificationService.notifyShiftDeleted({
+                  householdId: shift.householdId,
+                  shift,
+                  deleterId: user.id,
+                  deleterName: user.name || 'Someone',
+                });
               } catch (notificationError) {
                 console.warn('Failed to send shift deletion notification:', notificationError);
               }

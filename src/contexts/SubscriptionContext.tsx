@@ -29,6 +29,9 @@ export interface SubscriptionContextType {
   // Actions
   purchaseSubscription: (productId: string) => Promise<boolean>;
   restorePurchases: () => Promise<boolean>;
+
+  // Helpers
+  shouldShowAds: (isAdmin: boolean) => boolean;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -92,6 +95,7 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
     };
 
     setupSubscriptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const syncWithFirestore = async (userId: string, tier: 'free' | 'standard' | 'premium') => {
@@ -206,6 +210,7 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
     features: getFeatures(currentTier),
     purchaseSubscription,
     restorePurchases,
+    shouldShowAds: (isAdmin: boolean) => subscriptionService.shouldShowAds({ tier: currentTier } as any, isAdmin),
   };
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

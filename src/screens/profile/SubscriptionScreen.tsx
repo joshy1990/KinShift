@@ -38,6 +38,7 @@ export const SubscriptionScreen: React.FC = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadSubscription();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user])
   );
 
@@ -240,9 +241,6 @@ export const SubscriptionScreen: React.FC = () => {
                   • Ad-free for admin{'\n'}
                   • All features unlocked
                 </Text>
-                <TouchableOpacity style={styles.upgradeButton}>
-                  <Text style={styles.upgradeButtonText}>Upgrade to Standard</Text>
-                </TouchableOpacity>
               </View>
             )}
 
@@ -256,9 +254,6 @@ export const SubscriptionScreen: React.FC = () => {
                   • Completely ad-free{'\n'}
                   • Priority support
                 </Text>
-                <TouchableOpacity style={styles.upgradeButtonPremium}>
-                  <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
-                </TouchableOpacity>
               </View>
             )}
           </View>

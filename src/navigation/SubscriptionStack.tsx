@@ -13,6 +13,7 @@ const Stack = createNativeStackNavigator<SubscriptionStackParamList>();
 export const SubscriptionStack: React.FC = () => {
   return (
     <Stack.Navigator
+      id={undefined}
       screenOptions={{
         headerStyle: {
           backgroundColor: '#0F0F23',

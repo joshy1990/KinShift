@@ -59,6 +59,7 @@ export const PlanComparisonScreen: React.FC = () => {
   useFocusEffect(
     React.useCallback(() => {
       loadCurrentSubscription();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user])
   );
 
@@ -159,7 +160,7 @@ export const PlanComparisonScreen: React.FC = () => {
             setLoading(true);
             
             // Update subscription in Firestore
-            await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
+            await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
             
             await loadCurrentSubscription();
             
@@ -193,7 +194,7 @@ export const PlanComparisonScreen: React.FC = () => {
             
             // For now (TESTING ONLY): Update tier without payment
             console.warn('[PlanComparison] ⚠️ UPGRADING WITHOUT PAYMENT - TESTING ONLY');
-            await (subscriptionService as any).createTestSubscription(user.id, plan.tier);
+            await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
             
             await loadCurrentSubscription();
             
@@ -256,16 +257,6 @@ export const PlanComparisonScreen: React.FC = () => {
           <Text style={styles.subtitle}>
             All plans include unlimited shifts and notes. Upgrade for more households and members!
           </Text>
-          
-          {/* TEST MODE WARNING */}
-          <View style={{backgroundColor: '#FFA500', padding: 12, borderRadius: 8, marginTop: 16}}>
-            <Text style={{color: '#000', fontWeight: 'bold', textAlign: 'center'}}>
-              ⚠️ TEST MODE - NO PAYMENTS PROCESSED
-            </Text>
-            <Text style={{color: '#000', fontSize: 12, textAlign: 'center', marginTop: 4}}>
-              Payment integration required before production use
-            </Text>
-          </View>
         </View>
 
         {/* Plans */}

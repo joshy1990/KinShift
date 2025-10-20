@@ -73,10 +73,6 @@ class RevenueCatService {
    */
   async initialize(userId: string): Promise<void> {
     try {
-      if (this.initialized) {
-        return;
-      }
-
       // Initialize RevenueCat with API key
       await Purchases.configure({
         apiKey: REVENUECAT_API_KEY,
@@ -90,7 +86,7 @@ class RevenueCatService {
       // Setup purchase listener
       this.setupPurchaseListener();
 
-      this.initialized = true;
+  this.initialized = true;
 
       // Get initial customer info
       await this.refreshCustomerInfo();
@@ -158,12 +154,10 @@ class RevenueCatService {
       await this.saveSubscriptionStatus(customerInfo);
       return customerInfo;
     } catch (error: any) {
-      if (error.userCancelled) {
-        console.log('[RevenueCat] User cancelled purchase');
-      } else {
-        console.error('[RevenueCat] Purchase failed:', error);
-      }
-      return null;
+      // Surface error to caller so UI/tests can handle cancellation or failures
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[RevenueCat] Purchase failed:', err);
+      throw err;
     }
   }
 

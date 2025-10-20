@@ -3,29 +3,27 @@ import {
   doc, 
   addDoc, 
   updateDoc, 
-  deleteDoc, 
-  getDoc, 
   getDocs, 
+  getDoc, 
   query, 
   where, 
   arrayUnion, 
   arrayRemove, 
   writeBatch,
-  Timestamp,
   DocumentSnapshot,
   QuerySnapshot 
 } from 'firebase/firestore';
 import {Household, HouseholdSettings, HouseholdMember} from '@/types';
-import {COLLECTIONS, JOIN_CODE_LENGTH, JOIN_CODE_EXPIRY_DAYS, db} from '@/config/firebase.config';
+import {COLLECTIONS, db} from '@/config/firebase.config';
 import {subscriptionService} from './subscription.service';
-import {shiftService} from './shift.service';
 import { auditService } from './audit.service';
-import { notificationService } from './notification.service';
 
 interface PermissionCheckResult {
   allowed: boolean;
   reason?: string;
 }
+
+const JOIN_CODE_LENGTH = 6;
 
 class HouseholdService {
   /**

@@ -62,7 +62,7 @@ export const validators = {
   phoneNumber: (phone: string): boolean => {
     if (!phone || typeof phone !== 'string') return false;
     // Remove common formatting characters
-    const cleaned = phone.replace(/[\s\-\(\)\.]/g, '');
+    const cleaned = phone.replace(/[\s\-(). ]/g, '');
     // Should be at least 7 and at most 15 digits
     return /^\d{7,15}$/.test(cleaned);
   },
