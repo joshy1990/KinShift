@@ -12,9 +12,11 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { subscriptionService } from '@/services/subscription.service';
+import { admobService, getBannerAdUnitId } from '@/services/admob.service';
 
 interface AdBannerProps {
   /** Whether to show placeholder */
@@ -53,7 +55,7 @@ interface AdBannerProps {
  * ```
  */
 export const AdBanner: React.FC<AdBannerProps> = ({ 
-  showPlaceholder = true,
+  showPlaceholder = false,
   userId,
   adminId,
   isAdmin = false,
@@ -61,13 +63,13 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   const subscription = useSubscription();
   const [adminSubscription, setAdminSubscription] = useState(null);
   const [shouldShowAds, setShouldShowAds] = useState(false);
+  const [isAdLoading, setIsAdLoading] = useState(true);
   
   const { width } = Dimensions.get('window');
   const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
   
   // Responsive ad height
-  const adHeight = isMobile ? 50 : isTablet ? 60 : 70;
+  const adHeight = isMobile ? 50 : 60;
   
   // Fetch admin subscription on mount/adminId change
   useEffect(() => {
@@ -110,16 +112,18 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   
   // Don't render if ads shouldn't be shown
   if (!shouldShowAds && !showPlaceholder) {
-    // Return empty space for ads (when integrated with real ads)
-    return <View style={{ height: adHeight }} />;
+    // Return empty space for ads when not showing
+    return <View style={{ height: 0 }} />;
   }
   
-  // Return nothing if not showing ads and not showing placeholder
+  // Return nothing if not showing ads
   if (!shouldShowAds) {
     return null;
   }
-  
-  // Placeholder design
+
+  // Render real Google ad
+  const adUnitId = getBannerAdUnitId(false);
+
   return (
     <View style={[
       styles.container,
@@ -127,12 +131,29 @@ export const AdBanner: React.FC<AdBannerProps> = ({
         height: adHeight,
       }
     ]}>
-      <View style={styles.placeholder}>
-        <Text style={styles.placeholderText}>📢 Advertisement</Text>
-        <Text style={styles.placeholderSmallText}>
-          {isMobile ? '320×50' : isTablet ? '728×60' : '970×90'} Ad Space
-        </Text>
-      </View>
+      <BannerAd
+        unitId={adUnitId}
+        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+        requestOptions={{
+          requestNonPersonalizedAdsOnly: false,
+          keywords: ['shift', 'work', 'family', 'schedule', 'household'],
+          contentUrl: 'https://kinshift.app',
+        }}
+        onAdFailedToLoad={(error) => {
+          console.error('[AdBanner] Ad failed to load:', error);
+          // Fallback to placeholder on error
+          setIsAdLoading(false);
+        }}
+        onAdLoaded={() => {
+          console.log('[AdBanner] Ad loaded successfully');
+          setIsAdLoading(false);
+        }}
+      />
+      {isAdLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#6366F1" />
+        </View>
+      )}
     </View>
   );
 };
@@ -145,31 +166,15 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    overflow: 'hidden',
   },
-  placeholder: {
-    width: '100%',
-    backgroundColor: '#0F1729',
-    borderRadius: 4,
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(99, 102, 241, 0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  placeholderText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6366F1',
-    marginBottom: 1,
-  },
-  placeholderSmallText: {
-    fontSize: 10,
-    color: '#A1A1AA',
-    fontStyle: 'italic',
+    backgroundColor: 'rgba(26, 26, 46, 0.8)',
   },
 });
 

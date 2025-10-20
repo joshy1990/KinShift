@@ -35,15 +35,20 @@ console.warn = function(...args: any[]) {
   originalWarn.apply(console, args);
 };
 
-// Production Firebase configuration - NEW PROJECT
+// Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: 'AIzaSyAlpo7Wi29uqY3coh0EjXWsmjaZfdmxo7c',
-  authDomain: 'linkshift-c2725.firebaseapp.com',
-  projectId: 'linkshift-c2725',
-  storageBucket: 'linkshift-c2725.firebasestorage.app',
-  messagingSenderId: '518355942929',
-  appId: '1:518355942929:web:183f005b7c513873e03bb0',
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
 };
+
+// Validate that all required config values are present
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('[Firebase] Missing required configuration. Check your .env.local file.');
+}
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
