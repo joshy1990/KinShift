@@ -98,18 +98,16 @@ class RBACService {
 
       if (!isAdmin) {
         // Log unauthorized attempt
-        await auditService.log({
-          userId,
+        await auditService.logHouseholdAction(
           householdId,
+          userId,
           action,
-          resourceType: 'household',
-          resourceId: householdId,
-          success: false,
-          details: {
+          {
+            success: false,
             reason: 'Admin permission required',
             attemptedAction: action,
-          },
-        }).catch(err => console.error('Audit log error:', err));
+          }
+        ).catch(err => console.error('Audit log error:', err));
 
         return {
           allowed: false,
@@ -144,18 +142,16 @@ class RBACService {
 
       if (!isMember) {
         // Log unauthorized attempt
-        await auditService.log({
-          userId,
+        await auditService.logHouseholdAction(
           householdId,
+          userId,
           action,
-          resourceType: 'household',
-          resourceId: householdId,
-          success: false,
-          details: {
+          {
+            success: false,
             reason: 'Must be household member',
             attemptedAction: action,
-          },
-        }).catch(err => console.error('Audit log error:', err));
+          }
+        ).catch(err => console.error('Audit log error:', err));
 
         return {
           allowed: false,
@@ -191,19 +187,17 @@ class RBACService {
 
       if (!isAdmin && !isOwner) {
         // Log unauthorized attempt
-        await auditService.log({
-          userId,
+        await auditService.logHouseholdAction(
           householdId,
+          userId,
           action,
-          resourceType: 'resource',
-          resourceId: resourceOwnerId,
-          success: false,
-          details: {
+          {
+            success: false,
             reason: 'Must be admin or resource owner',
             attemptedAction: action,
             ownerId: resourceOwnerId,
-          },
-        }).catch(err => console.error('Audit log error:', err));
+          }
+        ).catch(err => console.error('Audit log error:', err));
 
         return {
           allowed: false,
@@ -251,18 +245,16 @@ class RBACService {
 
       // If target is admin and it's the last admin, prevent action
       if (isTargetAdmin && adminCount === 1) {
-        await auditService.log({
-          userId: operatorUserId,
+        await auditService.logHouseholdAction(
           householdId,
+          operatorUserId,
           action,
-          resourceType: 'household',
-          resourceId: householdId,
-          success: false,
-          details: {
+          {
+            success: false,
             reason: 'Cannot remove last admin',
             targetUserId,
-          },
-        }).catch(err => console.error('Audit log error:', err));
+          }
+        ).catch(err => console.error('Audit log error:', err));
 
         return {
           allowed: false,
@@ -328,12 +320,12 @@ class RBACService {
       // Get subscription service dynamically to avoid circular dependency
       try {
         const subscriptionService = (await import('./subscription.service')).subscriptionService;
-        const limit = await subscriptionService.getHouseholdMemberLimit(creatorId, householdId);
+        const canAddResult = await subscriptionService.canAddMember(creatorId, householdId);
 
-        if (memberCount >= limit) {
+        if (!canAddResult.allowed) {
           return {
             allowed: false,
-            reason: `Member limit (${limit}) reached for your subscription tier. Upgrade to add more members.`,
+            reason: canAddResult.reason || 'Member limit reached. Upgrade to add more members.',
             code: 'INVALID_STATE',
           };
         }

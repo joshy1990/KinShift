@@ -269,7 +269,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       'Are you sure you want to delete this note?',
       async () => {
         try {
-          await dayNoteService.deleteNote(noteId);
+          await dayNoteService.deleteNote(noteId, user!.id, currentHouseholdId);
           await loadDayData();
         } catch (error) {
           showError('Failed to delete note');

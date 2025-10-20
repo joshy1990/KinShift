@@ -17,8 +17,8 @@ import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
 type Props = NativeStackScreenProps<CalendarStackParamList, 'TwoWeekView'>;
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const DAY_COLUMN_WIDTH = 50;
-const NAME_COLUMN_WIDTH = 100;
+const DAY_COLUMN_WIDTH = 65;
+const NAME_COLUMN_WIDTH = 120;
 
 export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   const currentHouseholdId = useCurrentHouseholdId();
@@ -180,93 +180,65 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
       </View>
       
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View>
-          {/* Date header row */}
-          <View style={styles.dateHeaderRow}>
-            <View style={[styles.cell, styles.nameCell]}>
-              <Text style={styles.nameHeaderText}>Member</Text>
-            </View>
-            {dateRange.map((date, index) => {
-              const coverage = analyzeCoverage(date);
-              let coverageColor = '#374151'; // Default gray
-              if (coverage.gap) coverageColor = '#EF4444'; // Red for gaps
-              else if (coverage.overlap) coverageColor = '#F59E0B'; // Orange for overlap
-              else if (coverage.working > 0) coverageColor = '#10B981'; // Green for good
-              
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[styles.cell, styles.dateCell, {borderBottomColor: coverageColor}]}
-                  onPress={() => navigation.navigate('DayDetail', {date: format(date, 'yyyy-MM-dd')})}>
-                  <Text style={styles.dateHeaderDay}>{format(date, 'EEE')}</Text>
-                  <Text style={styles.dateHeaderDate}>{format(date, 'd')}</Text>
-                  <Text style={[styles.coverageCount, {color: coverageColor}]}>
+        <View style={styles.dayColumnsContainer}>
+          {/* Day columns - days across top with shifts underneath */}
+          {dateRange.map((date, index) => {
+            const dayShifts = shifts.filter(shift =>
+              isSameDay(new Date(shift.startTime), date)
+            );
+            const coverage = analyzeCoverage(date);
+            let coverageColor = '#374151'; // Default gray
+            if (coverage.gap) coverageColor = '#EF4444'; // Red for gaps
+            else if (coverage.overlap) coverageColor = '#F59E0B'; // Orange for overlap
+            else if (coverage.working > 0) coverageColor = '#10B981'; // Green for good
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[styles.dayColumn, {borderBottomColor: coverageColor}]}
+                onPress={() => navigation.navigate('DayDetail', {date: format(date, 'yyyy-MM-dd')})}>
+                {/* Day header */}
+                <View style={styles.dayHeader}>
+                  <Text style={styles.dayOfWeek}>{format(date, 'EEE')}</Text>
+                  <Text style={styles.dayDate}>{format(date, 'd')}</Text>
+                  <Text style={[styles.coverageCountBadge, {backgroundColor: coverageColor}]}>
                     {coverage.working}
                   </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          
-          {/* Member rows */}
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {members.map((member) => (
-              <View key={member.userId} style={styles.memberRow}>
-                <View style={[styles.cell, styles.nameCell]}>
-                  <View style={styles.memberInfo}>
-                    <View style={styles.initialsCircle}>
-                      <Text style={styles.initialsText}>
-                        {getUserInitials(member.name)}
-                      </Text>
-                    </View>
-                    <Text style={styles.memberName} numberOfLines={1}>
-                      {member.name}
-                    </Text>
-                  </View>
                 </View>
                 
-                {dateRange.map((date, index) => {
-                  const userShifts = getShiftsForUserAndDate(member.userId, date);
-                  const hasShift = userShifts.length > 0;
-                  
-                  return (
+                {/* Shifts for this day */}
+                <View style={styles.dayShiftsContainer}>
+                  {dayShifts.length > 0 ? (
+                    dayShifts.map((shift) => {
+                      const member = members.find(m => m.userId === shift.ownerId);
+                      return (
+                        <TouchableOpacity
+                          key={shift.id}
+                          style={[
+                            styles.dayShiftCard,
+                            {backgroundColor: getShiftColor(shift, shift.ownerId)},
+                          ]}
+                          onPress={() => navigation.navigate('ShiftDetail', {shiftId: shift.id})}>
+                          <Text style={styles.dayShiftMember} numberOfLines={1}>
+                            {member?.name.split(' ')[0] || 'Unknown'}
+                          </Text>
+                          <Text style={styles.dayShiftTime}>
+                            {format(new Date(shift.startTime), 'HH:mm')}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  ) : (
                     <TouchableOpacity
-                      key={index}
-                      style={[styles.cell, styles.shiftCell]}
-                      onPress={() => {
-                        if (hasShift) {
-                          navigation.navigate('ShiftDetail', {shiftId: userShifts[0].id});
-                        } else {
-                          navigation.navigate('AddShift', {date});
-                        }
-                      }}>
-                      {hasShift ? (
-                        <View style={styles.shiftIndicators}>
-                          {userShifts.map((shift, idx) => (
-                            <View
-                              key={shift.id}
-                              style={[
-                                styles.shiftBlock,
-                                {backgroundColor: getShiftColor(shift, shift.ownerId)},
-                                idx > 0 && {marginTop: 2},
-                              ]}>
-                              <Text style={styles.shiftBlockText}>
-                                {format(new Date(shift.startTime), 'HH:mm')}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      ) : (
-                        <View style={styles.emptyCell}>
-                          <Text style={styles.emptyCellText}>+</Text>
-                        </View>
-                      )}
+                      style={styles.dayEmptyCell}
+                      onPress={() => navigation.navigate('AddShift', {date})}>
+                      <Text style={styles.dayEmptyCellText}>+</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-          </ScrollView>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
       
@@ -347,110 +319,87 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
   },
-  dateHeaderRow: {
+  dayColumnsContainer: {
     flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+  },
+  dayColumn: {
+    width: DAY_COLUMN_WIDTH + 20,
+    borderLeftWidth: 4,
     backgroundColor: '#1A1A2E',
-    borderBottomWidth: 2,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderLeftColor: '#374151',
+  },
+  dayHeader: {
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
     borderBottomColor: '#2A2A3E',
   },
-  memberRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1A2E',
-  },
-  cell: {
-    padding: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#1A1A2E',
-  },
-  nameCell: {
-    width: NAME_COLUMN_WIDTH,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingLeft: 12,
-  },
-  nameHeaderText: {
-    fontSize: 14,
+  dayOfWeek: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  dateCell: {
-    width: DAY_COLUMN_WIDTH,
-    backgroundColor: '#1A1A2E',
-    borderBottomWidth: 3,
-  },
-  dateHeaderDay: {
-    fontSize: 10,
     color: '#9CA3AF',
-    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  dateHeaderDate: {
-    fontSize: 16,
-    fontWeight: '600',
+  dayDate: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 2,
+    marginTop: 2,
+    marginBottom: 6,
   },
-  coverageCount: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  memberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  initialsCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#6366F1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  initialsText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  memberName: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    flex: 1,
-  },
-  shiftCell: {
-    width: DAY_COLUMN_WIDTH,
-    minHeight: 50,
-    backgroundColor: '#0F0F23',
-  },
-  shiftIndicators: {
-    flex: 1,
-    width: '100%',
-  },
-  shiftBlock: {
-    flex: 1,
+  coverageCountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 4,
+    minWidth: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 22,
-    paddingHorizontal: 2,
   },
-  shiftBlockText: {
-    fontSize: 9,
-    fontWeight: '600',
+  coverageCountText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
-  emptyCell: {
-    flex: 1,
+  dayShiftsContainer: {
+    gap: 6,
+  },
+  dayShiftCard: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 40,
   },
-  emptyCellText: {
-    fontSize: 20,
+  dayShiftMember: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  dayShiftTime: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  dayEmptyCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  dayEmptyCellText: {
+    fontSize: 24,
+    fontWeight: '300',
     color: '#374151',
-    opacity: 0.3,
+    opacity: 0.4,
   },
   footer: {
     flexDirection: 'row',

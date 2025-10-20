@@ -1,27 +1,26 @@
 /**
  * Rate Limiting Cloud Function
  * 
- * Implements distributed rate limiting for Firestore operations
- * Protects against brute force attacks, DoS, and excessive API usage
+ * IMPORTANT: This file is for Firebase Cloud Functions deployment.
+ * It is not used in the client application directly.
  * 
- * Critical Finding: Rate limiting was missing from security rules audit
- * Severity: HIGH
- * 
- * Deployment:
- *   gcloud functions deploy rateLimitEnforcer --runtime nodejs18 --trigger-topic rate-limit-enforcer
+ * Deploy separately to Firebase Cloud Functions:
+ *   gcloud functions deploy rateLimitEnforcer --runtime nodejs18
  */
 
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import * as Redis from 'redis';
+// These imports are only available in Cloud Functions environment
+// Commented out for client-side builds - this file should be excluded from client bundle
+// import * as functions from 'firebase-functions';
+// import * as admin from 'firebase-admin';
+// import * as Redis from 'redis';
 
-const db = admin.firestore();
-const redisClient = Redis.createClient({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  db: parseInt(process.env.REDIS_DB || '1'),
-});
+// const db = admin.firestore();
+// const redisClient = Redis.createClient({
+//   host: process.env.REDIS_HOST || 'localhost',
+//   port: parseInt(process.env.REDIS_PORT || '6379'),
+//   password: process.env.REDIS_PASSWORD,
+//   db: parseInt(process.env.REDIS_DB || '1'),
+// });
 
 /**
  * Rate Limit Configuration
@@ -361,6 +360,9 @@ declare global {
   }
 }
 
+// Cloud Function exports - Deploy separately to Firebase Cloud Functions
+// Not used in client-side application build
+/*
 export default {
   checkRateLimit,
   enforceRateLimit,
@@ -368,3 +370,4 @@ export default {
   cleanupRateLimits,
   rateLimitHealthCheck,
 };
+*/

@@ -16,7 +16,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import * as Sentry from '@sentry/react-native';
+// import * as Sentry from '@sentry/react-native'; // Optional error tracking
 
 interface RateLimitStatus {
   allowed: boolean;
@@ -94,19 +94,19 @@ export function useRateLimit() {
           setIsLimited(operation);
           setResetAt(prev => ({ ...prev, [operation]: resetTime }));
 
-          // Log to Sentry
-          Sentry.captureMessage('Rate limit exceeded', {
-            level: 'warning',
-            tags: { operation },
-            extra: { retryAfter, resetTime },
-          });
+          // Log to Sentry (optional error tracking)
+          // Sentry.captureMessage('Rate limit exceeded', {
+          //   level: 'warning',
+          //   tags: { operation },
+          //   extra: { retryAfter, resetTime },
+          // });
 
           return false;
         }
 
         // If error is not rate-limit related, log and allow operation
         console.warn('Rate limit check error:', error);
-        Sentry.captureException(error);
+        // Sentry.captureException(error);
 
         return true; // Fail open
       }

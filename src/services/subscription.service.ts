@@ -41,6 +41,7 @@ export interface SubscriptionLimits {
   canAddNotes: boolean;
   hasPrioritySupport: boolean;
   canExportCalendar: boolean;
+  removesAdsForHousehold?: boolean; // Premium feature: removes ads for entire household
 }
 
 export interface PricingInfo {
@@ -106,6 +107,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enhanced household management',
           'Real-time sync',
+          'Ad-free for admin',
         ],
       },
       {
@@ -122,6 +124,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enterprise household management',
           'Real-time sync',
+          'Ad-free for entire household',
           'Calendar export (coming soon)',
           'Early access to new features',
         ],
@@ -145,6 +148,7 @@ class SubscriptionService {
           canAddNotes: true,
           hasPrioritySupport: true,
           canExportCalendar: true,
+          removesAdsForHousehold: true, // Premium removes ads for entire household
         };
       
       case 'standard':
@@ -158,6 +162,7 @@ class SubscriptionService {
           canAddNotes: true,
           hasPrioritySupport: false,
           canExportCalendar: false,
+          removesAdsForHousehold: false, // Standard doesn't remove household ads
         };
       
       case 'free':
@@ -172,6 +177,7 @@ class SubscriptionService {
           canAddNotes: true,
           hasPrioritySupport: false,
           canExportCalendar: false,
+          removesAdsForHousehold: false, // Free tier shows ads to everyone
         };
     }
   }
@@ -407,7 +413,7 @@ class SubscriptionService {
       // Log subscription change to audit trail
       if (householdId) {
         const actionType = newTier === 'free' ? AuditAction.SUBSCRIPTION_CANCEL : AuditAction.SUBSCRIPTION_UPGRADE;
-        await auditService.logHouseholdAction(householdId, userId, actionType, true);
+        await auditService.logHouseholdAction(householdId, userId, actionType, { tier: newTier });
       }
 
       return {
@@ -475,7 +481,7 @@ class SubscriptionService {
 
       // Log subscription cancellation
       if (householdId) {
-        await auditService.logHouseholdAction(householdId, userId, AuditAction.SUBSCRIPTION_CANCEL, true);
+        await auditService.logHouseholdAction(householdId, userId, AuditAction.SUBSCRIPTION_CANCEL, { cancelled: true });
       }
 
       // Trigger downgrade workflow asynchronously
@@ -658,6 +664,38 @@ class SubscriptionService {
     } else {
       return limits.showAdsToMembers;
     }
+  }
+
+  /**
+   * Check if user should see ads in a household context
+   * Option 3: Premium admin removes ads for entire household
+   * 
+   * Rules:
+   * - If current user is Premium → no ads
+   * - If current user's household admin is Premium → no ads (household perk)
+   * - Otherwise → check based on user's own tier and role
+   * 
+   * @param userSubscription - Current user's subscription
+   * @param adminSubscription - Household admin's subscription
+   * @param isCurrentUserAdmin - Is current user the admin?
+   */
+  shouldShowAdsInHousehold(
+    userSubscription: Subscription,
+    adminSubscription: Subscription,
+    isCurrentUserAdmin: boolean
+  ): boolean {
+    // If user is Premium, they don't see ads
+    if (userSubscription.tier === 'premium') {
+      return false;
+    }
+
+    // If household admin is Premium, nobody in household sees ads (household perk)
+    if (adminSubscription.tier === 'premium') {
+      return false;
+    }
+
+    // Otherwise, check based on user's own tier and role
+    return this.shouldShowAds(userSubscription, isCurrentUserAdmin);
   }
 }
 

@@ -36,7 +36,7 @@ class InvitationService {
     
     // Prevent self-invites
     if (normalizedEmail === inviterUser.email) {
-      await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, false, 'Cannot invite self');
+      await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, { error: 'Cannot invite self' });
       throw new Error('Cannot send invitation to yourself');
     }
 
@@ -60,7 +60,7 @@ class InvitationService {
     const createdInvitation = { id: docRef.id, ...invitation } as Invitation;
 
     // Log successful invitation creation
-    await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, true);
+    await auditService.logHouseholdAction(householdId, inviterUser.id, AuditAction.MEMBER_INVITE, { invitedEmail: normalizedEmail });
 
     // Send notification if invitee has an account (if lookup is implemented)
     try {
@@ -126,7 +126,7 @@ class InvitationService {
     await updateDoc(invitationRef, { status: 'cancelled', cancelledAt: Timestamp.now(), cancelledByUserId: cancellingUserId });
     
     // Log successful cancellation
-    await auditService.logHouseholdAction(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE, true);
+    await auditService.logHouseholdAction(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE, { cancelled: true });
   }
 }
 

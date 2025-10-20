@@ -419,64 +419,78 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
             <View style={styles.emptyDay}>
               <Text style={styles.emptyDayText}>No shifts</Text>
             </View>
-          ) : colorInfo.displayStrategy === 'multi' ? (
-            // Show compact badge with just the total count for 3+ people
-            <View style={styles.weekMultiPersonContainer}>
-              <View style={[styles.weekMultiPersonBadge, { backgroundColor: colorInfo.colors[0] }]}>
-                <Text style={styles.weekMultiPersonText}>{colorInfo.count}</Text>
-              </View>
-            </View>
           ) : (
-            // Show up to 2 owner blocks with initials (deduplicated per owner)
+            // Show all users grouped by user - each user on own line
             <View style={styles.weekColorBlocks}>
               {(() => {
                 const owners = getUsersWorkingOnDate(date);
-                // Build owner -> latest shift
-                const byOwner: Record<string, Shift | undefined> = {};
-                owners.forEach(ownerId => {
-                  const ownerShifts = dayShifts.filter(s => s.ownerId === ownerId);
-                  ownerShifts.sort((a, b) => {
-                    const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
-                    const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
-                    return bTime - aTime;
-                  });
-                  byOwner[ownerId] = ownerShifts[0];
+                const currentUserId = user?.id;
+                
+                // Sort owners: current user first, then others
+                const sortedOwners = owners.sort((a, b) => {
+                  if (a === currentUserId) return -1;
+                  if (b === currentUserId) return 1;
+                  return 0;
                 });
 
-                const ownersToDisplay: string[] = [];
-                const currentUserId = user?.id;
-                if (currentUserId && owners.includes(currentUserId)) {
-                  ownersToDisplay.push(currentUserId);
-                }
-                for (const ownerId of owners) {
-                  if (ownersToDisplay.length >= 2) break;
-                  if (!currentUserId || ownerId !== currentUserId) {
-                    ownersToDisplay.push(ownerId);
-                  }
-                }
+                return (
+                  <View style={styles.userShiftRow}>
+                    {/* All users in one row */}
+                    {sortedOwners.map((ownerId) => {
+                      const ownerShifts = dayShifts.filter(s => s.ownerId === ownerId);
+                      if (ownerShifts.length === 0) return null;
+                      
+                      // Get color from first shift
+                      const isCurrent = ownerId === currentUserId;
+                      const color = getShiftColor(ownerShifts[0], currentUserId || '', isCurrent);
+                      
+                      return (
+                        <View key={`user-${ownerId}`}>
+                          {/* User shifts */}
+                          {ownerShifts.map((shift, idx) => {
+                            // Convert various time formats to Date
+                            let shiftDate: Date | null = null;
+                            if (shift.startTime) {
+                              if (shift.startTime instanceof Date) {
+                                shiftDate = shift.startTime;
+                              } else if (typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
+                                // Firestore Timestamp
+                                shiftDate = new Date((shift.startTime as any).seconds * 1000);
 
-                return ownersToDisplay.map((ownerId, index) => {
-                  const latest = byOwner[ownerId];
-                  if (!latest) return null;
-                  const isCurrent = ownerId === currentUserId;
-                  const color = getShiftColor(latest, currentUserId || '', isCurrent);
-                  return (
-                    <View
-                      key={`${ownerId}-${index}`}
-                      style={[
-                        styles.weekColorBlockWithInitials,
-                        { backgroundColor: color },
-                        ownersToDisplay.length === 1 && styles.colorBlockFull,
-                      ]}>
-                      <Text style={styles.shiftInitials}>
-                        {getUserInitialsForShift(ownerId)}
-                      </Text>
-                      {isCurrent && (
-                        <View style={styles.ownShiftIndicator} />
-                      )}
+                          } else if (typeof shift.startTime === 'string') {
+                            shiftDate = new Date(shift.startTime);
+                          } else if (typeof shift.startTime === 'number') {
+                            shiftDate = new Date(shift.startTime);
+                          }
+                        }
+                        
+                        const timeString = shiftDate && !isNaN(shiftDate.getTime()) 
+                          ? format(shiftDate, 'HH:mm')
+                          : '--:--';
+                        
+                        return (
+                          <View
+                            key={`${ownerId}-shift-${idx}`}
+                            style={[styles.userShiftLabel, { backgroundColor: color }]}>
+                            <View style={styles.shiftLabelContent}>
+                              <Text style={styles.shiftInitials}>
+                                {getUserInitialsForShift(ownerId)}
+                              </Text>
+                              <Text style={styles.shiftTimeInline}>
+                                {timeString}
+                              </Text>
+                            </View>
+                            {isCurrent && (
+                              <View style={styles.ownShiftIndicator} />
+                            )}
+                          </View>
+                        );
+                      })}
                     </View>
                   );
-                });
+                    })}
+                  </View>
+                );
               })()}
             </View>
           )}
@@ -700,28 +714,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   dayName: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#A1A1AA',
     textTransform: 'uppercase',
   },
   dayNumber: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginTop: 4,
+    marginTop: 2,
   },
   todayText: {
     color: '#FFFFFF',
   },
   shiftsContainer: {
-    flex: 1,
-    padding: 8,
+    minHeight: 90,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   emptyDay: {
-    flex: 1,
+    minHeight: 80,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -733,7 +749,54 @@ const styles = StyleSheet.create({
   weekColorBlocks: {
     width: '100%',
     flexDirection: 'column',
-    gap: 4,
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userShiftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    flexWrap: 'wrap',
+    paddingHorizontal: 4,
+  },
+  userShiftLabel: {
+    width: 50,
+    height: 50,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 8,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 0,
+    flexShrink: 0,
+  },
+  shiftLabelContent: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+    flex: 1,
+    paddingTop: 6,
+  },
+  shiftTimeInline: {
+    fontSize: 7,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    opacity: 0.95,
+    lineHeight: 9,
+    paddingBottom: 4,
+  },
+  userShiftsList: {
+    flexDirection: 'row',
+    gap: 3,
+    flex: 1,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   weekColorBlock: {
     height: 60,
@@ -741,7 +804,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   weekColorBlockWithInitials: {
-    height: 60,
+    height: 36,
     borderRadius: 8,
     width: '100%',
     flexDirection: 'row',
@@ -751,15 +814,16 @@ const styles = StyleSheet.create({
   },
   shiftInitials: {
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
+    lineHeight: 13,
   },
   ownShiftIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#FFFFFF',
-    marginLeft: 'auto',
+    marginTop: 'auto',
   },
   weekMultiPersonContainer: {
     flex: 1,
