@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "LinkShift",
-    "slug": "linkshift",
+    "name": "KinShift",
+    "slug": "kinshift",
     "version": "0.1.0",
     "icon": "./assets/icon.png",
     "platforms": [
@@ -16,17 +16,17 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.linkshift.app",
+      "bundleIdentifier": "com.kinshift.app",
       "infoPlist": {
-        "NSUserNotificationUsageDescription": "LinkShift uses notifications to inform you about shift updates, changes, and schedule conflicts in your households.",
-        "NSLocationWhenInUseUsageDescription": "Your location is not used by LinkShift but is required by some system features.",
+        "NSUserNotificationUsageDescription": "KinShift uses notifications to inform you about shift updates, changes, and schedule conflicts in your households.",
+        "NSLocationWhenInUseUsageDescription": "Your location is not used by KinShift but is required by some system features.",
         "UIBackgroundModes": ["remote-notification"],
         "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
       "backgroundColor": "#0F0F23",
-      "package": "com.linkshift.app",
+      "package": "com.kinshift.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0F0F23"
@@ -38,7 +38,8 @@
     "extra": {
       "eas": {
         "projectId": "519ab785-c013-4ecb-b983-2354ae498ec4"
-      }
+      },
+      "supportEmail": "kinshift25@gmail.com"
     }
   }
 }
