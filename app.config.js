@@ -3,7 +3,7 @@ require('dotenv').config({ path: '.env.local' });
 module.exports = {
   "expo": {
     "name": "KinShift",
-    "slug": "kinshift",
+    "slug": "linkshift",  // Matches EAS project ID
     "version": "1.0.0",
     "icon": "./assets/icon.png",
     "platforms": [
@@ -48,6 +48,7 @@ module.exports = {
         }
       ]
     ],
+    "owner": "joshlee1990",
     "extra": {
       "eas": {
         "projectId": "519ab785-c013-4ecb-b983-2354ae498ec4"
