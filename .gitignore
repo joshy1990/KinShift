@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +40,41 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase config files (SECURITY: Never commit these!)
+google-services.json
+GoogleService-Info.plist
+
+# Service account keys (SECURITY: Never commit these!)
+*.json
+kinshift-service-account.json
+*service-account*.json
+
+# Keystores (SECURITY: Never commit these!)
+*.keystore
+*.jks
+
+# Apple certificates
+*.p8
+*.p12
+*.mobileprovision
+*.certSigningRequest
+
+# RevenueCat / API keys
+.revenuecat
+*api-key*
+
+# Build artifacts
+*.aab
+*.apk
+*.ipa
+
+# Testing
+coverage/
+.nyc_output/
+
+# Backup and old files
+*.old.*
+*.backup.*
+*.bak
+*~

@@ -10,8 +10,8 @@ import Purchases, {
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// RevenueCat API Key - should be in environment variables
-const REVENUECAT_API_KEY = process.env.REACT_APP_REVENUECAT_API_KEY || 'appl_XXXXXXXXXXXXXXXXXXXXxx';
+// RevenueCat API Key - loaded from environment variables
+const REVENUECAT_API_KEY = process.env.REVENUECAT_API_KEY || 'appl_XXXXXXXXXXXXXXXXXXXXxx';
 
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {

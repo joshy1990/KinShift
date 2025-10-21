@@ -17,8 +17,8 @@ import { BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
  * Get from: https://admob.google.com → Apps
  */
 export const ADMOB_APP_IDS = {
-  ios: 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your iOS App ID
-  android: 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your Android App ID
+  ios: process.env.ADMOB_APP_ID_IOS || 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your iOS App ID
+  android: process.env.ADMOB_APP_ID_ANDROID || 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your Android App ID
 };
 
 /**
@@ -34,21 +34,21 @@ export const AD_UNIT_IDS = {
   // Banner Ads
   bannerPortrait: __DEV__
     ? TestIds.BANNER // Test ID during development
-    : 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy', // Production Banner Ad Unit ID
+    : process.env.ADMOB_BANNER_PORTRAIT_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy', // Production Banner Ad Unit ID
 
   bannerLandscape: __DEV__
     ? TestIds.BANNER
-    : 'ca-app-pub-xxxxxxxxxxxxxxxx/zzzzzzzzzz', // Production Landscape Banner Ad Unit ID
+    : process.env.ADMOB_BANNER_LANDSCAPE_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/zzzzzzzzzz', // Production Landscape Banner Ad Unit ID
 
   // Interstitial Ads (full-screen ads)
   interstitial: __DEV__
     ? TestIds.INTERSTITIAL
-    : 'ca-app-pub-xxxxxxxxxxxxxxxx/aaaaaaaaaa', // Production Interstitial Ad Unit ID
+    : process.env.ADMOB_INTERSTITIAL_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/aaaaaaaaaa', // Production Interstitial Ad Unit ID
 
   // Rewarded Ads (video ads with reward)
   rewarded: __DEV__
     ? TestIds.REWARDED
-    : 'ca-app-pub-xxxxxxxxxxxxxxxx/bbbbbbbbbb', // Production Rewarded Ad Unit ID
+    : process.env.ADMOB_REWARDED_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/bbbbbbbbbb', // Production Rewarded Ad Unit ID
 };
 
 /**
