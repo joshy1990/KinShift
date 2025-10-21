@@ -60,16 +60,6 @@ eas build --platform android --profile production
 
 ---
 
-## 📚 Documentation
-
-Essential guides for launch:
-
-1. **`PRE_BUILD_READINESS_COMPLETE.md`** - Complete pre-launch checklist
-2. **`REVENUECAT_SETUP_COMPLETE.md`** - Subscription system details
-3. **`PLAY_STORE_REVIEW_PREPARATION.md`** - Store submission guide
-
----
-
 ## ✅ Readiness Status
 
 | Component | Status |
