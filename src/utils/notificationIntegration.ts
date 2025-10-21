@@ -32,11 +32,15 @@ export const useNotificationSetup = (userId: string | null | undefined, navigati
       try {
         // 1. Request permission
         const hasPermission = await notificationService.requestPermission();
-        console.log('📱 Notification permission:', hasPermission ? 'granted' : 'denied');
+        if (__DEV__) {
+          console.log('📱 Notification permission:', hasPermission ? 'granted' : 'denied');
+        }
 
         // 2. Initialize notifications
         const initialized = await notificationService.initialize(userId);
-        console.log('🔔 Notifications initialized:', initialized);
+        if (__DEV__) {
+          console.log('🔔 Notifications initialized:', initialized);
+        }
 
         // 3. Handle notification that launched the app
         await handleInitialNotification(navigationCallback);

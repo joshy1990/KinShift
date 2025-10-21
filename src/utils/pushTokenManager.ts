@@ -85,7 +85,9 @@ export const registerPushToken = async (
     // Store locally for reference
     await AsyncStorage.setItem(STORAGE_KEY, token);
 
-    console.log('✅ Push token registered:', token);
+    if (__DEV__) {
+      console.log('✅ Push token registered:', token);
+    }
     return true;
   } catch (error) {
     console.error('Error registering push token:', error);
@@ -117,7 +119,9 @@ export const unregisterPushToken = async (
     // Clear from local storage
     await AsyncStorage.removeItem(STORAGE_KEY);
 
-    console.log('✅ Push token unregistered:', token);
+    if (__DEV__) {
+      console.log('✅ Push token unregistered:', token);
+    }
     return true;
   } catch (error) {
     console.error('Error unregistering push token:', error);
