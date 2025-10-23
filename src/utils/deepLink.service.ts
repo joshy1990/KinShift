@@ -91,7 +91,7 @@ class DeepLinkService {
    * Generate invitation deep link
    */
   generateInvitationLink(inviteCode: string): string {
-    return `linkshift://invite/${inviteCode}`;
+  return `kinshift://invite/${inviteCode}`;
   }
 
   /**
@@ -100,7 +100,7 @@ class DeepLinkService {
   async openInvitationLink(inviteCode: string) {
     const url = this.generateInvitationLink(inviteCode);
     try {
-      const canOpen = await Linking.canOpenURL(url);
+        const canOpen = await Linking.canOpenURL(url);
       if (canOpen) {
         await Linking.openURL(url);
       } else {

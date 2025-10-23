@@ -16,8 +16,8 @@ const REVENUECAT_API_KEY = process.env.REVENUECAT_API_KEY || 'appl_XXXXXXXXXXXXX
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {
   FREE: 'free',
-  STANDARD: 'linkshift_standard_monthly',
-  PREMIUM: 'linkshift_premium_monthly',
+  STANDARD: 'kinshift_standard_monthly',
+  PREMIUM: 'kinshift_premium_monthly',
 };
 
 // Entitlements (in RevenueCat)
@@ -283,7 +283,7 @@ class RevenueCatService {
         hasPremiumEntitlement: this.hasEntitlement(ENTITLEMENTS.PREMIUM),
       };
 
-      await AsyncStorage.setItem('@linkshift/subscription_status', JSON.stringify(status));
+  await AsyncStorage.setItem('@kinshift/subscription_status', JSON.stringify(status));
     } catch (error) {
       console.error('[RevenueCat] Failed to save subscription status:', error);
     }
@@ -294,7 +294,7 @@ class RevenueCatService {
    */
   async getCachedSubscriptionStatus(): Promise<any> {
     try {
-      const cached = await AsyncStorage.getItem('@linkshift/subscription_status');
+  const cached = await AsyncStorage.getItem('@kinshift/subscription_status');
       return cached ? JSON.parse(cached) : null;
     } catch (error) {
       console.error('[RevenueCat] Failed to get cached status:', error);
@@ -310,7 +310,7 @@ class RevenueCatService {
       await Purchases.logOut();
       this.customerInfo = null;
       this.initialized = false;
-      await AsyncStorage.removeItem('@linkshift/subscription_status');
+  await AsyncStorage.removeItem('@kinshift/subscription_status');
     } catch (error) {
       console.error('[RevenueCat] Logout failed:', error);
     }

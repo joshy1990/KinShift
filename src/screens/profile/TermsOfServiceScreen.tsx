@@ -136,7 +136,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.heading}>Contact Us</Text>
         <Text style={styles.paragraph}>For questions about these Terms:</Text>
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Email:</Text> support@linkshift.app
+          <Text style={styles.bold}>Email:</Text> support@kinshift.app
         </Text>
         <Text style={styles.paragraph}>We will respond within 30 days.</Text>
 
@@ -147,14 +147,14 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
           ❌ You can't: Hack, spam, harass, or use illegally{'\n'}
           🔒 Your data: You own it, we store it securely{'\n'}
           ⚠️ Disclaimer: App provided "as-is", use at your own risk{'\n'}
-          📧 Problems? support@linkshift.app{'\n'}
+          📧 Problems? support@kinshift.app{'\n'}
           🗑️ Leave: Delete account anytime
         </Text>
 
         <Text style={styles.footer}>
-          By using LinkShift, you agree to these Terms.
+          By using Kinshift, you agree to these Terms.
           {'\n\n'}
-          These Terms of Service are provided for LinkShift. For production apps serving many users, consult
+          These Terms of Service are provided for Kinshift. For production apps serving many users, consult
           a legal professional to ensure compliance with all applicable laws.
         </Text>
       </ScrollView>

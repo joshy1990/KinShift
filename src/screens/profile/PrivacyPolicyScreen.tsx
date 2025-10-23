@@ -27,12 +27,12 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.effectiveDate}>Last Updated: October 15, 2025</Text>
 
         <Text style={styles.paragraph}>
-          Welcome to LinkShift! This Privacy Policy explains how we collect, use, disclose, and safeguard
+          Welcome to Kinshift! This Privacy Policy explains how we collect, use, disclose, and safeguard
           your information when you use our mobile application.
         </Text>
 
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Contact:</Text> support@linkshift.app
+          <Text style={styles.bold}>Contact:</Text> support@kinshift.app
         </Text>
 
         <Text style={styles.heading}>Information We Collect</Text>

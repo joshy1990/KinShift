@@ -11,7 +11,7 @@ interface SyncResult {
 }
 
 class OfflineEditQueueService {
-  private readonly QUEUE_KEY = '@linkshift:offline_edit_queue';
+  private readonly QUEUE_KEY = '@kinshift:offline_edit_queue';
   private readonly MAX_RETRIES = 3;
   private readonly INITIAL_RETRY_DELAY = 1000; // 1 second
   
@@ -293,7 +293,7 @@ class OfflineEditQueueService {
    */
   async clearAllEdits(): Promise<void> {
     try {
-      await AsyncStorage.removeItem(this.QUEUE_KEY);
+  await AsyncStorage.removeItem('@kinshift:offline_edit_queue');
       this.notifyListeners(0);
     } catch (error) {
       console.error('Error clearing all edits:', error);

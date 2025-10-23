@@ -296,7 +296,7 @@ export const SubscriptionScreen: React.FC = () => {
         {/* Support Link */}
         <TouchableOpacity style={styles.supportLink}>
           <Text style={styles.supportLinkText}>
-            Need help? Contact support at support@linkshift.app
+            Need help? Contact support at support@kinshift.app
           </Text>
         </TouchableOpacity>
       </ScrollView>

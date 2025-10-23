@@ -25,38 +25,39 @@ export const generateDeepLink = (notification: Notifications.Notification): stri
       case 'shift_edited':
       case 'shift_deleted':
         if (data.shiftId) {
-          return `linkshift://shift/${data.shiftId}`;
+          return `kinshift://shift/${data.shiftId}`;
         }
         break;
 
       case 'invite':
       case 'invitation_received':
         if (data.invitationCode) {
-          return `linkshift://invitation/${data.invitationCode}`;
+          return `kinshift://invitation/${data.invitationCode}`;
         }
         break;
 
       case 'message':
       case 'day_message':
         if (data.shiftId) {
-          return `linkshift://shift/${data.shiftId}`;
+          return `kinshift://shift/${data.shiftId}`;
         }
         break;
 
       case 'conflict':
       case 'conflict_detected':
         if (data.householdId) {
-          return `linkshift://household/${data.householdId}`;
+          return `kinshift://household/${data.householdId}`;
         }
         break;
 
       case 'subscription_downgrade':
       case 'subscription_canceled':
         return 'linkshift://subscription';
+  return 'kinshift://subscription';
 
       default:
         if (data.householdId) {
-          return `linkshift://household/${data.householdId}`;
+          return `kinshift://household/${data.householdId}`;
         }
     }
   } catch (error) {
@@ -168,7 +169,7 @@ export const setupNotificationHandlers = (
  * This should be used in your navigation configuration
  */
 export const notificationLinkingConfiguration = {
-  prefixes: ['linkshift://', 'https://linkshift.app'],
+  prefixes: ['kinshift://', 'https://kinshift.app'],
   config: {
     screens: {
       // Shift screens

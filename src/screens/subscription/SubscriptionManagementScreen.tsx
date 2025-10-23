@@ -292,8 +292,8 @@ export const SubscriptionManagementScreen: React.FC<
             Alert.alert(
               'Support',
               subscription.tier === 'premium'
-                ? 'Priority support: support@linkshift.app'
-                : 'Email us at: support@linkshift.app'
+                ? 'Priority support: support@kinshift.app'
+                : 'Email us at: support@kinshift.app'
             )
           }>
           <Text style={styles.helpButtonText}>

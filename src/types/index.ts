@@ -1,5 +1,5 @@
 /**
- * Core data models for LinkShift
+ * Core data models for Kinshift
  */
 
 export interface User {

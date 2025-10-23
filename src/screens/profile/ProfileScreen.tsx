@@ -267,7 +267,7 @@ export const ProfileScreen: React.FC = () => {
           >
             <View style={styles.menuItemContent}>
               <Text style={styles.menuIcon}>ℹ️</Text>
-              <Text style={styles.menuText}>About LinkShift</Text>
+              <Text style={styles.menuText}>About Kinshift</Text>
             </View>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>

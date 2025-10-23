@@ -305,7 +305,7 @@ export const SubscriptionScreen: React.FC = () => {
               if (Platform.OS === 'ios') {
                 Linking.openURL('app-settings:');
               } else {
-                Linking.openURL('market://details?id=com.linkshift.app');
+                Linking.openURL('market://details?id=com.kinshift.app');
               }
             }}
           >
@@ -357,7 +357,7 @@ const getTierFeatures = (tierId: string): Array<{ name: string; included: boolea
   const baseFeatures = [
     { name: 'View schedule', included: true },
     { name: 'Basic shifts', included: true },
-    { name: 'Limited households', included: tierId !== 'linkshift_free' },
+  { name: 'Limited households', included: tierId !== 'kinshift_free' },
   ];
 
   if (tierId.includes('standard')) {
