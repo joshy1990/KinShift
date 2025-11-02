@@ -46,15 +46,16 @@ module.exports = {
           "androidAppId": process.env.ADMOB_APP_ID_ANDROID || "ca-app-pub-xxxxxxxxxxxxxxxx",
           "iosAppId": process.env.ADMOB_APP_ID_IOS || "ca-app-pub-xxxxxxxxxxxxxxxx"
         }
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "kinshift",
-          "organization": "kinshift"
-        }
       ]
+      // Sentry plugin temporarily disabled - will re-enable after adding SENTRY_AUTH_TOKEN to EAS
+      // [
+      //   "@sentry/react-native/expo",
+      //   {
+      //     "url": "https://sentry.io/",
+      //     "project": "kinshift",
+      //     "organization": "kinshift"
+      //   }
+      // ]
     ],
     "owner": "joshlee1990",
     "extra": {
