@@ -9,9 +9,10 @@ import Purchases, {
 } from 'react-native-purchases';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// RevenueCat API Key - loaded from environment variables
-const REVENUECAT_API_KEY = process.env.REVENUECAT_API_KEY || 'appl_XXXXXXXXXXXXXXXXXXXXxx';
+// RevenueCat API Key - loaded from app.config.js extra
+const REVENUECAT_API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || 'appl_XXXXXXXXXXXXXXXXXXXXxx';
 
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {

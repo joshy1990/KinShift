@@ -62,7 +62,14 @@ module.exports = {
       "eas": {
         "projectId": "519ab785-c013-4ecb-b983-2354ae498ec4"
       },
-      "supportEmail": "kinshift25@gmail.com"
+      "supportEmail": "kinshift25@gmail.com",
+      "firebaseApiKey": process.env.FIREBASE_API_KEY,
+      "firebaseAuthDomain": process.env.FIREBASE_AUTH_DOMAIN,
+      "firebaseProjectId": process.env.FIREBASE_PROJECT_ID,
+      "firebaseStorageBucket": process.env.FIREBASE_STORAGE_BUCKET,
+      "firebaseMessagingSenderId": process.env.FIREBASE_MESSAGING_SENDER_ID,
+      "firebaseAppId": process.env.FIREBASE_APP_ID,
+      "revenuecatApiKey": process.env.REVENUECAT_API_KEY
     }
   }
 };
