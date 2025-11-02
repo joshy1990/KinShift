@@ -46,9 +46,9 @@ google-services.json
 GoogleService-Info.plist
 
 # Service account keys (SECURITY: Never commit these!)
-*.json
 kinshift-service-account.json
 *service-account*.json
+firebase-service-account.json
 
 # Keystores (SECURITY: Never commit these!)
 *.keystore
