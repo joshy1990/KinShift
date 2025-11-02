@@ -290,8 +290,8 @@ export const MainTabNavigator: React.FC = () => {
     </Tab.Navigator>
       </View>
 
-    {/* Ad Banner - respect subscription tier & role */}
-    {shouldShowAdBanner && (
+    {/* Ad Banner - Disabled for launch, will be added in future */}
+    {/* {shouldShowAdBanner && (
       <View style={{
         width: '100%',
         height: navDimensions.adBannerHeight,
@@ -302,7 +302,7 @@ export const MainTabNavigator: React.FC = () => {
           showPlaceholder={true}
         />
       </View>
-    )}
+    )} */}
     </View>
   );
 };

@@ -5,6 +5,7 @@ import {authService} from '@/services/auth.service';
 import {notificationService} from '@/services/notification.service';
 import {revenueCatService} from '@/services/revenueCat.service';
 import {useNotificationSetup} from '@/utils/notificationIntegration';
+import {setSentryUser, clearSentryUser} from '@/config/sentry.config';
 
 interface AuthContextType {
   user: User | null;
@@ -40,6 +41,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     const unsubscribe = authService.onAuthStateChanged(currentUser => {
       setUser(currentUser);
       setLoading(false);
+      
+      // Set Sentry user context
+      if (currentUser) {
+        setSentryUser(currentUser.id, currentUser.email, currentUser.name);
+      } else {
+        clearSentryUser();
+      }
     });
 
     return unsubscribe;
@@ -86,6 +94,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
         console.error('Error cleaning up notifications:', error);
       }
     }
+    
+    // Clear Sentry user context
+    clearSentryUser();
+    
     setUser(null);
   };
 

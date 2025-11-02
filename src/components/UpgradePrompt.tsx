@@ -55,8 +55,8 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
               <Text style={styles.upgradePrice}>{tierPrice}</Text>
               <Text style={styles.upgradeFeature}>
                 {upgradeToTier === 'premium'
-                  ? '✓ Unlimited households\n✓ Up to 12 members\n✓ Completely ad-free\n✓ Priority support'
-                  : '✓ Up to 4 members\n✓ Ad-free for admin\n✓ All features'}
+                  ? '✓ Unlimited households\n✓ Up to 12 members\n✓ Ad-free (when ads launch)\n✓ Priority support'
+                  : '✓ Up to 4 members\n✓ Ad-free (when ads launch)\n✓ All features'}
               </Text>
             </View>
           </View>

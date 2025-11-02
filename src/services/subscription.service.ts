@@ -107,7 +107,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enhanced household management',
           'Real-time sync',
-          'Ad-free for admin',
+          'Ad-free (when ads launch)',
         ],
       },
       {
@@ -124,7 +124,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enterprise household management',
           'Real-time sync',
-          'Ad-free for entire household',
+          'Ad-free (when ads launch)',
           'Calendar export (coming soon)',
           'Early access to new features',
         ],
@@ -611,7 +611,7 @@ class SubscriptionService {
         benefits = [
           'Unlimited households',
           'Up to 12 members per household',
-          'Completely ad-free',
+          'Ad-free (when ads launch)',
           'Priority support',
           'Calendar export (coming soon)',
         ];
@@ -623,7 +623,7 @@ class SubscriptionService {
         benefits = [
           '1 household',
           'Up to 4 members',
-          'Ad-free for admin',
+          'Ad-free (when ads launch)',
           'All features',
         ];
         break;
@@ -636,7 +636,7 @@ class SubscriptionService {
           '1 household',
           'Up to 2 members',
           'Unlimited shifts & notes',
-          'All features',
+          'Banner ads (coming soon)',
         ];
         break;
     }

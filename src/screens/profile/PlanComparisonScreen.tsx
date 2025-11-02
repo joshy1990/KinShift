@@ -42,9 +42,11 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {PricingInfo, subscriptionService, Subscription, SubscriptionTier} from '@/services/subscription.service';
+import {revenueCatService} from '@/services/revenueCat.service';
 import {spacing, typography, borderRadius} from '@/utils/responsive';
 import {useAuth} from '@/contexts/AuthContext';
 import {showAlert, showConfirm} from '@/utils/alert';
@@ -98,7 +100,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 2 members',
         'Unlimited shifts & notes',
         'All core features',
-        'Banner ads shown',
+        'Banner ads (coming soon)',
       ],
     },
     {
@@ -112,7 +114,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 4 members',
         'Unlimited shifts & notes',
         'All core features',
-        'Ad-free for admin',
+        'Ad-free (when ads launch)',
       ],
     },
     {
@@ -126,7 +128,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 12 members per household',
         'Unlimited shifts & notes',
         'All core features',
-        'Completely ad-free',
+        'Ad-free (when ads launch)',
         'Calendar export',
         'Priority support',
       ],
@@ -177,34 +179,87 @@ export const PlanComparisonScreen: React.FC = () => {
         }
       );
     } else if (isUpgrade) {
-      // Handle upgrade - REQUIRES PAYMENT
+      // Handle upgrade - REQUIRES PAYMENT via RevenueCat
       const monthlyPrice = plan.priceMonthly.toFixed(2);
       const yearlyPrice = plan.priceYearly.toFixed(2);
       
       showConfirm(
         'Upgrade Plan',
-        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year (save 16%)\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}\n\n⚠️ PAYMENT PROCESSING NOT YET INTEGRATED\nThis is a test - no charges will be made.`,
+        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year (save 16%)\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
         async () => {
           try {
             setLoading(true);
             
-            // TODO: CRITICAL - Integrate payment processor here
-            // Options: Stripe, RevenueCat, or direct payment gateway
-            // MUST verify payment success before updating tier
+            // Skip payment on web platform (RevenueCat doesn't support web)
+            if (Platform.OS === 'web') {
+              console.warn('[PlanComparison] Web platform - updating tier without payment');
+              await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
+              await loadCurrentSubscription();
+              showAlert(
+                'Upgrade Successful (Test Mode)',
+                `Welcome to ${plan.name}!\n\n⚠️ Web platform - no payment processed.`
+              );
+              return;
+            }
             
-            // For now (TESTING ONLY): Update tier without payment
-            console.warn('[PlanComparison] ⚠️ UPGRADING WITHOUT PAYMENT - TESTING ONLY');
-            await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
+            // Get available packages from RevenueCat
+            const offerings = await revenueCatService.getOfferings();
             
-            await loadCurrentSubscription();
+            if (!offerings || offerings.length === 0) {
+              throw new Error('No subscription packages available. Please try again later.');
+            }
             
-            showAlert(
-              'Upgrade Successful',
-              `Welcome to ${plan.name}!\n\nYour subscription has been upgraded.\n\n⚠️ TEST MODE - No payment was processed.`
-            );
-          } catch (error) {
+            // Find the appropriate package for the selected tier
+            // RevenueCat package identifiers should match your product IDs
+            const targetPackage = offerings.find(pkg => {
+              const identifier = pkg.identifier.toLowerCase();
+              return identifier.includes(plan.tier.toLowerCase()) && identifier.includes('monthly');
+            });
+            
+            if (!targetPackage) {
+              throw new Error(`No package found for ${plan.name}. Please contact support.`);
+            }
+            
+            // Initiate purchase flow
+            const customerInfo = await revenueCatService.purchasePackage(targetPackage);
+            
+            if (!customerInfo) {
+              throw new Error('Purchase failed. Please try again.');
+            }
+            
+            // Verify purchase and update Firestore subscription
+            const hasEntitlement = plan.tier === 'premium' 
+              ? revenueCatService.hasEntitlement('premium')
+              : revenueCatService.hasEntitlement('standard');
+            
+            if (hasEntitlement) {
+              // Purchase successful - update Firestore
+              await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
+              await loadCurrentSubscription();
+              
+              showAlert(
+                'Upgrade Successful! 🎉',
+                `Welcome to ${plan.name}!\n\nYour subscription is now active. Enjoy your new features!`
+              );
+            } else {
+              throw new Error('Purchase verification failed. Please contact support if you were charged.');
+            }
+            
+          } catch (error: any) {
             console.error('[PlanComparison] Upgrade failed:', error);
-            showAlert('Error', 'Failed to upgrade subscription. Please try again.');
+            
+            // Handle specific error cases
+            if (error.message && error.message.includes('cancelled')) {
+              showAlert('Purchase Cancelled', 'You cancelled the purchase. No charges were made.');
+            } else if (error.message && error.message.includes('already owned')) {
+              showAlert('Already Subscribed', 'You already own this subscription. Refreshing your status...');
+              await loadCurrentSubscription();
+            } else {
+              showAlert(
+                'Upgrade Failed', 
+                error.message || 'Failed to upgrade subscription. Please try again or contact support.'
+              );
+            }
           } finally {
             setLoading(false);
           }

@@ -1,10 +1,12 @@
 /**
  * Error Boundary Component
  * Catches React errors and displays fallback UI
+ * Reports errors to Sentry for monitoring
  */
 
 import React, {Component, ReactNode, ErrorInfo} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
+import {captureException} from '@/config/sentry.config';
 
 interface Props {
   children: ReactNode;
@@ -35,8 +37,16 @@ export class ErrorBoundary extends Component<Props, State> {
     // Log error to console in development
     console.error('Error Boundary caught error:', error, errorInfo);
 
-    // In production, you would send this to an error tracking service
-    // Example: Sentry.captureException(error, { extra: errorInfo });
+    // Report to Sentry for production monitoring
+    try {
+      captureException(error, {
+        errorInfo,
+        componentStack: errorInfo.componentStack,
+        component: 'ErrorBoundary',
+      });
+    } catch (sentryError) {
+      console.error('Failed to report error to Sentry:', sentryError);
+    }
 
     this.setState({
       error,

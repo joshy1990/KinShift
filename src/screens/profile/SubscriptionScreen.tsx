@@ -13,6 +13,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
+  Linking,
 } from 'react-native';
 import {useAuth} from '@/contexts/AuthContext';
 import {useSubscription} from '@/contexts/SubscriptionContext';
@@ -20,6 +22,7 @@ import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ProfileStackParamList} from '@/types';
 import {subscriptionService} from '@/services/subscription.service';
+import {revenueCatService} from '@/services/revenueCat.service';
 import {getResponsiveValue, spacing, typography, borderRadius} from '@/utils/responsive';
 import {showError, showSuccess} from '@/utils/alert';
 import type {Subscription, SubscriptionDisplayInfo} from '@/services/subscription.service';
@@ -60,11 +63,11 @@ export const SubscriptionScreen: React.FC = () => {
         
         let benefits: string[] = [];
         if (sub.tier === 'premium') {
-          benefits = ['Unlimited households', 'Up to 12 members per household', 'Completely ad-free', 'Priority support', 'Calendar export'];
+          benefits = ['Unlimited households', 'Up to 12 members per household', 'Ad-free (when ads launch)', 'Priority support', 'Calendar export'];
         } else if (sub.tier === 'standard') {
-          benefits = ['1 household', 'Up to 4 members', 'Ad-free for admin', 'All features'];
+          benefits = ['1 household', 'Up to 4 members', 'Ad-free (when ads launch)', 'All features'];
         } else {
-          benefits = ['1 household', 'Up to 2 members', 'Unlimited shifts & notes', 'All features'];
+          benefits = ['1 household', 'Up to 2 members', 'Unlimited shifts & notes', 'Banner ads (coming soon)'];
         }
         
         const info: SubscriptionDisplayInfo = {
@@ -110,21 +113,54 @@ export const SubscriptionScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // TODO: Integrate with actual payment provider (Stripe/RevenueCat)
-              // For now, show confirmation
-              Alert.alert(
-                'Coming Soon',
-                'Subscription cancellation will be integrated with the payment provider. Your subscription would be canceled and you would revert to the Free plan at the end of your billing period.',
-                [{text: 'OK'}]
-              );
-              
-              // When integrated, uncomment:
-              // await subscriptionService.cancelSubscription(user.id);
-              // showSuccess('Subscription canceled successfully');
-              // loadSubscription(); // Reload to show updated status
+              // Platform-specific cancellation
+              if (Platform.OS === 'ios') {
+                // iOS: Direct to Apple subscription management
+                Alert.alert(
+                  'Manage Subscription',
+                  'To cancel your subscription, please go to:\n\nSettings → Your Name → Subscriptions → KinShift',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Open Settings',
+                      onPress: () => {
+                        Linking.openURL('https://apps.apple.com/account/subscriptions');
+                      },
+                    },
+                  ]
+                );
+              } else if (Platform.OS === 'android') {
+                // Android: Direct to Google Play subscription management
+                Alert.alert(
+                  'Manage Subscription',
+                  'To cancel your subscription, please go to:\n\nGoogle Play Store → Menu → Subscriptions → KinShift',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Open Play Store',
+                      onPress: () => {
+                        Linking.openURL('https://play.google.com/store/account/subscriptions');
+                      },
+                    },
+                  ]
+                );
+              } else {
+                // Web platform
+                Alert.alert(
+                  'Cancel Subscription',
+                  'Subscription cancellation is managed through the app stores. Please use the mobile app to cancel.',
+                  [{text: 'OK'}]
+                );
+              }
             } catch (error) {
-              console.error('Failed to cancel subscription:', error);
-              showError('Failed to cancel subscription. Please try again.');
+              console.error('Failed to open subscription management:', error);
+              Alert.alert('Error', 'Failed to open subscription management. Please try again.');
             }
           },
         },
@@ -133,12 +169,96 @@ export const SubscriptionScreen: React.FC = () => {
   };
 
   const handleManageSubscription = () => {
-    // TODO: Open billing portal (Stripe Customer Portal or similar)
-    Alert.alert(
-      'Manage Subscription',
-      'Subscription management portal coming soon! You\'ll be able to update payment methods, view invoices, and manage billing here.',
-      [{text: 'OK'}]
-    );
+    // Direct users to platform-specific subscription management
+    if (Platform.OS === 'ios') {
+      Alert.alert(
+        'Manage Subscription',
+        'View your billing, payment method, and subscription details in iOS Settings.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              Linking.openURL('https://apps.apple.com/account/subscriptions');
+            },
+          },
+        ]
+      );
+    } else if (Platform.OS === 'android') {
+      Alert.alert(
+        'Manage Subscription',
+        'View your billing, payment method, and subscription details in Google Play Store.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Open Play Store',
+            onPress: () => {
+              Linking.openURL('https://play.google.com/store/account/subscriptions');
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Manage Subscription',
+        'Subscription management is available through the app stores. Please use the mobile app.',
+        [{text: 'OK'}]
+      );
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      
+      if (Platform.OS === 'web') {
+        Alert.alert('Not Available', 'Purchase restoration is only available on mobile devices.');
+        return;
+      }
+
+      const customerInfo = await revenueCatService.restorePurchases();
+      
+      if (!customerInfo) {
+        Alert.alert('No Purchases Found', 'No previous purchases found for this account.');
+        return;
+      }
+
+      // Check if any entitlements were restored
+      const hasStandard = revenueCatService.hasEntitlement('standard');
+      const hasPremium = revenueCatService.hasEntitlement('premium');
+      
+      if (hasStandard || hasPremium) {
+        const restoredTier = hasPremium ? 'premium' : 'standard';
+        
+        // Update Firestore with restored subscription
+        await subscriptionService.changeSubscriptionTier(user.id, restoredTier);
+        await loadSubscription();
+        
+        Alert.alert(
+          'Purchases Restored! 🎉',
+          `Your ${restoredTier.charAt(0).toUpperCase() + restoredTier.slice(1)} subscription has been restored.`
+        );
+      } else {
+        Alert.alert('No Active Subscription', 'No active subscription found to restore.');
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to restore purchases:', error);
+      Alert.alert(
+        'Restore Failed',
+        error.message || 'Failed to restore purchases. Please try again or contact support.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getTierBadge = () => {
@@ -224,7 +344,7 @@ export const SubscriptionScreen: React.FC = () => {
           <View style={styles.upgradeSection}>
             <Text style={styles.upgradeSectionTitle}>🚀 Upgrade Your Experience</Text>
             <Text style={styles.upgradeSectionText}>
-              Get more households, members, and remove ads!
+              Get more households, members, and be ad-free when ads launch!
             </Text>
 
             <TouchableOpacity style={styles.viewPlansButton} onPress={handleViewPlans}>
@@ -238,7 +358,7 @@ export const SubscriptionScreen: React.FC = () => {
                 <Text style={styles.quickUpgradePrice}>£2.99/month</Text>
                 <Text style={styles.quickUpgradeFeatures}>
                   • 4 members per household{'\n'}
-                  • Ad-free for admin{'\n'}
+                  • Ad-free (when ads launch){'\n'}
                   • All features unlocked
                 </Text>
               </View>
@@ -251,7 +371,7 @@ export const SubscriptionScreen: React.FC = () => {
                 <Text style={styles.quickUpgradeFeatures}>
                   • Unlimited households{'\n'}
                   • 12 members per household{'\n'}
-                  • Completely ad-free{'\n'}
+                  • Ad-free (when ads launch){'\n'}
                   • Priority support
                 </Text>
               </View>
@@ -289,9 +409,27 @@ export const SubscriptionScreen: React.FC = () => {
         <View style={styles.infoSection}>
           <Text style={styles.infoText}>
             💡 All plans include unlimited shifts, notes, and calendar features. 
-            Upgrade for more households, members, and an ad-free experience!
+            Upgrade for more households, members, and be ad-free when banner ads launch in the future!
           </Text>
         </View>
+
+        {/* Restore Purchases Button - Only on mobile */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.restoreSection}>
+            <TouchableOpacity 
+              style={styles.restoreButton} 
+              onPress={handleRestorePurchases}
+              disabled={loading}
+            >
+              <Text style={styles.restoreButtonText}>
+                🔄 Restore Purchases
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.restoreNote}>
+              Already purchased? Tap to restore your subscription
+            </Text>
+          </View>
+        )}
 
         {/* Support Link */}
         <TouchableOpacity style={styles.supportLink}>
@@ -589,5 +727,33 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  restoreSection: {
+    backgroundColor: '#1E293B',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  restoreButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+  },
+  restoreButtonText: {
+    fontSize: typography.body,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  restoreNote: {
+    marginTop: spacing.sm,
+    fontSize: typography.caption,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
 });
