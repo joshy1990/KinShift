@@ -10,25 +10,6 @@ import {notificationLinkingConfiguration} from './src/utils/notificationHandlers
 import {initializeSentry, captureException} from './src/config/sentry.config';
 import * as Sentry from '@sentry/react-native';
 
-Sentry.init({
-  dsn: 'https://6e580d8b3790db36a3de08c066d97db3@o4510295982997504.ingest.de.sentry.io/4510295987716176',
-
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
-
-  // Enable Logs
-  enableLogs: true,
-
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
-});
-
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
   constructor(props: any) {
     super(props);
