@@ -48,7 +48,16 @@ const firebaseConfig = {
 
 // Validate that all required config values are present
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.error('[Firebase] Missing required configuration. Check your .env.local file.');
+  const errorMsg = '[Firebase] CRITICAL: Missing required configuration. Firebase will not work!';
+  console.error(errorMsg);
+  console.error('[Firebase] Config values:', {
+    apiKey: firebaseConfig.apiKey ? 'present' : 'MISSING',
+    projectId: firebaseConfig.projectId ? 'present' : 'MISSING',
+    authDomain: firebaseConfig.authDomain ? 'present' : 'MISSING',
+    appId: firebaseConfig.appId ? 'present' : 'MISSING',
+  });
+  console.error('[Firebase] Constants.expoConfig:', Constants.expoConfig);
+  throw new Error('Firebase configuration is missing. Check that environment variables are properly set in app.config.js');
 }
 
 // Initialize Firebase
