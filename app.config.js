@@ -84,7 +84,7 @@ module.exports = {
       "firebaseStorageBucket": process.env.FIREBASE_STORAGE_BUCKET || "linkshift-c2725.firebasestorage.app",
       "firebaseMessagingSenderId": process.env.FIREBASE_MESSAGING_SENDER_ID || "518355942929",
       "firebaseAppId": process.env.FIREBASE_APP_ID || "1:518355942929:web:183f005b7c513873e03bb0",
-      "revenuecatApiKey": process.env.REVENUECAT_API_KEY || "sk_JdczdMuCfjmWXQXpQZhlRVlPEhShe",
+      "revenuecatApiKey": process.env.REVENUECAT_API_KEY || "goog_GRYWOsDimzOiVWFkRcOyutFByLc",
       "sentryDsn": process.env.SENTRY_DSN,
       "sentryDebug": process.env.SENTRY_DEBUG === 'true',
       "admobAppIdIos": process.env.ADMOB_APP_ID_IOS,
