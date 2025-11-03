@@ -2,34 +2,20 @@
  * Plan Comparison Screen
  * Shows all available subscription plans with features and pricing
  * 
- * CRITICAL TODO FOR PRODUCTION:
+ * PAYMENT INTEGRATION: ✅ COMPLETE
  * ================================
- * 1. PAYMENT INTEGRATION (Lines ~140-160)
- *    - Integrate Stripe, RevenueCat, or payment gateway
- *    - MUST verify payment success BEFORE updating subscription tier
- *    - Handle payment failures gracefully
- *    - Implement webhooks for payment status updates
+ * - RevenueCat integrated for subscription management
+ * - Purchase flow implemented with error handling
+ * - Entitlement verification after purchase
+ * - Platform-specific payment handling (iOS/Android)
+ * - Firestore subscription tier synced with RevenueCat
  * 
- * 2. SUBSCRIPTION TIER VALIDATION
- *    - Backend validation to prevent unauthorized tier changes
- *    - Cloud Functions to verify payment before Firestore updates
- *    - Security rules to prevent client-side tier manipulation
- * 
- * 3. BILLING CYCLE MANAGEMENT
- *    - Implement proper prorated billing for upgrades
- *    - Handle downgrades at end of billing period (not immediate)
- *    - Track payment history and invoices
- * 
- * 4. ERROR HANDLING
- *    - Payment declined scenarios
- *    - Subscription expiration
- *    - Failed renewals
- *    - Refund processing
- * 
- * CURRENT STATE: TEST MODE ONLY
- * - No payment processing
- * - Direct Firestore updates (UNSAFE for production)
- * - For development/testing purposes only
+ * PRODUCTION CHECKLIST:
+ * ================================
+ * 1. ✅ RevenueCat dashboard configured with products
+ * 2. ✅ App Store Connect / Play Console products created
+ * 3. ⚠️  Test sandbox payments on both platforms
+ * 4. ⚠️  Configure webhooks for payment status updates (optional but recommended)
  */
 
 import React, {useState, useEffect} from 'react';

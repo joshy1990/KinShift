@@ -20,6 +20,7 @@ module.exports = {
       "supportsTablet": true,
       "bundleIdentifier": "com.kinshift.app",
       "buildNumber": "1",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSUserNotificationUsageDescription": "KinShift uses notifications to inform you about shift updates, changes, and schedule conflicts in your households.",
         "NSLocationWhenInUseUsageDescription": "Your location is not used by KinShift but is required by some system features.",
@@ -34,12 +35,26 @@ module.exports = {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0F0F23"
-      }
+      },
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0F0F23",
+          "sounds": []
+        }
+      ],
       [
         "react-native-google-mobile-ads",
         {
