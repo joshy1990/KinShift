@@ -8,7 +8,6 @@ import {SubscriptionProvider} from './src/contexts/SubscriptionContext';
 import {RootNavigator} from './src/navigation/RootNavigator';
 import {notificationLinkingConfiguration} from './src/utils/notificationHandlers';
 import {initializeSentry, captureException} from './src/config/sentry.config';
-import * as Sentry from '@sentry/react-native';
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
   constructor(props: any) {
@@ -48,7 +47,7 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
-export default Sentry.wrap(function App() {
+function App() {
   // Initialize Sentry on app startup
   useEffect(() => {
     initializeSentry();
@@ -74,4 +73,6 @@ export default Sentry.wrap(function App() {
       </SafeAreaProvider>
     </ErrorBoundary>
   );
-});
+}
+
+export default App;

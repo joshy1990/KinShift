@@ -74,6 +74,12 @@ class RevenueCatService {
    */
   async initialize(userId: string): Promise<void> {
     try {
+      // Check if API key is valid
+      if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.startsWith('appl_')) {
+        console.warn('[RevenueCat] Invalid API key - skipping initialization');
+        return;
+      }
+
       // Initialize RevenueCat with API key
       await Purchases.configure({
         apiKey: REVENUECAT_API_KEY,
@@ -87,13 +93,13 @@ class RevenueCatService {
       // Setup purchase listener
       this.setupPurchaseListener();
 
-  this.initialized = true;
+      this.initialized = true;
 
       // Get initial customer info
       await this.refreshCustomerInfo();
     } catch (error) {
       console.error('[RevenueCat] Initialization failed:', error);
-      throw error;
+      // Don't throw - allow app to continue without RevenueCat
     }
   }
 
