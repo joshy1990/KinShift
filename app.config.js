@@ -69,7 +69,15 @@ module.exports = {
       "firebaseStorageBucket": process.env.FIREBASE_STORAGE_BUCKET,
       "firebaseMessagingSenderId": process.env.FIREBASE_MESSAGING_SENDER_ID,
       "firebaseAppId": process.env.FIREBASE_APP_ID,
-      "revenuecatApiKey": process.env.REVENUECAT_API_KEY
+      "revenuecatApiKey": process.env.REVENUECAT_API_KEY,
+      "sentryDsn": process.env.SENTRY_DSN,
+      "sentryDebug": process.env.SENTRY_DEBUG === 'true',
+      "admobAppIdIos": process.env.ADMOB_APP_ID_IOS,
+      "admobAppIdAndroid": process.env.ADMOB_APP_ID_ANDROID,
+      "admobBannerPortraitId": process.env.ADMOB_BANNER_PORTRAIT_ID,
+      "admobBannerLandscapeId": process.env.ADMOB_BANNER_LANDSCAPE_ID,
+      "admobInterstitialId": process.env.ADMOB_INTERSTITIAL_ID,
+      "admobRewardedId": process.env.ADMOB_REWARDED_ID
     }
   }
 };

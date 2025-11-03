@@ -11,9 +11,10 @@
 
 import * as Sentry from '@sentry/react-native';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-// Sentry DSN from environment variables
-const SENTRY_DSN = process.env.SENTRY_DSN || '';
+// Sentry DSN from expo-constants (configured in app.config.js)
+const SENTRY_DSN = Constants.expoConfig?.extra?.sentryDsn || '';
 
 // Only initialize if DSN is provided
 const SENTRY_ENABLED = SENTRY_DSN && SENTRY_DSN.startsWith('https://');
@@ -63,7 +64,7 @@ export const initializeSentry = (): void => {
       // Filter out sensitive data
       beforeSend(event, hint) {
         // Don't send events in development (unless you want to test)
-        if (__DEV__ && !process.env.SENTRY_DEBUG) {
+        if (__DEV__ && !Constants.expoConfig?.extra?.sentryDebug) {
           console.log('[Sentry] Event blocked in development:', event);
           return null;
         }

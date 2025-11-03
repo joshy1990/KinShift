@@ -11,14 +11,15 @@
  */
 
 import { BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import Constants from 'expo-constants';
 
 /**
- * Your AdMob App IDs - UPDATE THESE
+ * Your AdMob App IDs - loaded from expo-constants
  * Get from: https://admob.google.com → Apps
  */
 export const ADMOB_APP_IDS = {
-  ios: process.env.ADMOB_APP_ID_IOS || 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your iOS App ID
-  android: process.env.ADMOB_APP_ID_ANDROID || 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your Android App ID
+  ios: Constants.expoConfig?.extra?.admobAppIdIos || 'ca-app-pub-xxxxxxxxxxxxxxxx',
+  android: Constants.expoConfig?.extra?.admobAppIdAndroid || 'ca-app-pub-xxxxxxxxxxxxxxxx',
 };
 
 /**
@@ -34,21 +35,21 @@ export const AD_UNIT_IDS = {
   // Banner Ads
   bannerPortrait: __DEV__
     ? TestIds.BANNER // Test ID during development
-    : process.env.ADMOB_BANNER_PORTRAIT_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy', // Production Banner Ad Unit ID
+    : Constants.expoConfig?.extra?.admobBannerPortraitId || 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy',
 
   bannerLandscape: __DEV__
     ? TestIds.BANNER
-    : process.env.ADMOB_BANNER_LANDSCAPE_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/zzzzzzzzzz', // Production Landscape Banner Ad Unit ID
+    : Constants.expoConfig?.extra?.admobBannerLandscapeId || 'ca-app-pub-xxxxxxxxxxxxxxxx/zzzzzzzzzz',
 
   // Interstitial Ads (full-screen ads)
   interstitial: __DEV__
     ? TestIds.INTERSTITIAL
-    : process.env.ADMOB_INTERSTITIAL_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/aaaaaaaaaa', // Production Interstitial Ad Unit ID
+    : Constants.expoConfig?.extra?.admobInterstitialId || 'ca-app-pub-xxxxxxxxxxxxxxxx/aaaaaaaaaa',
 
   // Rewarded Ads (video ads with reward)
   rewarded: __DEV__
     ? TestIds.REWARDED
-    : process.env.ADMOB_REWARDED_ID || 'ca-app-pub-xxxxxxxxxxxxxxxx/bbbbbbbbbb', // Production Rewarded Ad Unit ID
+    : Constants.expoConfig?.extra?.admobRewardedId || 'ca-app-pub-xxxxxxxxxxxxxxxx/bbbbbbbbbb',
 };
 
 /**
