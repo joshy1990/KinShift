@@ -38,12 +38,12 @@ console.warn = function(...args: any[]) {
 
 // Firebase configuration from app.config.js extra
 const firebaseConfig = {
-  apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
-  authDomain: Constants.expoConfig?.extra?.firebaseAuthDomain,
-  projectId: Constants.expoConfig?.extra?.firebaseProjectId,
-  storageBucket: Constants.expoConfig?.extra?.firebaseStorageBucket,
-  messagingSenderId: Constants.expoConfig?.extra?.firebaseMessagingSenderId,
-  appId: Constants.expoConfig?.extra?.firebaseAppId,
+  apiKey: Constants.expoConfig?.extra?.firebaseApiKey || 'AIzaSyAlpo7Wi29uqY3coh0EjXWsmjaZfdmxo7c',
+  authDomain: Constants.expoConfig?.extra?.firebaseAuthDomain || 'linkshift-c2725.firebaseapp.com',
+  projectId: Constants.expoConfig?.extra?.firebaseProjectId || 'linkshift-c2725',
+  storageBucket: Constants.expoConfig?.extra?.firebaseStorageBucket || 'linkshift-c2725.firebasestorage.app',
+  messagingSenderId: Constants.expoConfig?.extra?.firebaseMessagingSenderId || '518355942929',
+  appId: Constants.expoConfig?.extra?.firebaseAppId || '1:518355942929:web:183f005b7c513873e03bb0',
 };
 
 // Validate that all required config values are present

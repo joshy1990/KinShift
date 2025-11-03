@@ -11,8 +11,10 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// RevenueCat API Key - loaded from app.config.js extra
-const REVENUECAT_API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || 'appl_XXXXXXXXXXXXXXXXXXXXxx';
+// RevenueCat API Key - loaded from app.config.js extra with fallback
+// NOTE: Mobile apps need PUBLIC keys (different from server secret keys)
+// For now, if no valid public key, skip RevenueCat initialization
+const REVENUECAT_API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || '';
 
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {
@@ -74,9 +76,9 @@ class RevenueCatService {
    */
   async initialize(userId: string): Promise<void> {
     try {
-      // Check if API key is valid
-      if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.startsWith('appl_')) {
-        console.warn('[RevenueCat] Invalid API key - skipping initialization');
+      // Check if API key is valid (must be public key for mobile, not secret key)
+      if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.startsWith('sk_') || REVENUECAT_API_KEY.startsWith('appl_')) {
+        console.warn('[RevenueCat] No valid public API key - skipping initialization. RevenueCat requires platform-specific public keys for mobile apps.');
         return;
       }
 
