@@ -42,8 +42,9 @@ yarn-error.*
 /android
 
 # Firebase config files (SECURITY: Never commit these!)
-google-services.json
-GoogleService-Info.plist
+# TEMPORARILY COMMENTED FOR EAS BUILD TESTING - UNCOMMENT AFTER BUILD
+# google-services.json
+# GoogleService-Info.plist
 
 # Service account keys (SECURITY: Never commit these!)
 kinshift-service-account.json

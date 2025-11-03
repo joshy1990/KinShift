@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "518355942929",
+  "project_id": "kinshift-c2725",
+  "storage_bucket": "kinshift-c2725.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:518355942929:android:9ba3711a1d57e551e03bb0",
+        "android_client_info": {
+          "package_name": "com.kinshift.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJW6xjT-aHCk_cGAV9FIDemaoLJGN1Tro"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
