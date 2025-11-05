@@ -12,7 +12,7 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useAuth} from '@/contexts/AuthContext';
 import {notificationService} from '@/services/notification.service';
 import {db, COLLECTIONS} from '@/config/firebase.config';
-import {doc, getDoc, setDoc} from 'firebase/firestore';
+import {doc, getDoc, setDoc} from '@/config/firestore.compat';
 import {showError, showSuccess, showAlert} from '@/utils/alert';
 
 type RootStackParamList = {

@@ -150,7 +150,7 @@ export class CustomPatternService {
       const snapshot = await getDocs(q);
       const patterns: CustomPattern[] = [];
 
-      snapshot.forEach(doc => {
+      snapshot.docs.forEach(doc => {
         const data = doc.data();
         patterns.push({
           id: doc.id,

@@ -10,9 +10,8 @@ import {
   where,
   orderBy,
   onSnapshot,
-  QueryConstraint,
   getDocs,
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { Notification } from '@/types';
 
@@ -58,7 +57,9 @@ class NotificationSubscriptionManager {
     let unsubscribe: (() => void) | null = null;
 
     try {
-      const constraints: QueryConstraint[] = [where('userId', '==', userId)];
+      // Build query
+    const notificationsRef = collection(db, 'notifications');
+    const constraints: any[] = [where('userId', '==', userId)];
 
       if (options?.unreadOnly) {
         constraints.push(where('read', '==', false));

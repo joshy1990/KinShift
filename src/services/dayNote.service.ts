@@ -345,7 +345,7 @@ class DayNoteService {
         const recipientList = Array.from(recipientUserIds);
 
         recipientList.forEach((userId) => {
-          const notificationRef = doc(collection(db, COLLECTIONS.NOTIFICATIONS));
+          const notificationRef = collection(db, COLLECTIONS.NOTIFICATIONS).doc();
           const notification = {
             id: notificationRef.id,
             userId,
@@ -414,7 +414,7 @@ class DayNoteService {
       const batch = writeBatch(db);
       
       Array.from(workingUserIds).forEach((userId) => {
-        const notificationRef = doc(collection(db, COLLECTIONS.NOTIFICATIONS));
+        const notificationRef = collection(db, COLLECTIONS.NOTIFICATIONS).doc();
         const notification = {
           id: notificationRef.id,
           userId,

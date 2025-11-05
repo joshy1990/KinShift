@@ -16,7 +16,7 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
 import {showError, showSuccess, showConfirm} from '@/utils/alert';
-import {getAuth, sendPasswordResetEmail} from 'firebase/auth';
+import auth from '@react-native-firebase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -103,8 +103,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
       async () => {
         setLoading(true);
         try {
-          const auth = getAuth();
-          await sendPasswordResetEmail(auth, email);
+          await auth().sendPasswordResetEmail(email);
           showSuccess('Password reset email sent! Check the Firebase Emulator console for the link.');
         } catch (error: any) {
           console.error('❌ Password reset error:', error);

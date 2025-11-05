@@ -5,7 +5,7 @@
 
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 
 const STORAGE_KEY = 'expo_push_token';

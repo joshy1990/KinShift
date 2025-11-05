@@ -238,3 +238,16 @@ export const onSnapshot = (
     onError
   );
 };
+
+// Field value helpers
+export const arrayUnion = (...elements: any[]) => firestore.FieldValue.arrayUnion(...elements);
+export const arrayRemove = (...elements: any[]) => firestore.FieldValue.arrayRemove(...elements);
+export const serverTimestamp = () => firestore.FieldValue.serverTimestamp();
+export const increment = (n: number) => firestore.FieldValue.increment(n);
+export const deleteField = () => firestore.FieldValue.delete();
+
+// Export type aliases
+export type DocumentSnapshot = any;
+export type QuerySnapshot = any;
+export type Unsubscribe = () => void;
+export type QueryConstraint = any;

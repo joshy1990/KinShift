@@ -1,65 +1,80 @@
 // Jest setup file for tests
-// Mock Firebase for testing
+// Mock React Native Firebase for testing
 
-jest.mock('firebase/app', () => ({
-  initializeApp: jest.fn(() => ({})),
-  getApp: jest.fn(() => ({})),
+jest.mock('@react-native-firebase/app', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({})),
 }));
 
-jest.mock('firebase/storage', () => ({
-  getStorage: jest.fn(() => ({})),
+jest.mock('@react-native-firebase/auth', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    currentUser: null,
+    createUserWithEmailAndPassword: jest.fn(),
+    signInWithEmailAndPassword: jest.fn(),
+    signOut: jest.fn(),
+    sendPasswordResetEmail: jest.fn(),
+    onAuthStateChanged: jest.fn(),
+  })),
+  EmailAuthProvider: {
+    credential: jest.fn(),
+  },
 }));
 
-jest.mock('firebase/firestore', () => {
-  const defaultSnapshot = { docs: [], empty: true, forEach: jest.fn(), size: 0 };
+jest.mock('@react-native-firebase/firestore', () => {
+  const mockCollection = jest.fn(() => mockCollection);
+  const mockDoc = jest.fn(() => mockDoc);
+  const mockGet = jest.fn(() => Promise.resolve({ exists: true, id: 'mock-id', data: () => ({}) }));
+  
+  mockCollection.doc = mockDoc;
+  mockCollection.get = mockGet;
+  mockCollection.where = jest.fn(() => mockCollection);
+  mockCollection.orderBy = jest.fn(() => mockCollection);
+  mockCollection.limit = jest.fn(() => mockCollection);
+  mockCollection.add = jest.fn(() => Promise.resolve({ id: 'mock-id' }));
+  
+  mockDoc.get = mockGet;
+  mockDoc.set = jest.fn(() => Promise.resolve());
+  mockDoc.update = jest.fn(() => Promise.resolve());
+  mockDoc.delete = jest.fn(() => Promise.resolve());
+  mockDoc.collection = mockCollection;
+  
   return {
-    getFirestore: jest.fn(),
-    initializeFirestore: jest.fn(),
-    collection: jest.fn((...args) => ({ __type: 'collection', args })),
-    doc: jest.fn((...args) => ({ __type: 'doc', args })),
-    query: jest.fn((...args) => ({ __type: 'query', args })),
-    orderBy: jest.fn((..._args) => ({ __type: 'orderBy' })),
-    limit: jest.fn((..._args) => ({ __type: 'limit' })),
-    startAfter: jest.fn((..._args) => ({ __type: 'startAfter' })),
-    endBefore: jest.fn((..._args) => ({ __type: 'endBefore' })),
-    startAt: jest.fn((..._args) => ({ __type: 'startAt' })),
-    where: jest.fn((..._args) => ({ __type: 'where' })),
-    getDocs: jest.fn(async () => defaultSnapshot),
-    getDoc: jest.fn(async () => ({ exists: () => true, id: 'mock-id', data: () => ({}) })),
-    addDoc: jest.fn(async () => ({ id: 'mock-id' })),
-    updateDoc: jest.fn(async () => undefined),
-    deleteDoc: jest.fn(async () => undefined),
-    serverTimestamp: jest.fn(() => new Date()),
-    onSnapshot: jest.fn((...args) => {
-      const success = args.find((a) => typeof a === 'function');
-      // schedule on next tick to work with tests using done()
-      if (success) {
-        setTimeout(() => {
-          try { success(defaultSnapshot); } catch (_e) {}
-        }, 0);
-      }
-      return jest.fn(); // unsubscribe
-    }),
-    setDoc: jest.fn(async () => undefined),
-    writeBatch: jest.fn(() => ({
-      set: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      commit: jest.fn(async () => undefined),
+    __esModule: true,
+    default: jest.fn(() => ({
+      collection: mockCollection,
+      doc: mockDoc,
+      batch: jest.fn(() => ({
+        set: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        commit: jest.fn(() => Promise.resolve()),
+      })),
+      settings: jest.fn(),
     })),
-    Timestamp: jest.fn(() => ({ toDate: () => new Date() })),
-    arrayUnion: jest.fn((...values) => ({ __op: 'arrayUnion', values })),
-    arrayRemove: jest.fn((...values) => ({ __op: 'arrayRemove', values })),
-    increment: jest.fn((n = 1) => ({ __op: 'increment', by: n })),
+    Timestamp: {
+      now: jest.fn(() => ({ toDate: () => new Date() })),
+      fromDate: jest.fn((date) => ({ toDate: () => date })),
+    },
+    FieldValue: {
+      serverTimestamp: jest.fn(() => new Date()),
+      arrayUnion: jest.fn((...values) => ({ __op: 'arrayUnion', values })),
+      arrayRemove: jest.fn((...values) => ({ __op: 'arrayRemove', values })),
+      increment: jest.fn((n = 1) => ({ __op: 'increment', by: n })),
+      delete: jest.fn(() => ({ __op: 'delete' })),
+    },
   };
 });
 
-jest.mock('firebase/auth', () => ({
-  getAuth: jest.fn(),
-  signInWithEmailAndPassword: jest.fn(),
-  createUserWithEmailAndPassword: jest.fn(),
-  signOut: jest.fn(),
-  onAuthStateChanged: jest.fn(),
+jest.mock('@react-native-firebase/storage', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    ref: jest.fn(() => ({
+      putFile: jest.fn(() => Promise.resolve()),
+      getDownloadURL: jest.fn(() => Promise.resolve('https://example.com/file.jpg')),
+      delete: jest.fn(() => Promise.resolve()),
+    })),
+  })),
 }));
 
 // Mock AsyncStorage

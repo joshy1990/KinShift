@@ -573,7 +573,7 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
         // Validate required fields (householdId is optional for personal mode)
         this.validateRequired(shiftData, ['ownerId', 'title', 'startTime', 'endTime']);
 
-        const shiftRef = doc(collection(db, this.collection));
+        const shiftRef = collection(db, this.collection).doc();
         const shift: Omit<Shift, 'id'> = {
           ...shiftData,
           title: this.sanitizeString(shiftData.title),
@@ -651,7 +651,7 @@ return {
     const querySnapshot = await getDocs(q);
     const messages: ShiftMessage[] = [];
 
-    querySnapshot.forEach((doc) => {
+    querySnapshot.docs.forEach((doc) => {
       messages.push({ id: doc.id, ...doc.data() } as ShiftMessage);
     });
 
@@ -720,7 +720,7 @@ return {
     const querySnapshot = await getDocs(q);
     const messages: DayMessage[] = [];
 
-    querySnapshot.forEach((doc) => {
+    querySnapshot.docs.forEach((doc) => {
       messages.push({ id: doc.id, ...doc.data() } as DayMessage);
     });
 

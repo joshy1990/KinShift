@@ -13,7 +13,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { BannerAdSize, TestIds } from '@/services/admob.service';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { subscriptionService } from '@/services/subscription.service';
 import { admobService, getBannerAdUnitId } from '@/services/admob.service';
@@ -121,9 +121,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({
     return null;
   }
 
-  // Render real Google ad
-  const adUnitId = getBannerAdUnitId(false);
-
+  // Render placeholder - ads coming soon
   return (
     <View style={[
       styles.container,
@@ -131,29 +129,9 @@ export const AdBanner: React.FC<AdBannerProps> = ({
         height: adHeight,
       }
     ]}>
-      <BannerAd
-        unitId={adUnitId}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        requestOptions={{
-          requestNonPersonalizedAdsOnly: false,
-          keywords: ['shift', 'work', 'family', 'schedule', 'household'],
-          contentUrl: 'https://kinshift.app',
-        }}
-        onAdFailedToLoad={(error) => {
-          console.error('[AdBanner] Ad failed to load:', error);
-          // Fallback to placeholder on error
-          setIsAdLoading(false);
-        }}
-        onAdLoaded={() => {
-          console.log('[AdBanner] Ad loaded successfully');
-          setIsAdLoading(false);
-        }}
-      />
-      {isAdLoading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#6366F1" />
-        </View>
-      )}
+      <View style={styles.adPlaceholder}>
+        <Text style={styles.adPlaceholderText}>Ads Coming Soon</Text>
+      </View>
     </View>
   );
 };
@@ -175,6 +153,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(26, 26, 46, 0.8)',
+  },
+  adPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  adPlaceholderText: {
+    color: '#666',
+    fontSize: 12,
   },
 });
 

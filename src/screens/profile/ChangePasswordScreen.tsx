@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
-import {getAuth, EmailAuthProvider, reauthenticateWithCredential, updatePassword} from 'firebase/auth';
+import auth from '@react-native-firebase/auth';
 import {getResponsiveValue, spacing, typography, borderRadius} from '@/utils/responsive';
 import {showError, showSuccess} from '@/utils/alert';
 import {useAuth} from '@/contexts/AuthContext';
@@ -59,19 +59,18 @@ export const ChangePasswordScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      const auth = getAuth();
-      const user = auth.currentUser;
+      const user = auth().currentUser;
 
       if (!user || !user.email) {
         throw new Error('No authenticated user found');
       }
 
       // Re-authenticate user (required by Firebase before password change)
-      const credential = EmailAuthProvider.credential(user.email, currentPassword);
-      await reauthenticateWithCredential(user, credential);
+      const credential = auth.EmailAuthProvider.credential(user.email, currentPassword);
+      await user.reauthenticateWithCredential(credential);
 
       // Update password
-      await updatePassword(user, newPassword);
+      await user.updatePassword(newPassword);
 
       showSuccess('Password changed successfully! You will be signed out now to verify your new password.');
       
