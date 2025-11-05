@@ -1,7 +1,7 @@
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, User as FirebaseUser, onAuthStateChanged, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch } from '@/config/firestore.compat';
 import {User} from '@/types/index';
-import { auth, db, COLLECTIONS } from '@/config/firebase.config';
+import { db, COLLECTIONS } from '@/config/firebase.config';
 import { householdService } from './household.service';
 
 class AuthService {
@@ -10,11 +10,11 @@ class AuthService {
    */
   async signUpWithEmail(email: string, password: string, name: string): Promise<User> {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
       const {uid} = userCredential.user;
 
       // Update display name
-      await updateProfile(userCredential.user, {displayName: name});
+      await userCredential.user.updateProfile({displayName: name});
 
       // Create user document in Firestore
       const userData: User = {
@@ -25,7 +25,7 @@ class AuthService {
         updatedAt: new Date(),
       };
 
-      await setDoc(doc(db, COLLECTIONS.USERS, uid), userData);
+      await db.collection(COLLECTIONS.USERS).doc(uid).set(userData);
 
       return userData;
     } catch (error: any) {
@@ -38,7 +38,7 @@ class AuthService {
    */
   async signInWithEmail(email: string, password: string): Promise<User> {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth().signInWithEmailAndPassword(email, password);
       const uid = userCredential.user.uid;
       try {
         const user = await this.getUserData(uid);
@@ -55,7 +55,7 @@ class AuthService {
           updatedAt: new Date(),
         };
         try {
-          await setDoc(doc(db, COLLECTIONS.USERS, uid), fallbackUser);
+          await db.collection(COLLECTIONS.USERS).doc(uid).set(fallbackUser);
         } catch (setDocError) {
           console.error('[AuthService] Failed to create user doc:', setDocError);
         }
@@ -72,7 +72,7 @@ class AuthService {
    */
   async signOut(): Promise<void> {
     try {
-      await signOut(auth);
+      await auth().signOut();
     } catch (error: any) {
       throw new Error('Failed to sign out');
     }
@@ -82,7 +82,7 @@ class AuthService {
    * Get current user
    */
   getCurrentUser(): User | null {
-    const firebaseUser = auth.currentUser;
+    const firebaseUser = auth().currentUser;
     if (!firebaseUser) {
       return null;
     }
@@ -152,7 +152,7 @@ class AuthService {
       });
 
       // Update Firebase Auth profile if name or photo changed
-      const currentUser = auth.currentUser;
+      const currentUser = auth().currentUser;
       if (currentUser) {
         const profileUpdates: any = {};
         if (updates.name) {
@@ -162,7 +162,7 @@ class AuthService {
           profileUpdates.photoURL = updates.photoUrl;
         }
         if (Object.keys(profileUpdates).length > 0) {
-          await updateProfile(currentUser, profileUpdates);
+          await currentUser.updateProfile(profileUpdates);
         }
       }
     } catch {
@@ -175,8 +175,7 @@ class AuthService {
    */
   async resetPassword(email: string): Promise<void> {
     try {
-      const { sendPasswordResetEmail } = await import('firebase/auth');
-      await sendPasswordResetEmail(auth, email);
+      await auth().sendPasswordResetEmail(email);
     } catch (error: any) {
       throw this.handleAuthError(error);
     }
@@ -188,14 +187,14 @@ class AuthService {
    */
   async deleteAccount(password: string): Promise<void> {
     try {
-      const currentUser = auth.currentUser;
+      const currentUser = auth().currentUser;
       if (!currentUser || !currentUser.email) {
         throw new Error('No authenticated user found');
       }
 
       // Re-authenticate user before deletion (Firebase requires this for security)
-      const credential = EmailAuthProvider.credential(currentUser.email, password);
-      await reauthenticateWithCredential(currentUser, credential);
+      const credential = auth.EmailAuthProvider.credential(currentUser.email, password);
+      await currentUser.reauthenticateWithCredential(credential);
 
       const userId = currentUser.uid;
       const batch = writeBatch(db);
@@ -226,7 +225,7 @@ class AuthService {
             where('householdId', '==', householdDoc.id)
           );
           const householdShiftsSnapshot = await getDocs(householdShiftsQuery);
-          householdShiftsSnapshot.forEach((shiftDoc) => {
+          householdShiftsSnapshot.docs.forEach((shiftDoc: any) => {
             batch.delete(shiftDoc.ref);
           });
 
@@ -236,7 +235,7 @@ class AuthService {
             where('householdId', '==', householdDoc.id)
           );
           const householdNotesSnapshot = await getDocs(householdNotesQuery);
-          householdNotesSnapshot.forEach((noteDoc) => {
+          householdNotesSnapshot.docs.forEach((noteDoc: any) => {
             batch.delete(noteDoc.ref);
           });
         } else {
@@ -273,7 +272,7 @@ class AuthService {
         where('ownerId', '==', userId)
       );
       const shiftsSnapshot = await getDocs(shiftsQuery);
-      shiftsSnapshot.forEach((shiftDoc) => {
+      shiftsSnapshot.docs.forEach((shiftDoc: any) => {
         batch.delete(shiftDoc.ref);
       });
 
@@ -283,7 +282,7 @@ class AuthService {
         where('authorId', '==', userId)
       );
       const notesSnapshot = await getDocs(notesQuery);
-      notesSnapshot.forEach((noteDoc) => {
+      notesSnapshot.docs.forEach((noteDoc: any) => {
         batch.delete(noteDoc.ref);
       });
 
@@ -318,7 +317,7 @@ class AuthService {
       }
 
       // Delete Firebase Auth account
-      await deleteUser(currentUser);
+      await currentUser.delete();
     } catch (error: any) {
       if (error.code === 'auth/wrong-password') {
         throw new Error('Incorrect password');
@@ -333,7 +332,7 @@ class AuthService {
    * Listen to auth state changes
    */
   onAuthStateChanged(callback: (user: User | null) => void): () => void {
-    return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    return auth().onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         try {
           const userData = await this.getUserData(firebaseUser.uid);

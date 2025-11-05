@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Timestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Timestamp, writeBatch } from '@/config/firestore.compat';
 import {Invitation, User} from '@/types';
 import {householdService} from './household.service';
 import {notificationService} from './notification.service';

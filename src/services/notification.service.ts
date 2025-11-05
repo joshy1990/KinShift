@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Notification Service
  * Handles all notification operations
  * Uses Expo Notifications for push + Firestore for storage
@@ -18,7 +18,7 @@ import {
   onSnapshot,
   writeBatch,
   getDoc,
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { Notification, Shift } from '@/types';
 import {
@@ -324,7 +324,7 @@ const sendPushNotificationToUser = async (
         if (result.errors) {
           console.warn('Expo push error:', result.errors);
         } else {
-          console.log('✅ Push sent via Expo to token:', message.to.substring(0, 10) + '...');
+          console.log('? Push sent via Expo to token:', message.to.substring(0, 10) + '...');
         }
       } catch (error) {
         console.error('Error sending individual push notification:', error);
@@ -388,7 +388,7 @@ const notifyMultipleShiftsCreated = async (
 ): Promise<void> => {
   try {
     const payload = {
-      title: '📅 Multiple Shifts Added',
+      title: '?? Multiple Shifts Added',
       body: `${creatorName || 'Team Member'} added ${shifts.length} new shifts to ${household.name}`,
       data: {
         type: 'shifts_created',

@@ -12,7 +12,7 @@ import {
   onSnapshot,
   writeBatch,
   deleteDoc,
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { DayNote } from '@/types';
 import { COLLECTIONS } from '@/config/firebase.config';

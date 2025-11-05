@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, setDoc, updateDoc, addDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, updateDoc, addDoc, getDoc } from '@/config/firestore.compat';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 import { notificationService } from './notification.service';
 import { rbacService, AuditAction } from './rbac.service';

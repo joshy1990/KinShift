@@ -16,7 +16,7 @@ import {
   onSnapshot,
   Unsubscribe,
   QueryConstraint
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { Shift, ShiftMessage, DayMessage, User, ShiftType } from '@/types';
 import { BaseService, ServiceError } from './base.service';

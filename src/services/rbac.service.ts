@@ -4,7 +4,7 @@
  * Provides consistent permission checks and security enforcement
  */
 
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { Household, User } from '@/types';
 import { auditService } from './audit.service';

@@ -47,6 +47,7 @@ module.exports = {
       "bundler": "metro"
     },
     "plugins": [
+      "@react-native-firebase/app",
       [
         "expo-notifications",
         {

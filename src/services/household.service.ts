@@ -12,7 +12,7 @@ import {
   writeBatch,
   DocumentSnapshot,
   QuerySnapshot 
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import {Household, HouseholdSettings, HouseholdMember} from '@/types';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 import {subscriptionService} from './subscription.service';
@@ -756,7 +756,7 @@ class HouseholdService {
 }
 
 // Add missing imports
-import { onSnapshot } from 'firebase/firestore';
+import { onSnapshot } from '@/config/firestore.compat';
 
 const { USERS } = COLLECTIONS;
 

@@ -14,7 +14,7 @@ import {
   query,
   where,
   orderBy,
-} from 'firebase/firestore';
+} from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import { CustomPattern, PatternCell, PatternPreview } from '@/types/customPattern';
 import { ShiftType } from '@/types';
