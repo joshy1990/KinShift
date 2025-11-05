@@ -54,14 +54,15 @@ module.exports = {
           "color": "#0F0F23",
           "sounds": []
         }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": process.env.ADMOB_APP_ID_ANDROID || "ca-app-pub-xxxxxxxxxxxxxxxx",
-          "iosAppId": process.env.ADMOB_APP_ID_IOS || "ca-app-pub-xxxxxxxxxxxxxxxx"
-        }
       ]
+      // AdMob plugin temporarily disabled - launching ad-free, will enable after user base grows
+      // [
+      //   "react-native-google-mobile-ads",
+      //   {
+      //     "androidAppId": process.env.ADMOB_APP_ID_ANDROID || "ca-app-pub-xxxxxxxxxxxxxxxx",
+      //     "iosAppId": process.env.ADMOB_APP_ID_IOS || "ca-app-pub-xxxxxxxxxxxxxxxx"
+      //   }
+      // ]
       // Sentry plugin temporarily disabled - will re-enable after adding SENTRY_AUTH_TOKEN to EAS
       // [
       //   "@sentry/react-native/expo",
