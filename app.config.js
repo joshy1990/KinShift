@@ -49,10 +49,16 @@ module.exports = {
     "plugins": [
       "@react-native-firebase/app",
       [
+        "@react-native-firebase/messaging",
+        {
+          "default_notification_icon": "notification_icon",
+          "default_notification_color": "#0F0F23"
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#0F0F23",
           "sounds": []
         }
       ]
