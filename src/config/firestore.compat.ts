@@ -28,7 +28,7 @@ export const doc = (firestoreInstance: any, collectionPath: string, ...pathSegme
 /**
  * Get a collection reference
  */
-export const collection = (firestore: any, collectionPath: string, ...pathSegments: string[]) => {
+export const collection = (firestoreInstance: any, collectionPath: string, ...pathSegments: string[]) => {
   const fullPath = [collectionPath, ...pathSegments].join('/');
   const parts = fullPath.split('/');
   
@@ -36,6 +36,9 @@ export const collection = (firestore: any, collectionPath: string, ...pathSegmen
   for (const part of parts) {
     ref = ref.collection(part);
   }
+  
+  // Return the native collection reference directly
+  // It already has all the methods (.add, .get, .where, etc.)
   return ref;
 };
 
@@ -91,8 +94,15 @@ export const updateDoc = async (docRef: any, data: any) => {
  * Add a document to a collection
  */
 export const addDoc = async (collectionRef: any, data: any) => {
-  const docRef = await collectionRef.add(data);
-  return docRef;
+  // React Native Firebase v22+ uses add() directly on collection
+  // Older versions might have deprecated it
+  try {
+    const docRef = await collectionRef.add(data);
+    return docRef;
+  } catch (error) {
+    console.error('[Firestore Compat] addDoc failed:', error);
+    throw error;
+  }
 };
 
 /**
