@@ -215,15 +215,17 @@ export const onSnapshot = (
     (snapshot: any) => {
       if ('docs' in snapshot) {
         // Query snapshot
+        const docs = snapshot.docs.map((doc: any) => ({
+          exists: () => doc.exists,
+          data: () => doc.data(),
+          id: doc.id,
+          ref: doc.ref,
+        }));
         onNext({
-          docs: snapshot.docs.map((doc: any) => ({
-            exists: () => doc.exists,
-            data: () => doc.data(),
-            id: doc.id,
-            ref: doc.ref,
-          })),
+          docs,
           empty: snapshot.empty,
           size: snapshot.size,
+          forEach: (callback: (doc: any) => void) => docs.forEach(callback),
         });
       } else {
         // Document snapshot
