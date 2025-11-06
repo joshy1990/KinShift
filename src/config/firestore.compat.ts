@@ -94,11 +94,9 @@ export const updateDoc = async (docRef: any, data: any) => {
  * Add a document to a collection
  */
 export const addDoc = async (collectionRef: any, data: any) => {
-  // React Native Firebase v22+ uses add() directly on collection
-  // Older versions might have deprecated it
   try {
     const docRef = await collectionRef.add(data);
-    return docRef;
+    return { id: docRef.id };
   } catch (error) {
     console.error('[Firestore Compat] addDoc failed:', error);
     throw error;

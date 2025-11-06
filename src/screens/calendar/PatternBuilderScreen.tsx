@@ -8,6 +8,7 @@ import {
   ScrollView,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -72,7 +73,10 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
       // Fill Week 2 to match Week 1 (repeat the 7-day pattern)
       const newCells = [...cells];
       for (let i = 0; i < 7; i++) {
-        newCells[7 + i] = { ...newCells[i] };
+        newCells[7 + i] = { 
+          ...newCells[i],
+          day: 8 + i // Ensure correct day numbering for Week 2 (8-14)
+        };
       }
       setCells(newCells);
     }
@@ -414,6 +418,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.md,
+    paddingBottom: Platform.OS === 'android' ? 120 : 80, // Extra padding for Android navigation
   },
   header: {
     marginBottom: spacing.lg,
