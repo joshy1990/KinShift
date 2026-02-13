@@ -41,18 +41,48 @@ export enum AuditAction {
 
 class RBACService {
   /**
+   * In-memory cache for household docs to avoid re-fetching on every RBAC check.
+   * Entries expire after CACHE_TTL_MS to stay reasonably fresh.
+   */
+  private householdCache = new Map<string, { data: Household; fetchedAt: number }>();
+  private static readonly CACHE_TTL_MS = 30_000; // 30 seconds
+
+  private async getCachedHousehold(householdId: string): Promise<Household | null> {
+    const cached = this.householdCache.get(householdId);
+    if (cached && Date.now() - cached.fetchedAt < RBACService.CACHE_TTL_MS) {
+      return cached.data;
+    }
+
+    try {
+      const householdRef = doc(db, 'households', householdId);
+      const householdDoc = await getDoc(householdRef);
+      if (!householdDoc.exists()) return null;
+
+      const data = householdDoc.data() as Household;
+      this.householdCache.set(householdId, { data, fetchedAt: Date.now() });
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Invalidate a specific household from cache (call after mutations) */
+  invalidateHousehold(householdId: string): void {
+    this.householdCache.delete(householdId);
+  }
+
+  /** Clear the entire cache (call on sign-out) */
+  clearCache(): void {
+    this.householdCache.clear();
+  }
+
+  /**
    * Check if user is a household admin
    */
   async isHouseholdAdmin(householdId: string, userId: string): Promise<boolean> {
     try {
-      const householdRef = doc(db, 'households', householdId);
-      const householdDoc = await getDoc(householdRef);
-      
-      if (!householdDoc.exists()) {
-        return false;
-      }
-
-      const household = householdDoc.data() as Household;
+      const household = await this.getCachedHousehold(householdId);
+      if (!household) return false;
       return Array.isArray(household.admins) && household.admins.includes(userId);
     } catch (error) {
       console.error('Error checking admin status:', error);
@@ -65,14 +95,8 @@ class RBACService {
    */
   async isHouseholdMember(householdId: string, userId: string): Promise<boolean> {
     try {
-      const householdRef = doc(db, 'households', householdId);
-      const householdDoc = await getDoc(householdRef);
-      
-      if (!householdDoc.exists()) {
-        return false;
-      }
-
-      const household = householdDoc.data() as Household;
+      const household = await this.getCachedHousehold(householdId);
+      if (!household) return false;
       return (
         (Array.isArray(household.members) && household.members.includes(userId)) ||
         (Array.isArray(household.admins) && household.admins.includes(userId))
@@ -228,10 +252,8 @@ class RBACService {
     operatorUserId: string
   ): Promise<RBACResult> {
     try {
-      const householdRef = doc(db, 'households', householdId);
-      const householdDoc = await getDoc(householdRef);
-
-      if (!householdDoc.exists()) {
+      const household = await this.getCachedHousehold(householdId);
+      if (!household) {
         return {
           allowed: false,
           reason: 'Household not found',
@@ -239,7 +261,6 @@ class RBACService {
         };
       }
 
-      const household = householdDoc.data() as Household;
       const adminCount = household.admins?.length || 0;
       const isTargetAdmin = household.admins?.includes(targetUserId);
 
@@ -303,10 +324,8 @@ class RBACService {
     creatorId: string
   ): Promise<RBACResult> {
     try {
-      const householdRef = doc(db, 'households', householdId);
-      const householdDoc = await getDoc(householdRef);
-
-      if (!householdDoc.exists()) {
+      const household = await this.getCachedHousehold(householdId);
+      if (!household) {
         return {
           allowed: false,
           reason: 'Household not found',
@@ -314,7 +333,6 @@ class RBACService {
         };
       }
 
-      const household = householdDoc.data() as Household;
       const memberCount = (household.members?.length || 0) + (household.admins?.length || 0);
 
       // Get subscription service dynamically to avoid circular dependency
@@ -331,7 +349,12 @@ class RBACService {
         }
       } catch (error) {
         console.warn('Could not check subscription limits:', error);
-        // Don't block if we can't verify limits - fail open
+        // Fail-closed: deny operation if we can't verify subscription limits
+        return {
+          allowed: false,
+          reason: 'Unable to verify subscription limits. Please try again.',
+          code: 'INVALID_STATE',
+        };
       }
 
       return { allowed: true };

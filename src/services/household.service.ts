@@ -314,24 +314,25 @@ class HouseholdService {
         return;
       }
 
-      // Use batch to update all shifts
-      const batch = writeBatch(db);
-      let migratedCount = 0;
-
-      shiftsSnapshot.docs.forEach((shiftDoc) => {
+      // Filter to shifts that need migration
+      const docsToMigrate = shiftsSnapshot.docs.filter((shiftDoc) => {
         const shift = shiftDoc.data();
-        
-        // Only migrate if shift doesn't already have a householdId
-        if (!shift.householdId) {
+        return !shift.householdId;
+      });
+
+      if (docsToMigrate.length === 0) return;
+
+      // Chunk into batches of 499 to stay under Firestore's 500-operation limit
+      const BATCH_LIMIT = 499;
+      for (let i = 0; i < docsToMigrate.length; i += BATCH_LIMIT) {
+        const chunk = docsToMigrate.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(db);
+        chunk.forEach((shiftDoc) => {
           batch.update(shiftDoc.ref, {
             householdId: householdId,
             updatedAt: new Date(),
           });
-          migratedCount++;
-        }
-      });
-
-      if (migratedCount > 0) {
+        });
         await batch.commit();
       }
     } catch (error) {
@@ -402,20 +403,21 @@ class HouseholdService {
       const updateData: any = {
         members: arrayRemove(userId),
         admins: arrayRemove(userId),
+        updatedAt: new Date(),
       };
 
-      // If no admins remain, promote another member
+      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
+
+      // If no admins remain, promote another member in a separate operation
       if (household.admins.length === 1 && household.admins.includes(userId) && household.members.length > 1) {
         const secondMember = household.members.find(m => m !== userId);
         if (secondMember) {
-          // Set this member as the new admin
-            updateData.admins = arrayUnion(secondMember);
+          await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
+            admins: arrayUnion(secondMember),
+            updatedAt: new Date(),
+          });
         }
       }
-
-      updateData.updatedAt = new Date();
-
-      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
 
       // Log audit trail
       await auditService.logHouseholdAction(householdId, requestingUserId, 'remove_member', {
@@ -659,22 +661,23 @@ class HouseholdService {
         throw new Error('Only admins can delete household');
       }
 
-      const batch = writeBatch(db);
-
-      // Delete household
-      batch.delete(doc(db, COLLECTIONS.HOUSEHOLDS, householdId));
-
       // Delete all shifts for this household
       const shiftsQuery = query(
         collection(db, COLLECTIONS.SHIFTS),
         where('householdId', '==', householdId)
       );
       const shiftsSnapshot = await getDocs(shiftsQuery);
-      shiftsSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
 
-      await batch.commit();
+      // Chunk deletes: household doc + all shifts must respect 500-op batch limit
+      const BATCH_LIMIT = 499;
+      const allRefs = [doc(db, COLLECTIONS.HOUSEHOLDS, householdId), ...shiftsSnapshot.docs.map(d => d.ref)];
+
+      for (let i = 0; i < allRefs.length; i += BATCH_LIMIT) {
+        const chunk = allRefs.slice(i, i + BATCH_LIMIT);
+        const batchOp = writeBatch(db);
+        chunk.forEach(ref => batchOp.delete(ref));
+        await batchOp.commit();
+      }
 
       // Log audit trail
       await auditService.logHouseholdAction(householdId, userId, 'delete_household', {});

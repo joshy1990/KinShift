@@ -10,13 +10,13 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useAuth} from '@/contexts/AuthContext';
 import {useNavigation} from '@react-navigation/native';
 import {getResponsiveValue, spacing, typography, borderRadius} from '@/utils/responsive';

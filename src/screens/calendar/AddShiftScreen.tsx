@@ -13,6 +13,7 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, ShiftType} from '@/types';
@@ -907,6 +908,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   };
 
   return (
+    <SafeAreaView style={{flex: 1, backgroundColor: '#0F0F23'}} edges={['bottom']}>
     <KeyboardAvoidingView 
       style={{flex: 1}}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1440,6 +1442,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         />
       )}
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 

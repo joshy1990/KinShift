@@ -41,8 +41,9 @@ yarn-error.*
 /ios
 /android
 
-# Firebase config files (SECURITY: Never commit these!)
-# TEMPORARILY COMMENTED FOR EAS BUILD TESTING - UNCOMMENT AFTER BUILD
+# Firebase config files
+# These contain public identifiers (not secrets) and are safe to commit.
+# They are required by EAS Build and the native SDKs.
 # google-services.json
 # GoogleService-Info.plist
 

@@ -95,8 +95,8 @@ export function detectShiftPattern(shifts: ShiftEntry[]): DetectedPattern | null
     return null; // Need at least 3 entries to detect a pattern
   }
 
-  // Sort shifts by date
-  const sortedShifts = shifts.sort((a, b) => a.date.getTime() - b.date.getTime());
+  // Sort shifts by date (create copy to avoid mutating input)
+  const sortedShifts = [...shifts].sort((a, b) => a.date.getTime() - b.date.getTime());
   
   // Try to detect various cycle lengths (3-14 days are common)
   for (let cycleLength = 3; cycleLength <= 14; cycleLength++) {

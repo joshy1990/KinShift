@@ -173,11 +173,12 @@ export class ShiftService extends BaseService {
     try {
       this.validateRequired(shiftData, ['ownerId', 'title', 'startTime', 'endTime']);
 
-      // SECURITY: Validate ownerId matches the current user
-      const currentUserId = shiftData.ownerId;
-      if (shiftData.ownerId !== currentUserId) {
+      // SECURITY: Validate ownerId matches the current authenticated user
+      const currentUser = await authService.getCurrentUser();
+      if (!currentUser || shiftData.ownerId !== currentUser.id) {
         throw new Error('Unauthorized: Cannot create shift for another user');
       }
+      const currentUserId = currentUser.id;
 
       // SECURITY: Validate household membership if household shift
       if (shiftData.householdId) {
@@ -364,23 +365,29 @@ export class ShiftService extends BaseService {
 
   /**
    * Deletes multiple shifts in bulk (soft delete) - for pattern cleanup
+   * Properly chunked to respect Firestore's 500-operation batch limit.
    */
   async deleteBulkShifts(shiftIds: string[]): Promise<void> {
     try {
       if (shiftIds.length === 0) return;
 
-      const batch = writeBatch(db);
+      const BATCH_LIMIT = 499;
       const now = new Date();
 
-      shiftIds.forEach((shiftId) => {
-        const shiftRef = doc(db, this.collection, shiftId);
-        batch.update(shiftRef, {
-          isDeleted: true,
-          updatedAt: now,
-        });
-      });
+      for (let i = 0; i < shiftIds.length; i += BATCH_LIMIT) {
+        const chunk = shiftIds.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(db);
 
-      await batch.commit();
+        chunk.forEach((shiftId) => {
+          const shiftRef = doc(db, this.collection, shiftId);
+          batch.update(shiftRef, {
+            isDeleted: true,
+            updatedAt: now,
+          });
+        });
+
+        await batch.commit();
+      }
     } catch (error) {
       throw this.handleError(error);
     }
@@ -402,19 +409,23 @@ export class ShiftService extends BaseService {
       
       const snapshot = await getDocs(q);
       
-      // Soft delete all shifts
+      // Soft delete all shifts, chunked to respect 500-op batch limit
       if (snapshot.docs.length > 0) {
-        const batch = writeBatch(db);
-        
-        snapshot.docs.forEach((doc) => {
-          batch.update(doc.ref, {
-            isDeleted: true,
-            updatedAt: new Date(),
-            lastEditedBy: userId,
+        const BATCH_LIMIT = 499;
+        for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
+          const chunk = snapshot.docs.slice(i, i + BATCH_LIMIT);
+          const batch = writeBatch(db);
+
+          chunk.forEach((d) => {
+            batch.update(d.ref, {
+              isDeleted: true,
+              updatedAt: new Date(),
+              lastEditedBy: userId,
+            });
           });
-        });
-        
-        await batch.commit();
+
+          await batch.commit();
+        }
       }
     } catch (error) {
       console.error(`Error deleting user shifts in household:`, error);
@@ -530,6 +541,21 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
     } else {
       throw new Error('Either householdId or ownerId must be provided');
     }
+
+    // SCALABILITY: Add date range filter to prevent unbounded reads.
+    // Default to a 6-month rolling window so the listener doesn't grow
+    // linearly with the user's history.
+    if (filters.startDate) {
+      constraints.push(where('startTime', '>=', filters.startDate));
+    } else {
+      // Fallback: only load shifts from the last 6 months
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      constraints.push(where('startTime', '>=', sixMonthsAgo));
+    }
+    if (filters.endDate) {
+      constraints.push(where('startTime', '<=', filters.endDate));
+    }
     
     // Add ordering
     constraints.push(orderBy('startTime', 'asc'));
@@ -563,33 +589,89 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
 
   /**
    * Creates bulk shifts (for patterns)
+   * Includes auth validation, household membership checks, approval flow, and batch chunking
    */
   async createBulkShifts(shiftsData: CreateShiftData[]): Promise<string[]> {
     try {
-      const batch = writeBatch(db);
+      if (shiftsData.length === 0) return [];
+
+      // SECURITY: Validate authenticated user
+      const currentUser = await authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('Unauthorized: Must be logged in to create shifts');
+      }
+
+      // SECURITY: Validate all shifts belong to current user
+      const invalidOwner = shiftsData.find(s => s.ownerId !== currentUser.id);
+      if (invalidOwner) {
+        throw new Error('Unauthorized: Cannot create shifts for another user');
+      }
+
+      // SECURITY: Validate household membership if household shifts
+      const householdId = shiftsData[0]?.householdId;
+      let requiresApproval = false;
+      if (householdId) {
+        const household = await householdService.getHousehold(householdId);
+        if (!household.members.includes(currentUser.id)) {
+          throw new Error('Unauthorized: You are not a member of this household');
+        }
+        // Check tier compliance
+        const compliance = await householdService.validateHouseholdCompliance(householdId);
+        const complianceObj = compliance as any;
+        if (complianceObj && !complianceObj.compliant && complianceObj.violation) {
+          throw new Error('Household has exceeded member limit for subscription tier');
+        }
+        requiresApproval = !!household.settings?.requireApprovalForShifts;
+      }
+
       const shiftIds: string[] = [];
+      const BATCH_LIMIT = 499; // Firestore batch limit is 500
 
-      shiftsData.forEach((shiftData) => {
-        // Validate required fields (householdId is optional for personal mode)
-        this.validateRequired(shiftData, ['ownerId', 'title', 'startTime', 'endTime']);
+      // Process in chunks to avoid exceeding Firestore batch limit
+      for (let i = 0; i < shiftsData.length; i += BATCH_LIMIT) {
+        const chunk = shiftsData.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(db);
 
-        const shiftRef = collection(db, this.collection).doc();
-        const shift: Omit<Shift, 'id'> = {
-          ...shiftData,
-          title: this.sanitizeString(shiftData.title),
-          notes: shiftData.notes ? this.sanitizeString(shiftData.notes) : undefined,
-          colorTag: this.generateColorForShiftType(shiftData.shiftType),
-          label: getShiftTypeLabel(shiftData.shiftType as ShiftType), // Add display label
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastEditedBy: shiftData.ownerId,
-        };
+        chunk.forEach((shiftData) => {
+          this.validateRequired(shiftData, ['ownerId', 'title', 'startTime', 'endTime']);
 
-        batch.set(shiftRef, shift);
-        shiftIds.push(shiftRef.id);
-      });
+          const shiftRef = collection(db, this.collection).doc();
 
-      await batch.commit();
+          // Build shift with approval flow matching createShift logic
+          const shift: any = {
+            ...shiftData,
+            title: this.sanitizeString(shiftData.title),
+            notes: shiftData.notes ? this.sanitizeString(shiftData.notes) : undefined,
+            colorTag: this.generateColorForShiftType(shiftData.shiftType),
+            label: getShiftTypeLabel(shiftData.shiftType as ShiftType),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            lastEditedBy: shiftData.ownerId,
+          };
+
+          // Apply approval flow
+          if (shiftData.householdId && requiresApproval) {
+            shift.isApproved = false;
+            shift.approvalStatus = 'pending';
+            shift.approvedBy = null;
+          } else {
+            shift.isApproved = true;
+            shift.approvalStatus = 'approved';
+            shift.approvedBy = shiftData.ownerId;
+          }
+
+          // Remove undefined values (Firestore rejects them)
+          Object.keys(shift).forEach(key => {
+            if (shift[key] === undefined) delete shift[key];
+          });
+
+          batch.set(shiftRef, shift);
+          shiftIds.push(shiftRef.id);
+        });
+
+        await batch.commit();
+      }
+
       return shiftIds;
     } catch (error) {
       throw this.handleError(error);
@@ -800,6 +882,43 @@ listenToHouseholdShifts(
   const result = await this.getShifts({ householdId });
   return result.shifts;
 }
+
+  // ============================================
+  // DATA RETENTION / PURGE
+  // ============================================
+
+  /**
+   * Hard-delete shifts that were soft-deleted more than `retentionDays` ago.
+   * Should be called periodically (e.g. on app startup) to reclaim storage.
+   */
+  async purgeSoftDeletedShifts(retentionDays: number = 30): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    const q = query(
+      collection(db, 'shifts'),
+      where('isDeleted', '==', true),
+      where('updatedAt', '<=', cutoff),
+      limit(500)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    let deleted = 0;
+    const refs = snapshot.docs.map((d) => d.ref);
+
+    for (let i = 0; i < refs.length; i += 499) {
+      const chunk = refs.slice(i, i + 499);
+      const batch = writeBatch(db);
+      chunk.forEach((ref) => batch.delete(ref));
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    console.log(`[ShiftService] Purged ${deleted} soft-deleted shifts older than ${retentionDays}d`);
+    return deleted;
+  }
 }
 
 // Export singleton instance

@@ -14,6 +14,8 @@ import {HouseholdStackParamList, Invitation} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
 import {invitationService} from '@/services/invitation.service';
 import {notificationService} from '@/services/notification.service';
+import {doc, updateDoc} from '@/config/firestore.compat';
+import {db} from '@/config/firebase.config';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'InvitationAccept'>;
 
@@ -44,7 +46,9 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
         return;
       }
 
-      if (invite.expiresAt < new Date()) {
+      // Convert Firestore Timestamp to Date for comparison
+      const expiresAt = (invite.expiresAt as any)?.toDate ? (invite.expiresAt as any).toDate() : new Date(invite.expiresAt);
+      if (expiresAt < new Date()) {
         setError('This invitation has expired.');
         return;
       }
@@ -103,8 +107,13 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
   };
 
   const declineInvitation = async () => {
+    if (!invitation) return;
     setDeclining(true);
     try {
+      // Update invitation status in Firestore
+      const invitationRef = doc(db, 'invitations', invitation.id);
+      await updateDoc(invitationRef, { status: 'declined', declinedAt: new Date() });
+      
       Alert.alert(
         'Invitation Declined',
         'You have declined this invitation.',
@@ -115,6 +124,8 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
           }
         ]
       );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to decline invitation');
     } finally {
       setDeclining(false);
     }

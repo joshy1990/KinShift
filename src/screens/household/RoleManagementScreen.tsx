@@ -64,15 +64,13 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
       async () => {
         setProcessing(member.userId);
         try {
-          // TODO: Implement promoteMemberToAdmin in householdService
-          // await householdService.promoteMemberToAdmin(
-          //   householdId,
-          //   user.id,
-          //   member.userId
-          // );
-          showError('Role promotion not yet implemented');
-          // showSuccess(`${member.name} is now an admin`);
-          // await loadMembers();
+          await householdService.promoteMember(
+            householdId,
+            member.userId,
+            user.id
+          );
+          showSuccess(`${member.name} is now an admin`);
+          await loadMembers();
         } catch (error: any) {
           showError(error.message || 'Failed to promote member');
         } finally {
@@ -91,15 +89,13 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
       async () => {
         setProcessing(member.userId);
         try {
-          // TODO: Implement demoteAdminToMember in householdService
-          // await householdService.demoteAdminToMember(
-          //   householdId,
-          //   user.id,
-          //   member.userId
-          // );
-          showError('Role demotion not yet implemented');
-          // showSuccess(`${member.name} is now a regular member`);
-          // await loadMembers();
+          await householdService.demoteMember(
+            householdId,
+            member.userId,
+            user.id
+          );
+          showSuccess(`${member.name} is now a regular member`);
+          await loadMembers();
         } catch (error: any) {
           showError(error.message || 'Failed to demote admin');
         } finally {
@@ -120,8 +116,8 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
         try {
           await householdService.transferOwnership(
             householdId,
-            user.id,
-            member.userId
+            member.userId,
+            user.id
           );
           showAlert(
             'Ownership Transferred',

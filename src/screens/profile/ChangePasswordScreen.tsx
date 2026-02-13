@@ -10,12 +10,12 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
 import auth from '@react-native-firebase/auth';
 import {getResponsiveValue, spacing, typography, borderRadius} from '@/utils/responsive';
@@ -72,16 +72,14 @@ export const ChangePasswordScreen: React.FC = () => {
       // Update password
       await user.updatePassword(newPassword);
 
-      showSuccess('Password changed successfully! You will be signed out now to verify your new password.');
+      showSuccess('Password changed successfully! Signing out...');
       
-      // Automatically sign out after successful password change
-      setTimeout(async () => {
-        try {
-          await signOut();
-        } catch (signOutError) {
-          console.error('Error signing out after password change:', signOutError);
-        }
-      }, 1000);
+      // Sign out immediately after showing success message
+      try {
+        await signOut();
+      } catch (signOutError) {
+        console.error('Error signing out after password change:', signOutError);
+      }
     } catch (error: any) {
       console.error('Error changing password:', error);
       

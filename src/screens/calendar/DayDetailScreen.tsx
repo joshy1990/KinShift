@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Switch,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList, Shift, DayNote } from '@/types';
@@ -31,6 +33,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [shifts, setShifts] = useState<Shift[]>(passedShifts || []);
   const [notes, setNotes] = useState<DayNote[]>([]);
   const [users, setUsers] = useState<Record<string, { name: string; email: string }>>({});
+  const usersRef = useRef<Record<string, { name: string; email: string }>>({});
   const [loading, setLoading] = useState(true);
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteContent, setNoteContent] = useState('');
@@ -94,7 +97,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 ? new Date((shift.startTime as any).seconds * 1000)
                 : new Date(shift.startTime);
               const isOnThisDate = isSameDay(shiftDate, dateObj);
-              const isUserInHousehold = !!users[shift.ownerId];
+              const isUserInHousehold = !!usersRef.current[shift.ownerId];
               return isOnThisDate && isUserInHousehold;
             });
             setShifts(shiftsOnThisDate);
@@ -135,9 +138,11 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       // Set up users
       if (isPersonalMode) {
         // Personal mode - only show current user
-        setUsers({
+        const personalUsers = {
           [user.id]: { name: user.name || 'You', email: user.email || '' }
-        });
+        };
+        setUsers(personalUsers);
+        usersRef.current = personalUsers;
       } else {
         // Household mode - fetch real household members
         const members = await householdService.getHouseholdMembers(currentHouseholdId!);
@@ -156,6 +161,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         }
         
         setUsers(usersMap);
+        usersRef.current = usersMap;
       }
       
       // Load shifts for this day
@@ -302,6 +308,11 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   }
 
   return (
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+    <KeyboardAvoidingView
+      style={{flex: 1}}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -629,10 +640,16 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#0F0F23',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0F0F23',
@@ -697,7 +714,7 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
   shiftCard: {
     flexDirection: 'row',
@@ -825,8 +842,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#374151',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   categorySelected: {
     backgroundColor: '#6366F1',
@@ -911,7 +930,7 @@ const styles = StyleSheet.create({
   },
   noteAuthor: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
   deleteButton: {
     fontSize: 12,

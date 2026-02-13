@@ -10,18 +10,18 @@ import {
   ScrollView,
   ActivityIndicator,
   StatusBar,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
+import {getResponsiveValue, spacing, typography} from '@/utils/responsive';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Signup'>;
 
-const {height} = Dimensions.get('window');
-
 export const SignupScreen: React.FC<Props> = ({navigation}) => {
   const {signUp} = useAuth();
+  const {height} = useWindowDimensions();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -101,7 +101,7 @@ export const SignupScreen: React.FC<Props> = ({navigation}) => {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.backgroundGradient} />
+          <View style={[styles.backgroundGradient, {height: height * 0.4}]} />
           
           <TouchableOpacity 
             style={styles.backButton}
@@ -231,14 +231,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.md,
   },
   backgroundGradient: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: height * 0.4,
     backgroundColor: '#1A1A2E',
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
@@ -262,9 +261,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   logoCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: getResponsiveValue(80, 90, 100),
+    height: getResponsiveValue(80, 90, 100),
+    borderRadius: getResponsiveValue(40, 45, 50),
     backgroundColor: '#1A1A2E',
     alignItems: 'center',
     justifyContent: 'center',
@@ -306,14 +305,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   title: {
-    fontSize: 28,
+    fontSize: typography.heading,
     fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: typography.body,
     color: '#A1A1AA',
     textAlign: 'center',
   },

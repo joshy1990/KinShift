@@ -249,7 +249,8 @@ export class CustomPatternService {
 
     for (let i = 0; i < previewDays; i++) {
       const currentDate = addDays(startDay, i);
-      const dayInPattern = i % 14; // 14-day cycle
+      const cycleLength = this.calculateCycleLength(pattern.cells);
+      const dayInPattern = i % cycleLength;
       const cell = pattern.cells[dayInPattern];
 
       if (cell.shiftType !== null) {

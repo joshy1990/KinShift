@@ -10,7 +10,9 @@ import {
   Switch,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { format, addDays, startOfToday } from 'date-fns';
 import { spacing, typography, borderRadius } from '@/utils/responsive';
 
@@ -95,10 +97,18 @@ export const ShiftPatternModal: React.FC<Props> = ({
   const [customCycle, setCustomCycle] = useState<(string | null)[]>([]);
   const [cycleDays, setCycleDays] = useState(7);
   const [startDate, setStartDate] = useState(startOfToday());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [repeatForever, setRepeatForever] = useState(true);
   const [rotationWeeks, setRotationWeeks] = useState(4);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const shiftTypes = DEFAULT_SHIFT_TYPES;
+
+  const handleDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setStartDate(selectedDate);
+    }
+  };
 
   useEffect(() => {
     if (existingPattern) {
@@ -349,9 +359,17 @@ export const ShiftPatternModal: React.FC<Props> = ({
       
       <View style={styles.inputSection}>
         <Text style={styles.inputLabel}>Start Date</Text>
-        <TouchableOpacity style={styles.dateButton}>
+        <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
           <Text style={styles.dateButtonText}>{format(startDate, 'MMM dd, yyyy')}</Text>
         </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleDateChange}
+          />
+        )}
       </View>
 
       <View style={styles.inputSection}>

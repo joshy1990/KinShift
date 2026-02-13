@@ -6,10 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList } from '@/types';
-import { addDays, format, startOfToday } from 'date-fns';
+import { addDays, format, startOfToday, startOfDay } from 'date-fns';
 import { 
   detectShiftPattern, 
   quickPatternCheck,
@@ -18,15 +19,22 @@ import {
   COMMON_PATTERNS 
 } from '@/utils/shiftPatterns';
 import { spacing, typography, borderRadius } from '@/utils/responsive';
+import { shiftPatternService } from '@/services/shiftPattern.service';
+import type { PatternTemplateKey } from '@/services/shiftPattern.service';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCurrentHouseholdId } from '@/contexts/HouseholdContext';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'AddShiftPattern'>;
 
 export const AddShiftPatternScreen: React.FC<Props> = ({ navigation }) => {
+  const { user } = useAuth();
+  const currentHouseholdId = useCurrentHouseholdId();
   const [currentStep, setCurrentStep] = useState<'choose' | 'input' | 'confirm'>('choose');
   const [selectedPattern, setSelectedPattern] = useState<ShiftPattern | null>(null);
   const [manualShifts, setManualShifts] = useState<ShiftEntry[]>([]);
   const [detectedPattern, setDetectedPattern] = useState<ShiftPattern | null>(null);
   const [currentDate, setCurrentDate] = useState(startOfToday());
+  const [isApplying, setIsApplying] = useState(false);
 
   // Quick pattern feedback
   const [quickFeedback, setQuickFeedback] = useState<string | null>(null);
@@ -70,12 +78,46 @@ export const AddShiftPatternScreen: React.FC<Props> = ({ navigation }) => {
     setCurrentStep('confirm');
   };
 
-  const confirmPattern = () => {
-    Alert.alert(
-      'Pattern Added!', 
-      `Your ${selectedPattern?.name || detectedPattern?.name} pattern has been added for the next year.`,
-      [{ text: 'Great!', onPress: () => navigation.goBack() }]
-    );
+  const confirmPattern = async () => {
+    const pattern = selectedPattern || detectedPattern;
+    if (!pattern || !user) return;
+
+    setIsApplying(true);
+    try {
+      // Determine pattern key — use id if it matches a template, else use 'custom'
+      const patternKey = (pattern.id || 'custom') as PatternTemplateKey | 'custom';
+      const firstShift = pattern.cycle?.[0];
+
+      const result = await shiftPatternService.generateShiftsFromPattern({
+        patternKey,
+        startDate: startOfDay(new Date()),
+        shiftStartTime: firstShift?.startTime || '09:00',
+        shiftEndTime: firstShift?.endTime || '17:00',
+        title: pattern.name || 'Shift',
+        householdId: currentHouseholdId || undefined,
+        ownerId: user.id,
+        shiftType: firstShift?.type === 'night' ? 'night' : 'day',
+        durationMonths: 12,
+      });
+
+      if (result.success) {
+        Alert.alert(
+          'Pattern Applied!',
+          `Created ${result.created} shifts for your ${pattern.name} pattern over the next year.`,
+          [{ text: 'Great!', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert(
+          'Partial Success',
+          `Created ${result.created} shifts with ${result.failed} failures.\n${result.errors.join('\n')}`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to apply pattern. Please try again.');
+    } finally {
+      setIsApplying(false);
+    }
   };
 
   const renderChooseMethod = () => (

@@ -285,8 +285,14 @@ export const NotificationsScreen: React.FC<Props> = ({navigation}) => {
     }
   };
 
-  const getRelativeTime = (date: Date): string => {
-    return formatDistanceToNow(date, {addSuffix: true});
+  const toDate = (value: any): Date => {
+    if (value?.toDate) return value.toDate(); // Firestore Timestamp
+    if (value instanceof Date) return value;
+    return new Date(value);
+  };
+
+  const getRelativeTime = (date: any): string => {
+    return formatDistanceToNow(toDate(date), {addSuffix: true});
   };
 
   const groupNotificationsByDate = (notifications: Notification[]) => {
@@ -294,13 +300,14 @@ export const NotificationsScreen: React.FC<Props> = ({navigation}) => {
     
     notifications.forEach(notification => {
       let groupKey = '';
+      const createdDate = toDate(notification.createdAt);
       
-      if (isToday(notification.createdAt)) {
+      if (isToday(createdDate)) {
         groupKey = 'Today';
-      } else if (isYesterday(notification.createdAt)) {
+      } else if (isYesterday(createdDate)) {
         groupKey = 'Yesterday';
       } else {
-        groupKey = format(notification.createdAt, 'MMMM d, yyyy');
+        groupKey = format(createdDate, 'MMMM d, yyyy');
       }
       
       if (!groups[groupKey]) {

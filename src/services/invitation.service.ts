@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Timestamp, writeBatch } from '@/config/firestore.compat';
+import { collection, doc, addDoc, updateDoc, getDoc, getDocs, query, where, Timestamp, writeBatch, limit, deleteDoc } from '@/config/firestore.compat';
 import {Invitation, User} from '@/types';
 import {householdService} from './household.service';
 import {notificationService} from './notification.service';
@@ -71,11 +71,11 @@ class InvitationService {
       
       if (!snapshot.empty) {
         const invitedUserId = snapshot.docs[0].id;
-        await notificationService.notifyInvitationAccepted(
+        await notificationService.notifyInvitationReceived(
           invitedUserId,
           householdId,
           household.name,
-          household.members.length
+          inviterName
         );
       }
     } catch (notificationError) {
@@ -99,6 +99,16 @@ class InvitationService {
     const invitation = await this.getInvitationByCode(inviteCode);
     if (!invitation) throw new Error('Invitation not found');
     if (invitation.status !== 'pending') throw new Error('This invitation has already been used or cancelled');
+    
+    // Check expiration
+    const expiresAt = (invitation as any).expiresAt?.toDate ? (invitation as any).expiresAt.toDate() : new Date((invitation as any).expiresAt);
+    if (expiresAt < new Date()) {
+      // Update status to expired
+      const invitationRef = doc(db, COLLECTIONS.INVITATIONS, invitation.id);
+      await updateDoc(invitationRef, { status: 'expired' });
+      throw new Error('This invitation has expired');
+    }
+    
     await householdService.addMemberToHousehold(invitation.householdId, acceptingUser.id, invitation.role);
     const invitationRef = doc(db, COLLECTIONS.INVITATIONS, invitation.id);
     await updateDoc(invitationRef, { status: 'accepted', acceptedAt: Timestamp.now(), acceptedByUserId: acceptingUser.id });
@@ -127,6 +137,44 @@ class InvitationService {
     
     // Log successful cancellation
     await auditService.logHouseholdAction(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE, { cancelled: true });
+  }
+
+  // ============================================
+  // DATA RETENTION / PURGE
+  // ============================================
+
+  /**
+   * Hard-delete invitations that expired more than `graceDays` ago.
+   * Expired/cancelled invitations have no value after a short grace period.
+   */
+  async purgeExpiredInvitations(graceDays: number = 7): Promise<number> {
+    const cutoff = Timestamp.fromDate(
+      new Date(Date.now() - graceDays * 24 * 60 * 60 * 1000)
+    );
+
+    const q = query(
+      collection(db, COLLECTIONS.INVITATIONS),
+      where('status', 'in', ['expired', 'cancelled']),
+      where('expiresAt', '<=', cutoff),
+      limit(500)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    let deleted = 0;
+    const refs = snapshot.docs.map((d) => d.ref);
+
+    for (let i = 0; i < refs.length; i += 499) {
+      const chunk = refs.slice(i, i + 499);
+      const batch = writeBatch(db);
+      chunk.forEach((ref) => batch.delete(ref));
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    console.log(`[InvitationService] Purged ${deleted} expired/cancelled invitations older than ${graceDays}d`);
+    return deleted;
   }
 }
 

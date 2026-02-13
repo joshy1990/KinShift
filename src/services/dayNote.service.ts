@@ -528,6 +528,42 @@ class DayNoteService {
       return {};
     }
   }
+
+  // ============================================
+  // DATA RETENTION / PURGE
+  // ============================================
+
+  /**
+   * Hard-delete day notes that were soft-deleted more than `retentionDays` ago.
+   */
+  async purgeSoftDeletedNotes(retentionDays: number = 30): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    const q = query(
+      collection(db, COLLECTIONS.DAY_NOTES),
+      where('isDeleted', '==', true),
+      where('updatedAt', '<=', cutoff),
+      limit(500)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    let deleted = 0;
+    const refs = snapshot.docs.map((d) => d.ref);
+
+    for (let i = 0; i < refs.length; i += 499) {
+      const chunk = refs.slice(i, i + 499);
+      const batch = writeBatch(db);
+      chunk.forEach((ref) => batch.delete(ref));
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    console.log(`[DayNoteService] Purged ${deleted} soft-deleted notes older than ${retentionDays}d`);
+    return deleted;
+  }
 }
 
 export const dayNoteService = new DayNoteService();

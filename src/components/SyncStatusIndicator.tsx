@@ -143,9 +143,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   indicator: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

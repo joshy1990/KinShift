@@ -8,6 +8,7 @@ import {SubscriptionProvider} from './src/contexts/SubscriptionContext';
 import {RootNavigator} from './src/navigation/RootNavigator';
 import {notificationLinkingConfiguration} from './src/utils/notificationHandlers';
 import {initializeSentry, captureException} from './src/config/sentry.config';
+import {runRetentionCleanupIfDue} from './src/utils/dataRetention';
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
   constructor(props: any) {
@@ -56,6 +57,11 @@ function App() {
   // Initialize Sentry on app startup
   useEffect(() => {
     initializeSentry();
+  }, []);
+
+  // Run daily data-retention cleanup (fire-and-forget)
+  useEffect(() => {
+    runRetentionCleanupIfDue();
   }, []);
 
   return (

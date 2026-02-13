@@ -92,11 +92,15 @@ service cloud.firestore {
     // HOUSEHOLDS COLLECTION
     // ========================================
     match /households/{householdId} {
-      // Any authenticated user can list households (filtered by members on client)
-      allow read: if isAuthenticated();
+      // SECURITY: Only household members can read household data.
+      // Listing households requires a query filtered by members array-contains.
+      allow read: if isAuthenticated() && isHouseholdMember(householdId);
       
-      // Only admins can write to households
-      allow write: if isHouseholdAdmin(householdId);
+      // Any authenticated user can create a household (they become the first member)
+      allow create: if isAuthenticated();
+      
+      // Only admins can update/delete households
+      allow update, delete: if isHouseholdAdmin(householdId);
       
       // Subcollections under households
       match /settings/{settingsDoc} {

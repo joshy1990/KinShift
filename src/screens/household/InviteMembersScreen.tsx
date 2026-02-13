@@ -248,7 +248,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       
       <View style={styles.invitationFooter}>
         <Text style={styles.invitationDate}>
-          Sent {invitation.createdAt.toLocaleDateString()}
+          Sent {((invitation.createdAt as any)?.toDate ? (invitation.createdAt as any).toDate() : new Date(invitation.createdAt)).toLocaleDateString()}
         </Text>
         <View style={styles.invitationActions}>
           {invitation.status === 'pending' && (
@@ -378,11 +378,11 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
             <>
               <View style={styles.invitationDetails}>
                 <Text style={styles.detailLabel}>Invitation Code:</Text>
-                <Text style={styles.detailCode}>{pendingInvitation.inviteCode}</Text>
+                <Text style={styles.detailCode}>{pendingInvitation.inviteCode || (pendingInvitation as any).code || ''}</Text>
                 
                 <Text style={styles.detailLabel}>Expires:</Text>
                 <Text style={styles.detailValue}>
-                  {new Date(pendingInvitation.expiresAt).toLocaleDateString()}
+                  {((pendingInvitation.expiresAt as any)?.toDate ? (pendingInvitation.expiresAt as any).toDate() : new Date(pendingInvitation.expiresAt)).toLocaleDateString()}
                 </Text>
               </View>
 

@@ -1,8 +1,0 @@
-node_modules/
-dist/
-build/
-coverage/
-e2e/
-**/*.d.ts
-**/*.config.*
-**/assets/**

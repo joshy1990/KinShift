@@ -197,7 +197,10 @@ class AuthService {
       await currentUser.reauthenticateWithCredential(credential);
 
       const userId = currentUser.uid;
-      const batch = writeBatch(db);
+
+      // Collect all document refs to delete/update, then chunk into batches of 499
+      const deleteRefs: any[] = [];
+      const updateOps: Array<{ ref: any; data: any }> = [];
 
       // Handle households: Transfer admin rights or remove from households
       const householdsQuery = query(
@@ -217,7 +220,7 @@ class AuthService {
 
         if (updatedMembers.length === 0) {
           // If no members left, delete the household
-          batch.delete(householdRef);
+          deleteRefs.push(householdRef);
           
           // Also delete all household shifts
           const householdShiftsQuery = query(
@@ -226,7 +229,7 @@ class AuthService {
           );
           const householdShiftsSnapshot = await getDocs(householdShiftsQuery);
           householdShiftsSnapshot.docs.forEach((shiftDoc: any) => {
-            batch.delete(shiftDoc.ref);
+            deleteRefs.push(shiftDoc.ref);
           });
 
           // Delete all household day notes
@@ -236,7 +239,7 @@ class AuthService {
           );
           const householdNotesSnapshot = await getDocs(householdNotesQuery);
           householdNotesSnapshot.docs.forEach((noteDoc: any) => {
-            batch.delete(noteDoc.ref);
+            deleteRefs.push(noteDoc.ref);
           });
         } else {
           // If user was the only admin, promote the next member to admin
@@ -258,10 +261,13 @@ class AuthService {
           }
 
           // Update household with new members and admins
-          batch.update(householdRef, {
-            members: updatedMembers,
-            admins: finalAdmins,
-            updatedAt: new Date(),
+          updateOps.push({
+            ref: householdRef,
+            data: {
+              members: updatedMembers,
+              admins: finalAdmins,
+              updatedAt: new Date(),
+            },
           });
         }
       }
@@ -273,7 +279,7 @@ class AuthService {
       );
       const shiftsSnapshot = await getDocs(shiftsQuery);
       shiftsSnapshot.docs.forEach((shiftDoc: any) => {
-        batch.delete(shiftDoc.ref);
+        deleteRefs.push(shiftDoc.ref);
       });
 
       // Delete user's personal day notes
@@ -283,15 +289,40 @@ class AuthService {
       );
       const notesSnapshot = await getDocs(notesQuery);
       notesSnapshot.docs.forEach((noteDoc: any) => {
-        batch.delete(noteDoc.ref);
+        deleteRefs.push(noteDoc.ref);
       });
 
       // Delete user document
       const userDocRef = doc(db, COLLECTIONS.USERS, userId);
-      batch.delete(userDocRef);
+      deleteRefs.push(userDocRef);
 
-      // Commit all deletions
-      await batch.commit();
+      // Commit all operations in chunked batches of 499
+      const BATCH_LIMIT = 499;
+      const totalOps = deleteRefs.length + updateOps.length;
+      let opsProcessed = 0;
+
+      // Process updates first (important: household membership changes)
+      while (opsProcessed < updateOps.length) {
+        const batch = writeBatch(db);
+        let batchCount = 0;
+
+        while (opsProcessed < updateOps.length && batchCount < BATCH_LIMIT) {
+          const op = updateOps[opsProcessed];
+          batch.update(op.ref, op.data);
+          opsProcessed++;
+          batchCount++;
+        }
+
+        if (batchCount > 0) await batch.commit();
+      }
+
+      // Process deletes in chunks
+      for (let i = 0; i < deleteRefs.length; i += BATCH_LIMIT) {
+        const chunk = deleteRefs.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(db);
+        chunk.forEach((ref: any) => batch.delete(ref));
+        await batch.commit();
+      }
 
       // Handle tier downgrade for households where new admin was promoted
       // This happens asynchronously after the batch commit to avoid delays

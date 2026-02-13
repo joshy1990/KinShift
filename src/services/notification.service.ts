@@ -15,6 +15,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   writeBatch,
   getDoc,
@@ -54,6 +55,48 @@ Notifications.setNotificationHandler({
 // ========================================
 // NOTIFICATION INITIALIZATION
 // ========================================
+
+/** TTL for notifications in days */
+const NOTIFICATION_TTL_DAYS = 30;
+
+/**
+ * Clean up notifications older than TTL
+ * Should be called periodically (e.g., on app start)
+ */
+const cleanupExpiredNotifications = async (userId: string): Promise<number> => {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - NOTIFICATION_TTL_DAYS);
+
+    const expiredQuery = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      where('createdAt', '<', cutoffDate)
+    );
+
+    const snapshot = await getDocs(expiredQuery);
+    if (snapshot.empty) return 0;
+
+    const BATCH_LIMIT = 499;
+    let deletedCount = 0;
+
+    for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
+      const chunk = snapshot.docs.slice(i, i + BATCH_LIMIT);
+      const batch = writeBatch(db);
+      chunk.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      deletedCount += chunk.length;
+    }
+
+    console.log(`Cleaned up ${deletedCount} expired notifications`);
+    return deletedCount;
+  } catch (error) {
+    console.error('Error cleaning up expired notifications:', error);
+    return 0;
+  }
+};
 
 /**
  * Initialize notifications for user
@@ -139,12 +182,13 @@ const createNotification = async (
 /**
  * Get user notifications
  */
-const getUserNotifications = async (userId: string): Promise<Notification[]> => {
+const getUserNotifications = async (userId: string, maxResults: number = 100): Promise<Notification[]> => {
   try {
     const notificationQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(maxResults)
     );
 
     const snapshot = await getDocs(notificationQuery);
@@ -161,6 +205,9 @@ const getUserNotifications = async (userId: string): Promise<Notification[]> => 
 /**
  * Listen to real-time notifications
  */
+/** Maximum notifications to keep in the real-time listener to bound read costs */
+const NOTIFICATION_LISTENER_LIMIT = 100;
+
 const listenToUserNotifications = (
   userId: string,
   callback: (notifications: Notification[]) => void
@@ -169,7 +216,8 @@ const listenToUserNotifications = (
     const notificationQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(NOTIFICATION_LISTENER_LIMIT)
     );
 
     const unsubscribe = onSnapshot(notificationQuery, (snapshot) => {
@@ -209,8 +257,6 @@ const markAsRead = async (notificationId: string): Promise<boolean> => {
  */
 const markAllAsRead = async (userId: string): Promise<boolean> => {
   try {
-    const batch = writeBatch(db);
-
     const notificationQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', userId),
@@ -219,11 +265,21 @@ const markAllAsRead = async (userId: string): Promise<boolean> => {
 
     const snapshot = await getDocs(notificationQuery);
 
-    snapshot.docs.forEach((doc) => {
-      batch.update(doc.ref, { read: true });
-    });
+    if (snapshot.empty) return true;
 
-    await batch.commit();
+    // Chunk into batches of 499 to stay under Firestore's 500-operation limit
+    const BATCH_LIMIT = 499;
+    const docs = snapshot.docs;
+
+    for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
+      const chunk = docs.slice(i, i + BATCH_LIMIT);
+      const batch = writeBatch(db);
+      chunk.forEach((doc) => {
+        batch.update(doc.ref, { read: true });
+      });
+      await batch.commit();
+    }
+
     return true;
   } catch (error) {
     console.error('Error marking all as read:', error);
@@ -268,14 +324,33 @@ const registerDeviceToken = async (userId: string, householdId: string): Promise
 
 /**
  * Send push notification to user(s)
- * Note: In production, this would use a backend to send via Expo's push service
- * For now, we store the notification in Firestore and let the app handle it locally
+ * 
+ * ⚠️ SECURITY NOTE: This calls the Expo Push API directly from the client.
+ * In production, push notifications should be sent from a backend server
+ * (e.g., Cloud Functions) to prevent token exposure and abuse.
+ * This is a simplified implementation for development/MVP.
+ * 
+ * Rate limiting: Max 10 push notifications per minute per user to prevent abuse.
  */
+const pushRateLimit = new Map<string, number[]>();
+const PUSH_RATE_LIMIT = 10;
+const PUSH_RATE_WINDOW_MS = 60_000;
+
 const sendPushNotificationToUser = async (
   userId: string,
   payload: NotificationPayload
 ): Promise<boolean> => {
   try {
+    // Rate limiting check
+    const now = Date.now();
+    const userHistory = pushRateLimit.get(userId) || [];
+    const recentSends = userHistory.filter(t => now - t < PUSH_RATE_WINDOW_MS);
+    if (recentSends.length >= PUSH_RATE_LIMIT) {
+      console.warn(`Push rate limit exceeded for user ${userId}. Skipping push (notification still in Firestore).`);
+      return true; // Notification is already in Firestore
+    }
+    pushRateLimit.set(userId, [...recentSends, now]);
+
     // Get all registered push tokens for the user
     const tokens = await getUserTokens(userId);
 
@@ -473,7 +548,34 @@ const notifyShiftDeleted = async (
 };
 
 /**
- * Notify user of household invitation
+ * Notify user of household invitation received
+ */
+const notifyInvitationReceived = async (
+  invitedUserId: string,
+  householdId: string,
+  householdName: string,
+  inviterName: string
+): Promise<void> => {
+  try {
+    const payload = {
+      title: 'Household Invitation',
+      body: `${inviterName} invited you to join "${householdName}"`,
+      data: { householdId, type: 'invitation_received' },
+    };
+
+    const notification = templateToNotification(invitedUserId, householdId, payload, 'invitation_received');
+    const notificationId = await createNotification(notification);
+
+    if (notificationId) {
+      await sendPushNotificationToUser(invitedUserId, payload);
+    }
+  } catch (error) {
+    console.error('Error notifying invitation received:', error);
+  }
+};
+
+/**
+ * Notify user of household invitation accepted
  */
 const notifyInvitationAccepted = async (
   invitedUserId: string,
@@ -600,6 +702,7 @@ const sendNotification = async (notification: any): Promise<boolean> => {
 export const notificationService = {
   initialize,
   cleanup,
+  cleanupExpiredNotifications,
   checkPermission,
   requestPermission,
   registerDeviceToken,
@@ -608,6 +711,7 @@ export const notificationService = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  notifyInvitationReceived,
   notifyInvitationAccepted,
   notifyHouseholdDowngrade,
   notifySubscriptionCanceled,

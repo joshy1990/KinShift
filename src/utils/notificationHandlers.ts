@@ -52,8 +52,7 @@ export const generateDeepLink = (notification: Notifications.Notification): stri
 
       case 'subscription_downgrade':
       case 'subscription_canceled':
-        return 'linkshift://subscription';
-  return 'kinshift://subscription';
+        return 'kinshift://subscription';
 
       default:
         if (data.householdId) {

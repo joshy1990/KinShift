@@ -1,0 +1,187 @@
+{
+  "indexes": [
+    {
+      "__comment": "shift.service.ts L403 — deleteUserShiftsInHousehold: householdId ==, ownerId ==, isDeleted !=",
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "isDeleted", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L456 — getShifts (householdId): householdId ==, startTime range, orderBy startTime DESC",
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L537 — subscribeToShifts (householdId): householdId ==, startTime range, orderBy startTime ASC",
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L458 — getShifts (ownerId): ownerId ==, startTime range, orderBy startTime DESC",
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L540 — subscribeToShifts (ownerId): ownerId ==, startTime range, orderBy startTime ASC",
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L729 — getShiftMessages: shiftId ==, orderBy createdAt ASC",
+      "collectionGroup": "shiftMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "shiftId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "shift.service.ts L795 — getDayMessages: householdId ==, date range, orderBy date ASC + createdAt ASC",
+      "collectionGroup": "dayMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "notification.service.ts L73 — cleanupExpiredNotifications: userId ==, createdAt <",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "notification.service.ts L189/L218 + notificationSubscriptions.ts L62 — getUserNotifications / listenToUserNotifications / subscribe (all): userId ==, orderBy createdAt DESC",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "notification.service.ts L262 + notificationSubscriptions.ts L236/L289 — markAllAsRead / getNotificationStats / getRecentNotificationSummary: userId ==, read ==",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "read", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "notificationSubscriptions.ts L62-68 — subscribe (unreadOnly): userId ==, read ==, orderBy createdAt DESC",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "read", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "notificationSubscriptions.ts L192 — subscribeToHouseholdNotifications: householdId ==, userId in, orderBy createdAt DESC",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "dayNote.service.ts L83 — getNotesByDate (personal): authorId ==, date ==, isDeleted !=, orderBy createdAt ASC",
+      "collectionGroup": "dayNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "authorId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "dayNote.service.ts L83/L258/L480 — getNotesByDate (household) / subscribeToNotes / hasNotes: householdId ==, date ==, isDeleted !=, orderBy createdAt ASC",
+      "collectionGroup": "dayNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "dayNote.service.ts L122/L510 — getNotesInRange / getNoteCounts: householdId ==, isDeleted !=, date range, orderBy date ASC + createdAt ASC",
+      "collectionGroup": "dayNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "householdId", "order": "ASCENDING" },
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "audit.service.ts L62 — getUserAuditLogs: userId ==, orderBy timestamp DESC",
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "audit.service.ts L86 — getResourceAuditLogs: resourceType ==, resourceId ==, orderBy timestamp DESC",
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "resourceType", "order": "ASCENDING" },
+        { "fieldPath": "resourceId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "audit.service.ts L111 — getHouseholdAuditLogs: resourceId ==, orderBy timestamp DESC",
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "resourceId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "__comment": "customPattern.service.ts L146 — getUserPatterns: userId ==, orderBy createdAt DESC",
+      "collectionGroup": "customPatterns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

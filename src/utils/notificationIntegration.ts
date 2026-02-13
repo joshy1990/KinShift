@@ -19,14 +19,21 @@ import { notificationSubscriptionManager } from '@/utils/notificationSubscriptio
  */
 export const useNotificationSetup = (userId: string | null | undefined, navigationCallback?: (deepLink: string) => void) => {
   const handlersCleanupRef = useRef<(() => void) | null>(null);
-  const initializationRef = useRef(false);
+  const initializationRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!userId || initializationRef.current) {
+    if (!userId) {
+      // Reset when user logs out so re-initialization happens for next user
+      initializationRef.current = null;
       return;
     }
 
-    initializationRef.current = true;
+    // Skip if already initialized for this specific user
+    if (initializationRef.current === userId) {
+      return;
+    }
+
+    initializationRef.current = userId;
 
     const setupNotifications = async () => {
       try {

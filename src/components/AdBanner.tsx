@@ -63,7 +63,6 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   const subscription = useSubscription();
   const [adminSubscription, setAdminSubscription] = useState(null);
   const [shouldShowAds, setShouldShowAds] = useState(false);
-  const [isAdLoading, setIsAdLoading] = useState(true);
   
   const { width } = Dimensions.get('window');
   const isMobile = width < 768;
@@ -148,12 +147,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     overflow: 'hidden',
   },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(26, 26, 46, 0.8)',
-  },
   adPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -161,7 +154,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   adPlaceholderText: {
-    color: '#666',
+    color: '#8B8B8B',
     fontSize: 12,
   },
 });

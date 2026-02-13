@@ -11,10 +11,13 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// RevenueCat API Key - loaded from app.config.js extra with fallback
-// NOTE: Mobile apps need PUBLIC keys (different from server secret keys)
-// For now, if no valid public key, skip RevenueCat initialization
+// RevenueCat API Key - loaded from app.config.js extra via environment variable
+// This must be set in .env.local (or EAS Secrets for builds)
 const REVENUECAT_API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || '';
+
+if (!REVENUECAT_API_KEY) {
+  console.warn('[RevenueCat] API key not configured. Set REVENUECAT_API_KEY in .env.local');
+}
 
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {

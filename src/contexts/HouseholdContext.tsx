@@ -3,7 +3,7 @@
  * Manages current household state and provides household-related functionality
  */
 
-import React, {createContext, useContext, useState, useEffect, ReactNode} from 'react';
+import React, {createContext, useContext, useState, useEffect, useCallback, ReactNode} from 'react';
 import {householdService} from '@/services/household.service';
 import { subscriptionService } from '@/services/subscription.service';
 import {Household} from '@/types';
@@ -33,7 +33,7 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHouseholds = React.useCallback(async () => {
+  const loadHouseholds = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
@@ -64,16 +64,46 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
     }
   }, [user]);
 
-  // Load user's households on mount and when user changes
+  // Use real-time listener for household updates
   useEffect(() => {
-    if (user) {
-      loadHouseholds();
-    } else {
+    if (!user) {
       setHouseholds([]);
       setCurrentHousehold(null);
       setLoading(false);
+      return;
     }
-  }, [user, loadHouseholds]);
+
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = householdService.onUserHouseholdsUpdates(user.id, (userHouseholds) => {
+      setHouseholds(userHouseholds);
+
+      // Auto-select first household if none selected
+      setCurrentHousehold((current) => {
+        if (!current && userHouseholds.length > 0) {
+          return userHouseholds[0];
+        }
+
+        // If current household is no longer in list, clear it
+        if (current && !userHouseholds.find(h => h.id === current.id)) {
+          return userHouseholds[0] || null;
+        }
+
+        // Update current household with latest data
+        if (current) {
+          const updated = userHouseholds.find(h => h.id === current.id);
+          return updated || current;
+        }
+
+        return current;
+      });
+
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const refreshHouseholds = async () => {
     await loadHouseholds();

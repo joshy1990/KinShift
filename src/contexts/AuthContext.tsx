@@ -86,7 +86,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
   };
 
   const signOut = async () => {
-    await authService.signOut();
+    // Clean up notifications BEFORE signing out (requires valid auth)
     if (Platform.OS !== 'web' && user?.id) {
       try { 
         await notificationService.cleanup(user.id); 
@@ -94,6 +94,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
         console.error('Error cleaning up notifications:', error);
       }
     }
+    
+    await authService.signOut();
     
     // Clear Sentry user context
     clearSentryUser();

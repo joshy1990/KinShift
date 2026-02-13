@@ -1,11 +1,11 @@
-import React, {useState, useEffect, useMemo, useCallback} from 'react';
+import React, {useState, useEffect, useMemo, useCallback, useRef} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -28,6 +28,8 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
   const {user} = useAuth();
   const currentHouseholdId = useCurrentHouseholdId();
   const insets = useSafeAreaInsets();
+  const {width: windowWidth} = useWindowDimensions();
+  const dayColumnWidth = (windowWidth - 40) / 7;
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -36,8 +38,17 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
   const [lastTapDate, setLastTapDate] = useState<Date | null>(null);
   const [lastTapTime, setLastTapTime] = useState<number>(0);
+
+  // Debounce currentDate for Firestore subscriptions (prevents listener churn on rapid swipes)
+  const [debouncedDate, setDebouncedDate] = useState(new Date());
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedDate(currentDate), 300);
+    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+  }, [currentDate]);
   
-  // Memoize expensive date calculations
+  // Memoize expensive date calculations (for UI — instant updates)
   const weekDates = useMemo(() => {
     const start = startOfWeek(currentDate, {weekStartsOn: 1}); // Monday = 1
     return Array.from({length: 7}, (_, i) => addDays(start, i));
@@ -55,6 +66,19 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     viewMode === 'month' ? monthDates : weekDates,
     [viewMode, monthDates, weekDates]
   );
+
+  // Debounced date ranges — only used for Firestore subscriptions to avoid listener churn
+  const debouncedWeekDates = useMemo(() => {
+    const start = startOfWeek(debouncedDate, {weekStartsOn: 1});
+    return Array.from({length: 7}, (_, i) => addDays(start, i));
+  }, [debouncedDate]);
+
+  const debouncedMonthDates = useMemo(() => {
+    const start = startOfMonth(debouncedDate);
+    const startDate = startOfWeek(start, {weekStartsOn: 1});
+    const endDate = addDays(startDate, 41);
+    return eachDayOfInterval({start: startDate, end: endDate});
+  }, [debouncedDate]);
 
   // Memoize user initials calculation (used internally)
     // Memoize navigation function
@@ -173,9 +197,9 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         
         setUsers(usersMap);
         
-        // Now set up shifts listener with the current users map
-        const startDate = viewMode === 'month' ? monthDates[0] : weekDates[0];
-        const endDate = viewMode === 'month' ? monthDates[monthDates.length - 1] : weekDates[weekDates.length - 1];
+        // Now set up shifts listener with the current users map (uses debounced dates to avoid churn)
+        const startDate = viewMode === 'month' ? debouncedMonthDates[0] : debouncedWeekDates[0];
+        const endDate = viewMode === 'month' ? debouncedMonthDates[debouncedMonthDates.length - 1] : debouncedWeekDates[debouncedWeekDates.length - 1];
         
         try {
           unsubscribeShifts = shiftService.listenToHouseholdShifts(
@@ -210,10 +234,10 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     
     loadHouseholdData();
     
-    // Load note counts
+    // Load note counts (using debounced dates to avoid churn)
     const loadNoteCounts = async () => {
       try {
-        const dates = viewMode === 'month' ? monthDates : weekDates;
+        const dates = viewMode === 'month' ? debouncedMonthDates : debouncedWeekDates;
         const counts = await dayNoteService.getNoteCounts(
           currentHouseholdId,
           dates
@@ -231,7 +255,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         unsubscribeShifts();
       }
     };
-  }, [currentDate, currentHouseholdId, viewMode, user, weekDates, monthDates]); // Re-run when these change
+  }, [debouncedDate, currentHouseholdId, viewMode, user, debouncedWeekDates, debouncedMonthDates]); // Debounced deps prevent listener churn
 
   // Handle date press with double-tap detection
   const handleDatePress = (date: Date, dateString: string) => {
@@ -386,6 +410,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
       <TouchableOpacity
         style={[
           styles.dayColumn,
+          {width: dayColumnWidth},
           isSelected && styles.selectedDayColumn,
         ]}
         onPress={() => handleDatePress(date, dateString)}>
@@ -696,7 +721,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   dayColumn: {
-    width: (Dimensions.get('window').width - 40) / 7,
     marginHorizontal: 2,
     backgroundColor: '#1A1A2E',
   },
@@ -714,7 +738,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   dayName: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
     color: '#A1A1AA',
     textTransform: 'uppercase',
@@ -783,11 +807,11 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   shiftTimeInline: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: '600',
     color: '#FFFFFF',
     opacity: 0.95,
-    lineHeight: 9,
+    lineHeight: 11,
     paddingBottom: 4,
   },
   userShiftsList: {

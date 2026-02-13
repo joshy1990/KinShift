@@ -101,6 +101,15 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
       startTime: defaultStart,
       endTime: defaultEnd,
     };
+    // In weekly mode, mirror Week 1 changes to Week 2
+    if (patternMode === 'weekly' && selectedDay <= 7) {
+      newCells[selectedDay + 6] = {
+        day: selectedDay + 7,
+        shiftType: shiftType,
+        startTime: defaultStart,
+        endTime: defaultEnd,
+      };
+    }
     setCells(newCells);
     setTempStartTime(defaultStart);
     setTempEndTime(defaultEnd);
@@ -122,6 +131,14 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
       startTime: tempStartTime,
       endTime: tempEndTime,
     };
+    // In weekly mode, mirror Week 1 time changes to Week 2
+    if (patternMode === 'weekly' && selectedDay <= 7) {
+      newCells[selectedDay + 6] = {
+        ...newCells[selectedDay + 6],
+        startTime: tempStartTime,
+        endTime: tempEndTime,
+      };
+    }
     setCells(newCells);
     setShowShiftPicker(false);
     setSelectedDay(null);
@@ -158,7 +175,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
     setSaving(true);
     try {
-      const savedPattern = await customPatternService.savePattern(
+      const savedPatternId = await customPatternService.savePattern(
         user.id,
         patternName.trim(),
         cells,
@@ -167,10 +184,13 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         patternMode // Pass the current mode!
       );
 
+      // Load the saved pattern to pass as object for pre-selection
+      const savedPattern = await customPatternService.getPattern(savedPatternId);
+
       // Navigate back to AddShift with the newly created pattern pre-selected
       navigation.navigate('AddShift', {
         date: new Date(), // Pass current date (will be hidden for custom patterns)
-        preSelectPattern: savedPattern, // Pass the entire pattern object
+        preSelectPattern: savedPattern || { id: savedPatternId, name: patternName.trim() }, // Pass the pattern object
       });
     } catch (error) {
       console.error('Failed to save pattern:', error);
