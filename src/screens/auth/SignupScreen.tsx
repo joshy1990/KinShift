@@ -118,7 +118,7 @@ export const SignupScreen: React.FC<Props> = ({navigation}) => {
                 </View>
               </View>
             </View>
-            <Text style={styles.title}>Join LinkShift</Text>
+            <Text style={styles.title}>Join KinShift</Text>
             <Text style={styles.subtitle}>Create your account and start organizing</Text>
           </View>
 

@@ -48,7 +48,7 @@ export const OnboardingScreen: React.FC<Props> = ({navigation}) => {
             </View>
           </View>
           
-          <Text style={styles.appName}>LinkShift</Text>
+          <Text style={styles.appName}>KinShift</Text>
           <Text style={styles.tagline}>Smart Family Scheduling</Text>
           
           <Text style={styles.description}>

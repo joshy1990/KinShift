@@ -53,7 +53,7 @@ export const AboutScreen: React.FC = () => {
               <View style={styles.chainLinkRight} />
             </View>
           </View>
-          <Text style={styles.appName}>LinkShift</Text>
+          <Text style={styles.appName}>KinShift</Text>
           <Text style={styles.version}>Version 1.0.0 (MVP)</Text>
           <Text style={styles.subtitle}>Family Shift Coordination App</Text>
         </View>
@@ -61,7 +61,7 @@ export const AboutScreen: React.FC = () => {
         {/* Description */}
         <View style={styles.section}>
           <Text style={styles.description}>
-            LinkShift helps families coordinate work shifts, appointments, and schedules. 
+            KinShift helps families coordinate work shifts, appointments, and schedules. 
             Share your calendar with family members, avoid scheduling conflicts, and stay organized together.
           </Text>
         </View>
@@ -106,7 +106,7 @@ export const AboutScreen: React.FC = () => {
           
           <TouchableOpacity
             style={styles.linkButton}
-            onPress={() => handleOpenLink('mailto:support@linkshift.app')}>
+            onPress={() => handleOpenLink('mailto:joshlee_990@hotmail.co.uk')}>
             <Text style={styles.linkText}>Contact Support</Text>
             <Text style={styles.linkArrow}>→</Text>
           </TouchableOpacity>
@@ -128,7 +128,7 @@ export const AboutScreen: React.FC = () => {
 
         {/* Copyright */}
         <View style={styles.footer}>
-          <Text style={styles.copyright}>© 2025 LinkShift</Text>
+          <Text style={styles.copyright}>© 2025 KinShift</Text>
           <Text style={styles.footerText}>Made with ❤️ for families and shift workers</Text>
         </View>
       </ScrollView>

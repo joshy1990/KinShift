@@ -147,7 +147,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
               </View>
             </View>
             <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your LinkShift account</Text>
+            <Text style={styles.subtitle}>Sign in to your KinShift account</Text>
           </View>
 
           <View style={styles.form}>

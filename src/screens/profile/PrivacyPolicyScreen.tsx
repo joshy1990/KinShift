@@ -23,23 +23,23 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.effectiveDate}>Effective Date: October 15, 2025</Text>
-        <Text style={styles.effectiveDate}>Last Updated: October 15, 2025</Text>
+        <Text style={styles.effectiveDate}>Effective Date: February 13, 2026</Text>
+        <Text style={styles.effectiveDate}>Last Updated: February 13, 2026</Text>
 
         <Text style={styles.paragraph}>
-          Welcome to Kinshift! This Privacy Policy explains how we collect, use, disclose, and safeguard
+          Welcome to KinShift! This Privacy Policy explains how we collect, use, disclose, and safeguard
           your information when you use our mobile application.
         </Text>
 
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Contact:</Text> support@kinshift.app
+          <Text style={styles.bold}>Contact:</Text> joshlee_990@hotmail.co.uk
         </Text>
 
         <Text style={styles.heading}>Information We Collect</Text>
 
         <Text style={styles.subheading}>1. Personal Information</Text>
         <Text style={styles.paragraph}>
-          When you register for LinkShift, we collect:
+          When you register for KinShift, we collect:
         </Text>
         <Text style={styles.listItem}>• Email address (required for account creation)</Text>
         <Text style={styles.listItem}>• Display name (optional)</Text>
@@ -56,8 +56,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
 
         <Text style={styles.subheading}>3. Automatically Collected Information</Text>
         <Text style={styles.listItem}>• Device type and operating system</Text>
-        <Text style={styles.listItem}>• App usage analytics (via Firebase Analytics)</Text>
-        <Text style={styles.listItem}>• Crash reports (via Firebase Crashlytics)</Text>
+        <Text style={styles.listItem}>• Crash reports and error diagnostics (via Sentry)</Text>
 
         <Text style={styles.heading}>How We Use Your Information</Text>
 
@@ -73,7 +72,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
 
         <Text style={styles.subheading}>Firebase Services</Text>
         <Text style={styles.paragraph}>
-          LinkShift uses Google Firebase for backend services:
+          KinShift uses Google Firebase for backend services:
         </Text>
         <Text style={styles.listItem}>• Firebase Authentication (for user accounts)</Text>
         <Text style={styles.listItem}>• Cloud Firestore (for data storage)</Text>
@@ -113,7 +112,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.heading}>Children's Privacy</Text>
 
         <Text style={styles.paragraph}>
-          LinkShift is not intended for users under 16. We do not knowingly collect information from children
+          KinShift is not intended for users under 16. We do not knowingly collect information from children
           under 16. If you believe we have collected data from a child, contact us immediately.
         </Text>
 
@@ -130,7 +129,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
           Questions about this Privacy Policy? Contact us:
         </Text>
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Email:</Text> support@linkshift.app
+          <Text style={styles.bold}>Email:</Text> joshlee_990@hotmail.co.uk
         </Text>
 
         <Text style={styles.summary}>
@@ -140,7 +139,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
           🔒 Stored securely on Firebase (Google){'\n'}
           ❌ We don't sell your data{'\n'}
           🗑️ You can delete your account anytime{'\n'}
-          📧 Questions? support@linkshift.app
+          📧 Questions? joshlee_990@hotmail.co.uk
         </Text>
 
         <Text style={styles.footer}>

@@ -44,8 +44,8 @@ class DeepLinkService {
     try {
       const parsedUrl = new URL(url);
       
-      if (parsedUrl.protocol === 'linkshift:') {
-        this.handleLinkShiftURL(parsedUrl);
+      if (parsedUrl.protocol === 'kinshift:') {
+        this.handleKinShiftURL(parsedUrl);
       }
     } catch (error) {
       console.error('Error parsing deep link:', error);
@@ -53,9 +53,9 @@ class DeepLinkService {
   }
 
   /**
-   * Handle LinkShift specific URLs
+   * Handle KinShift specific URLs
    */
-  private handleLinkShiftURL(url: URL) {
+  private handleKinShiftURL(url: URL) {
     const pathname = url.pathname;
     
     if (pathname.startsWith('/invite/')) {
@@ -64,12 +64,12 @@ class DeepLinkService {
   }
 
   /**
-   * Handle invitation links: linkshift://invite/[inviteCode]
+   * Handle invitation links: kinshift://invite/[inviteCode]
    */
   private handleInvitationLink(pathname: string) {
     const inviteCode = pathname.replace('/invite/', '');
     
-    if (!inviteCode || inviteCode.length !== 8) {
+    if (!inviteCode || inviteCode.length < 6 || inviteCode.length > 8) {
       console.error('Invalid invitation code:', inviteCode);
       return;
     }

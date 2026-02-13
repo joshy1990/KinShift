@@ -137,7 +137,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       if (Platform.OS === 'ios' || Platform.OS === 'android') {
         await Share.share({
           message,
-          title: `Join ${household?.name} on LinkShift`,
+          title: `Join ${household?.name} on KinShift`,
         });
       }
     } catch (error) {
@@ -150,7 +150,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
     const code = (inv as any).inviteCode || (inv as any).code || '';
     const link = code ? deepLinkService.generateInvitationLink(code) : '';
     const hhName = (inv as any).householdName || household?.name || 'our household';
-    return `You're invited to join ${hhName} on LinkShift.\n\nUse this link to accept: ${link}`;
+    return `You're invited to join ${hhName} on KinShift.\n\nUse this link to accept: ${link}`;
   };
 
   const sendViaEmail = async (invitation: Invitation) => {
@@ -161,7 +161,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
         return;
       }
 
-      const subject = `Join ${household?.name || 'our household'} on LinkShift`;
+      const subject = `Join ${household?.name || 'our household'} on KinShift`;
       const body = buildInvitationMessage(invitation);
       const mailto = `mailto:${encodeURIComponent((invitation as any).emailOrPhone)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 

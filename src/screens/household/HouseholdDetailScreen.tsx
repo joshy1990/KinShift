@@ -72,12 +72,12 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
     if (!household) return;
     
     try {
-      const message = `Join me on LinkShift! Use join code: ${household.joinCode}\n\nLinkShift helps families coordinate work schedules and manage shifts together.`;
+      const message = `Join me on KinShift! Use join code: ${household.joinCode}\n\nKinShift helps families coordinate work schedules and manage shifts together.`;
       
       if (Platform.OS === 'ios' || Platform.OS === 'android') {
         await Share.share({
           message,
-          title: `Join ${household.name} on LinkShift`,
+          title: `Join ${household.name} on KinShift`,
         });
       } else {
         // Web fallback: copy to clipboard would go here

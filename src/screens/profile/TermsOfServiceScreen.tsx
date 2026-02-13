@@ -23,27 +23,27 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.effectiveDate}>Effective Date: October 15, 2025</Text>
-        <Text style={styles.effectiveDate}>Last Updated: October 15, 2025</Text>
+        <Text style={styles.effectiveDate}>Effective Date: February 13, 2026</Text>
+        <Text style={styles.effectiveDate}>Last Updated: February 13, 2026</Text>
 
         <Text style={styles.heading}>Agreement to Terms</Text>
         <Text style={styles.paragraph}>
-          By accessing or using LinkShift ("the App"), you agree to be bound by these Terms of Service
+          By accessing or using KinShift ("the App"), you agree to be bound by these Terms of Service
           ("Terms"). If you do not agree to these Terms, do not use the App.
         </Text>
 
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Contact:</Text> support@linkshift.app
+          <Text style={styles.bold}>Contact:</Text> joshlee_990@hotmail.co.uk
         </Text>
 
-        <Text style={styles.heading}>About LinkShift</Text>
+        <Text style={styles.heading}>About KinShift</Text>
         <Text style={styles.paragraph}>
-          LinkShift is a personal project created to help families and shift workers manage schedules. It is
-          provided "as-is" without warranties. This is not a commercial service.
+          KinShift is a mobile application designed to help families and shift workers manage schedules.
+          The App offers both free and premium subscription tiers. It is provided "as-is" without warranties.
         </Text>
 
         <Text style={styles.heading}>Eligibility</Text>
-        <Text style={styles.listItem}>• You must be at least 16 years old to use LinkShift</Text>
+        <Text style={styles.listItem}>• You must be at least 16 years old to use KinShift</Text>
         <Text style={styles.listItem}>• You must provide accurate information when creating an account</Text>
         <Text style={styles.listItem}>• You must comply with all local laws regarding internet usage</Text>
 
@@ -72,7 +72,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
 
         <Text style={styles.heading}>Data & Privacy</Text>
         <Text style={styles.paragraph}>
-          Your use of LinkShift is also governed by our Privacy Policy. Key points:
+          Your use of KinShift is also governed by our Privacy Policy. Key points:
         </Text>
         <Text style={styles.listItem}>• We collect email, name, and shift data</Text>
         <Text style={styles.listItem}>• Data is stored on Firebase (Google)</Text>
@@ -93,7 +93,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
 
         <Text style={styles.heading}>Disclaimer of Warranties</Text>
         <Text style={styles.paragraph}>
-          LinkShift is provided <Text style={styles.bold}>"AS-IS"</Text> and{' '}
+          KinShift is provided <Text style={styles.bold}>"AS-IS"</Text> and{' '}
           <Text style={styles.bold}>"AS AVAILABLE"</Text> without warranties of any kind:
         </Text>
         <Text style={styles.listItem}>• No guarantee of availability or uptime</Text>
@@ -102,7 +102,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.listItem}>• No liability for data loss</Text>
 
         <Text style={styles.warningBox}>
-          <Text style={styles.bold}>THIS IS A PERSONAL PROJECT, NOT A COMMERCIAL SERVICE. USE AT YOUR OWN RISK.</Text>
+          <Text style={styles.bold}>USE AT YOUR OWN RISK. NO WARRANTIES ARE PROVIDED.</Text>
         </Text>
 
         <Text style={styles.heading}>Limitation of Liability</Text>
@@ -117,9 +117,9 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.heading}>Termination</Text>
 
         <Text style={styles.subheading}>By You</Text>
-        <Text style={styles.paragraph}>You can stop using LinkShift at any time by:</Text>
+        <Text style={styles.paragraph}>You can stop using KinShift at any time by:</Text>
         <Text style={styles.listItem}>• Deleting your account in app settings</Text>
-        <Text style={styles.listItem}>• Emailing us at: support@linkshift.app</Text>
+        <Text style={styles.listItem}>• Emailing us at: joshlee_990@hotmail.co.uk</Text>
 
         <Text style={styles.subheading}>By Us</Text>
         <Text style={styles.paragraph}>We may suspend or terminate your account if:</Text>
@@ -136,7 +136,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.heading}>Contact Us</Text>
         <Text style={styles.paragraph}>For questions about these Terms:</Text>
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Email:</Text> support@kinshift.app
+          <Text style={styles.bold}>Email:</Text> joshlee_990@hotmail.co.uk
         </Text>
         <Text style={styles.paragraph}>We will respond within 30 days.</Text>
 
@@ -147,12 +147,12 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
           ❌ You can't: Hack, spam, harass, or use illegally{'\n'}
           🔒 Your data: You own it, we store it securely{'\n'}
           ⚠️ Disclaimer: App provided "as-is", use at your own risk{'\n'}
-          📧 Problems? support@kinshift.app{'\n'}
+          📧 Problems? joshlee_990@hotmail.co.uk{'\n'}
           🗑️ Leave: Delete account anytime
         </Text>
 
         <Text style={styles.footer}>
-          By using Kinshift, you agree to these Terms.
+          By using KinShift, you agree to these Terms.
           {'\n\n'}
           These Terms of Service are provided for Kinshift. For production apps serving many users, consult
           a legal professional to ensure compliance with all applicable laws.

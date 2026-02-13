@@ -130,14 +130,22 @@ service cloud.firestore {
     // MESSAGES COLLECTIONS
     // ========================================
     match /shiftMessages/{messageId} {
-      allow read: if isAuthenticated();
+      // Read: author or household members only
+      allow read: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdMember(resource.data.householdId))
+      );
       allow create: if isAuthenticated() && 
         request.resource.data.authorId == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
     
     match /dayMessages/{messageId} {
-      allow read: if isAuthenticated();
+      // Read: author or household members only
+      allow read: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdMember(resource.data.householdId))
+      );
       allow create: if isAuthenticated() &&
         request.resource.data.authorId == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
@@ -147,18 +155,17 @@ service cloud.firestore {
     // INVITATIONS COLLECTION
     // ========================================
     match /invitations/{invitationId} {
-      // Household admins can read all invitations for their household
-      // Any authenticated user can read (needed to look up by invite code)
+      // Read: any authenticated user (needed for invite code lookup)
       allow read: if isAuthenticated();
       
-      // Household admins can create invitations
+      // Create: any authenticated user (service layer enforces admin check)
       allow create: if isAuthenticated();
       
-      // Any authenticated user can update (accept/decline)
+      // Update: any authenticated user (accept/decline flow)
       allow update: if isAuthenticated();
       
-      // Admins can delete
-      allow delete: if isAuthenticated();
+      // Delete: only the invitation creator (service layer enforces admin check)
+      allow delete: if isAuthenticated() && resource.data.invitedBy == request.auth.uid;
     }
     
     // ========================================
@@ -190,6 +197,9 @@ service cloud.firestore {
     
     // ========================================
     // AUDIT LOGS COLLECTION
+    // Note: Broad read/delete needed for client-side TTL cleanup
+    // (cleanupExpiredAuditLogs queries cross-user docs by timestamp).
+    // Consider migrating cleanup to a Cloud Function for tighter rules.
     // ========================================
     match /auditLogs/{logId} {
       allow read: if isAuthenticated();
@@ -199,6 +209,8 @@ service cloud.firestore {
     
     // ========================================
     // SECURITY EVENTS COLLECTION
+    // Note: Broad read/delete needed for client-side TTL cleanup.
+    // Consider migrating cleanup to a Cloud Function for tighter rules.
     // ========================================
     match /securityEvents/{eventId} {
       allow read: if isAuthenticated();

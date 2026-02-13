@@ -194,9 +194,9 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
         </View>
 
         <View style={styles.detailsSection}>
-          <Text style={styles.detailsTitle}>What's LinkShift?</Text>
+          <Text style={styles.detailsTitle}>What's KinShift?</Text>
           <Text style={styles.detailsText}>
-            LinkShift helps families coordinate work schedules and shifts. You'll be able to:
+            KinShift helps families coordinate work schedules and shifts. You'll be able to:
           </Text>
           <View style={styles.featureList}>
             <Text style={styles.featureItem}>📅 View and manage family schedules</Text>

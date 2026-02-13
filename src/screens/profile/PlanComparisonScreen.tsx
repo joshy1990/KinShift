@@ -87,7 +87,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 2 members',
         'Unlimited shifts & notes',
         'All core features',
-        'Banner ads (coming soon)',
+        'All core features',
       ],
     },
     {
@@ -386,7 +386,7 @@ export const PlanComparisonScreen: React.FC = () => {
         {/* Support */}
         <View style={styles.supportSection}>
           <Text style={styles.supportText}>
-            Have questions? Contact us at support@linkshift.app
+            Have questions? Contact us at joshlee_990@hotmail.co.uk
           </Text>
         </View>
       </ScrollView>

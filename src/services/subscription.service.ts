@@ -676,7 +676,7 @@ class SubscriptionService {
           '1 household',
           'Up to 2 members',
           'Unlimited shifts & notes',
-          'Banner ads (coming soon)',
+          'All core features',
         ];
         break;
     }

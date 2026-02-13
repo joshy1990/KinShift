@@ -138,7 +138,7 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
     if (permissionStatus === 'denied') {
       showAlert(
         'Notifications Disabled',
-        'Notifications are disabled in device settings. Please enable them in Settings > LinkShift > Notifications.'
+        'Notifications are disabled in device settings. Please enable them in Settings > KinShift > Notifications.'
       );
       return;
     }

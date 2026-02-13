@@ -67,7 +67,7 @@ export const SubscriptionScreen: React.FC = () => {
         } else if (sub.tier === 'standard') {
           benefits = ['1 household', 'Up to 4 members', 'Ad-free (when ads launch)', 'All features'];
         } else {
-          benefits = ['1 household', 'Up to 2 members', 'Unlimited shifts & notes', 'Banner ads (coming soon)'];
+          benefits = ['1 household', 'Up to 2 members', 'Unlimited shifts & notes', 'All core features'];
         }
         
         const info: SubscriptionDisplayInfo = {
@@ -434,7 +434,7 @@ export const SubscriptionScreen: React.FC = () => {
         {/* Support Link */}
         <TouchableOpacity style={styles.supportLink}>
           <Text style={styles.supportLinkText}>
-            Need help? Contact support at support@kinshift.app
+            Need help? Contact support at joshlee_990@hotmail.co.uk
           </Text>
         </TouchableOpacity>
       </ScrollView>
