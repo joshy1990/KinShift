@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
+  Linking,
 } from 'react-native';
 import {
   subscriptionService,
@@ -26,7 +28,6 @@ export const SubscriptionManagementScreen: React.FC<
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [displayInfo, setDisplayInfo] = useState<SubscriptionDisplayInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     loadSubscription();
@@ -65,34 +66,29 @@ export const SubscriptionManagementScreen: React.FC<
 
     Alert.alert(
       'Cancel Subscription',
-      'Are you sure you want to cancel? You will lose access to premium features at the end of your billing period.',
+      'To cancel your subscription, you need to manage it through your App Store or Google Play Store settings.\n\nYour subscription will remain active until the end of your current billing period.',
       [
-        {text: 'Keep Subscription', style: 'cancel'},
+        {text: 'Not Now', style: 'cancel'},
         {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: processCancellation,
+          text: 'Open Subscription Settings',
+          onPress: openSubscriptionManagement,
         },
       ]
     );
   };
 
-  const processCancellation = async () => {
-    if (!user?.id) return;
-
-    setCanceling(true);
-    try {
-      await subscriptionService.cancelSubscription(user.id);
+  const openSubscriptionManagement = () => {
+    if (Platform.OS === 'ios') {
+      // Opens the iOS subscription management page
+      Linking.openURL('https://apps.apple.com/account/subscriptions');
+    } else if (Platform.OS === 'android') {
+      // Opens the Play Store subscription management page
+      Linking.openURL('https://play.google.com/store/account/subscriptions');
+    } else {
       Alert.alert(
-        'Subscription Canceled',
-        'Your subscription will remain active until the end of your billing period.',
-        [{text: 'OK', onPress: loadSubscription}]
+        'Manage Subscription',
+        'Please manage your subscription through the App Store (iOS) or Google Play Store (Android).'
       );
-    } catch (error) {
-      console.error('Error canceling subscription:', error);
-      Alert.alert('Error', 'Failed to cancel subscription. Please try again.');
-    } finally {
-      setCanceling(false);
     }
   };
 
@@ -265,20 +261,15 @@ export const SubscriptionManagementScreen: React.FC<
 
         <TouchableOpacity
           style={styles.manageBillingButton}
-          onPress={() => Alert.alert('Manage Subscription', 'You can manage your subscription through the App Store or Google Play Store.')}>
+          onPress={openSubscriptionManagement}>
           <Text style={styles.manageBillingButtonText}>Manage Billing</Text>
         </TouchableOpacity>
 
         {subscription.tier !== 'free' && !subscription.canceledAt && (
           <TouchableOpacity
             style={styles.cancelButton}
-            onPress={handleCancelSubscription}
-            disabled={canceling}>
-            {canceling ? (
-              <ActivityIndicator size="small" color="#EF4444" />
-            ) : (
-              <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
-            )}
+            onPress={handleCancelSubscription}>
+            <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
           </TouchableOpacity>
         )}
       </View>

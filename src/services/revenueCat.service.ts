@@ -78,6 +78,14 @@ export interface SubscriptionOfference {
 class RevenueCatService {
   private initialized = false;
   private customerInfo: CustomerInfo | null = null;
+  private onCustomerInfoUpdated: ((info: CustomerInfo) => void) | null = null;
+
+  /**
+   * Register a callback for when customer info changes (used by SubscriptionContext)
+   */
+  setCustomerInfoUpdateCallback(callback: ((info: CustomerInfo) => void) | null): void {
+    this.onCustomerInfoUpdated = callback;
+  }
 
   /**
    * Initialize RevenueCat
@@ -123,6 +131,11 @@ class RevenueCatService {
 
       // Save subscription status locally
       await this.saveSubscriptionStatus(customerInfo);
+
+      // Notify SubscriptionContext so React state updates in real-time
+      if (this.onCustomerInfoUpdated) {
+        this.onCustomerInfoUpdated(customerInfo);
+      }
     });
   }
 

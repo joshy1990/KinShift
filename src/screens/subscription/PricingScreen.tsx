@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import {subscriptionService, PricingInfo} from '../../services/subscription.service';
 import {revenueCatService} from '../../services/revenueCat.service';
@@ -64,13 +65,23 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
     if (tier === 'free') {
       Alert.alert(
         'Downgrade Subscription',
-        'Are you sure you want to downgrade to the free plan? You may lose access to some features.',
+        'To downgrade or cancel your subscription, you need to manage it through your App Store or Google Play Store settings.\n\nYour current plan will remain active until the end of your billing period.',
         [
-          {text: 'Cancel', style: 'cancel'},
+          {text: 'Not Now', style: 'cancel'},
           {
-            text: 'Downgrade',
-            style: 'destructive',
-            onPress: () => processDowngrade(),
+            text: 'Open Subscription Settings',
+            onPress: () => {
+              if (Platform.OS === 'ios') {
+                Linking.openURL('https://apps.apple.com/account/subscriptions');
+              } else if (Platform.OS === 'android') {
+                Linking.openURL('https://play.google.com/store/account/subscriptions');
+              } else {
+                Alert.alert(
+                  'Manage Subscription',
+                  'Please manage your subscription through the App Store (iOS) or Google Play Store (Android).'
+                );
+              }
+            },
           },
         ]
       );
@@ -162,22 +173,6 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
       } else {
         Alert.alert('Error', msg || 'Failed to upgrade subscription. Please try again.');
       }
-    } finally {
-      setUpgrading(null);
-    }
-  };
-
-  const processDowngrade = async () => {
-    if (!user?.id) return;
-
-    setUpgrading('free');
-    try {
-      await subscriptionService.downgradeToFree(user.id);
-      Alert.alert('Downgraded', 'Your subscription has been downgraded to the free plan.');
-      setCurrentTier('free');
-    } catch (error) {
-      console.error('Error downgrading:', error);
-      Alert.alert('Error', 'Failed to downgrade subscription.');
     } finally {
       setUpgrading(null);
     }

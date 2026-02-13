@@ -68,6 +68,22 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
         // Initialize RevenueCat
         await revenueCatService.initialize(user.id);
 
+        // Register for real-time RevenueCat updates (subscription changes, cancellations, renewals)
+        revenueCatService.setCustomerInfoUpdateCallback((info) => {
+          setCustomerInfo(info);
+          const hasPremium = revenueCatService.hasEntitlement('premium');
+          const hasStandard = revenueCatService.hasEntitlement('standard');
+          const newTier = hasPremium ? 'premium' : hasStandard ? 'standard' : 'free';
+          setCurrentTier(newTier);
+
+          // Sync to Firestore in background
+          if (user?.id) {
+            syncWithFirestore(user.id, newTier).catch(e =>
+              console.warn('[SubscriptionContext] Background Firestore sync failed:', e)
+            );
+          }
+        });
+
         // Get customer info
         const info = await revenueCatService.refreshCustomerInfo();
         setCustomerInfo(info);
@@ -95,6 +111,11 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
     };
 
     setupSubscriptions();
+
+    // Cleanup listener on unmount
+    return () => {
+      revenueCatService.setCustomerInfoUpdateCallback(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 

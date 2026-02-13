@@ -29,6 +29,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Linking,
 } from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {PricingInfo, subscriptionService, Subscription, SubscriptionTier} from '@/services/subscription.service';
@@ -139,28 +140,20 @@ export const PlanComparisonScreen: React.FC = () => {
     const isDowngrade = tierOrder[plan.tier] < tierOrder[currentTier];
     
     if (isDowngrade) {
-      // Handle downgrade - FREE (no payment processing needed)
+      // Downgrades must go through the App Store / Play Store
       showConfirm(
         'Downgrade Plan',
-        `Are you sure you want to downgrade to ${plan.name}?\n\nYou'll lose access to some features at the end of your billing period.\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
-        async () => {
-          try {
-            setLoading(true);
-            
-            // Update subscription in Firestore
-            await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
-            
-            await loadCurrentSubscription();
-            
+        `To downgrade to ${plan.name}, you need to change your subscription in your App Store or Google Play Store settings.\n\nYour current plan will remain active until the end of your billing period.`,
+        () => {
+          if (Platform.OS === 'ios') {
+            Linking.openURL('https://apps.apple.com/account/subscriptions');
+          } else if (Platform.OS === 'android') {
+            Linking.openURL('https://play.google.com/store/account/subscriptions');
+          } else {
             showAlert(
-              'Downgrade Scheduled',
-              `Your plan will be downgraded to ${plan.name} at the end of your current billing period.\n\nYou'll continue to have ${currentTier} access until then.`
+              'Manage Subscription',
+              'Please manage your subscription through the App Store (iOS) or Google Play Store (Android).'
             );
-          } catch (error) {
-            console.error('[PlanComparison] Downgrade failed:', error);
-            showAlert('Error', 'Failed to downgrade subscription. Please try again.');
-          } finally {
-            setLoading(false);
           }
         }
       );

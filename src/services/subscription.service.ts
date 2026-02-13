@@ -134,6 +134,9 @@ class SubscriptionService {
 
   /**
    * Get subscription tier limits
+   * 
+   * IMPORTANT: For tier enforcement, prefer getEffectiveTier() which accounts
+   * for canceled/expired subscriptions.
    */
   getTierLimits(tier: SubscriptionTier): SubscriptionLimits {
     switch (tier) {
@@ -180,6 +183,41 @@ class SubscriptionService {
           removesAdsForHousehold: false, // Free tier shows ads to everyone
         };
     }
+  }
+
+  /**
+   * Get the effective tier for a subscription, accounting for status.
+   * 
+   * - 'active' or 'trialing' → use the stored tier
+   * - 'canceled' → use the stored tier ONLY if still within currentPeriodEnd, else 'free'
+   * - 'expired' → always 'free'
+   */
+  getEffectiveTier(subscription: Subscription): SubscriptionTier {
+    if (subscription.status === 'expired') {
+      return 'free';
+    }
+
+    if (subscription.status === 'canceled') {
+      // Canceled subscriptions stay active until the end of the billing period
+      const periodEnd = subscription.currentPeriodEnd instanceof Date
+        ? subscription.currentPeriodEnd
+        : new Date(subscription.currentPeriodEnd);
+      if (new Date() > periodEnd) {
+        return 'free';
+      }
+      // Still within the paid period
+      return subscription.tier;
+    }
+
+    // 'active' or 'trialing'
+    return subscription.tier;
+  }
+
+  /**
+   * Get effective tier limits for a subscription (accounts for cancellation/expiry)
+   */
+  getEffectiveTierLimits(subscription: Subscription): SubscriptionLimits {
+    return this.getTierLimits(this.getEffectiveTier(subscription));
   }
 
   async getUserSubscription(userId: string): Promise<Subscription | null> {
@@ -265,7 +303,8 @@ class SubscriptionService {
         return {allowed: false, reason: 'No subscription found'};
       }
 
-      const limits = this.getTierLimits(subscription.tier);
+      const effectiveTier = this.getEffectiveTier(subscription);
+      const limits = this.getTierLimits(effectiveTier);
       
       // Pro tier has unlimited households
       if (limits.maxHouseholds === -1) {
@@ -284,7 +323,7 @@ class SubscriptionService {
       if (currentCount >= limits.maxHouseholds) {
         return {
           allowed: false,
-          reason: `Free tier limited to ${limits.maxHouseholds} household`,
+          reason: `${effectiveTier === 'free' ? 'Free' : effectiveTier} tier limited to ${limits.maxHouseholds} household`,
           currentUsage: currentCount,
           limit: limits.maxHouseholds,
         };
@@ -308,7 +347,8 @@ class SubscriptionService {
         return {allowed: false, reason: 'No subscription found'};
       }
 
-      const limits = this.getTierLimits(subscription.tier);
+      const effectiveTier = this.getEffectiveTier(subscription);
+      const limits = this.getTierLimits(effectiveTier);
       
       // Pro tier has unlimited members
       if (limits.maxMembersPerHousehold === -1) {
@@ -329,7 +369,7 @@ class SubscriptionService {
       if (currentCount >= limits.maxMembersPerHousehold) {
         return {
           allowed: false,
-          reason: `Free tier limited to ${limits.maxMembersPerHousehold} members per household`,
+          reason: `Your plan is limited to ${limits.maxMembersPerHousehold} members per household`,
           currentUsage: currentCount,
           limit: limits.maxMembersPerHousehold,
         };
@@ -647,17 +687,18 @@ class SubscriptionService {
       statusText,
       statusColor,
       benefits,
-      showUpgrade: subscription.tier !== 'premium',
-      canUpgradeToStandard: subscription.tier === 'free',
-      canUpgradeToPremium: subscription.tier === 'free' || subscription.tier === 'standard',
+      showUpgrade: this.getEffectiveTier(subscription) !== 'premium',
+      canUpgradeToStandard: this.getEffectiveTier(subscription) === 'free',
+      canUpgradeToPremium: this.getEffectiveTier(subscription) === 'free' || this.getEffectiveTier(subscription) === 'standard',
     };
   }
 
   /**
-   * Check if user should see ads (based on their role and tier)
+   * Check if user should see ads (based on their role and effective tier)
    */
   shouldShowAds(subscription: Subscription, isAdmin: boolean): boolean {
-    const limits = this.getTierLimits(subscription.tier);
+    const effectiveTier = this.getEffectiveTier(subscription);
+    const limits = this.getTierLimits(effectiveTier);
     
     if (isAdmin) {
       return limits.showAdsToAdmin;
@@ -668,29 +709,25 @@ class SubscriptionService {
 
   /**
    * Check if user should see ads in a household context
-   * Option 3: Premium admin removes ads for entire household
+   * Premium admin removes ads for entire household
    * 
    * Rules:
-   * - If current user is Premium → no ads
-   * - If current user's household admin is Premium → no ads (household perk)
+   * - If current user's effective tier is Premium → no ads
+   * - If household admin's effective tier is Premium → no ads (household perk)
    * - Otherwise → check based on user's own tier and role
-   * 
-   * @param userSubscription - Current user's subscription
-   * @param adminSubscription - Household admin's subscription
-   * @param isCurrentUserAdmin - Is current user the admin?
    */
   shouldShowAdsInHousehold(
     userSubscription: Subscription,
     adminSubscription: Subscription,
     isCurrentUserAdmin: boolean
   ): boolean {
-    // If user is Premium, they don't see ads
-    if (userSubscription.tier === 'premium') {
+    // If user is effectively Premium, they don't see ads
+    if (this.getEffectiveTier(userSubscription) === 'premium') {
       return false;
     }
 
-    // If household admin is Premium, nobody in household sees ads (household perk)
-    if (adminSubscription.tier === 'premium') {
+    // If household admin is effectively Premium, nobody in household sees ads
+    if (this.getEffectiveTier(adminSubscription) === 'premium') {
       return false;
     }
 
