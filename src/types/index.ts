@@ -268,6 +268,7 @@ export type CalendarStackParamList = {
   DayDetail: {date: string; shifts?: Shift[]}; // YYYY-MM-DD format, optional pre-loaded shifts
   TwoWeekView: undefined; // 14-day forward view
   PatternBuilder: undefined; // Custom pattern builder screen
+  CalendarExport: undefined; // Export shifts as .ics file (Premium)
 };
 
 export type HouseholdStackParamList = {

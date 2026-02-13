@@ -11,6 +11,7 @@ import {EditShiftScreen} from '@/screens/calendar/EditShiftScreen';
 import {DayDetailScreen} from '@/screens/calendar/DayDetailScreen';
 import {TwoWeekViewScreen} from '@/screens/calendar/TwoWeekViewScreen';
 import {PatternBuilderScreen} from '@/screens/calendar/PatternBuilderScreen';
+import {CalendarExportScreen} from '@/screens/calendar/CalendarExportScreen';
 
 const Stack = createNativeStackNavigator<CalendarStackParamList>();
 
@@ -66,6 +67,11 @@ export const CalendarStack: React.FC = () => {
         name="PatternBuilder"
         component={PatternBuilderScreen}
         options={{title: 'Create Custom Pattern', presentation: 'modal'}}
+      />
+      <Stack.Screen
+        name="CalendarExport"
+        component={CalendarExportScreen}
+        options={{title: 'Export Calendar'}}
       />
     </Stack.Navigator>
   );

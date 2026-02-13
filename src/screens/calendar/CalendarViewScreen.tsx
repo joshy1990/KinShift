@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useMemo, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect} from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,21 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     debounceTimer.current = setTimeout(() => setDebouncedDate(currentDate), 300);
     return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
   }, [currentDate]);
+
+  // Header right button — export
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CalendarExport')}
+          style={{paddingHorizontal: 12, paddingVertical: 6}}
+          accessibilityLabel="Export calendar"
+          accessibilityRole="button">
+          <Text style={{fontSize: 16, color: '#6366F1'}}>📤 Export</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
   
   // Memoize expensive date calculations (for UI — instant updates)
   const weekDates = useMemo(() => {

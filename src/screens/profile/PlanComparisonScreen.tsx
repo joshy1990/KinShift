@@ -116,7 +116,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Unlimited shifts & notes',
         'All core features',
         'Ad-free (when ads launch)',
-        'Calendar export (coming soon)',
+        'Calendar export',
         'Priority support',
       ],
     },

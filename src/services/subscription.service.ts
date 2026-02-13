@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, setDoc, updateDoc, addDoc, getDoc } from '@/config/firestore.compat';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, getDoc } from '@/config/firestore.compat';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 import { notificationService } from './notification.service';
 import { rbacService, AuditAction } from './rbac.service';
@@ -125,7 +125,7 @@ class SubscriptionService {
           'Enterprise household management',
           'Real-time sync',
           'Ad-free (when ads launch)',
-          'Calendar export (coming soon)',
+          'Calendar export',
           'Early access to new features',
         ],
       },
@@ -653,7 +653,7 @@ class SubscriptionService {
           'Up to 12 members per household',
           'Ad-free (when ads launch)',
           'Priority support',
-          'Calendar export (coming soon)',
+          'Calendar export',
         ];
         break;
       

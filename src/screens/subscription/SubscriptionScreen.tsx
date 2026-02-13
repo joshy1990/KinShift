@@ -362,7 +362,7 @@ const getTierFeatures = (tierId: string): Array<{ name: string; included: boolea
       { name: 'Unlimited households', included: true },
       { name: 'Up to 12 members', included: true },
       { name: 'Ad-free (when ads launch)', included: true },
-      { name: 'Calendar export (coming soon)', included: true },
+      { name: 'Calendar export', included: true },
       { name: 'Priority support', included: true },
     ];
   }
@@ -412,7 +412,7 @@ const getPremiumFeatures = () => [
   'Unlimited households',
   'Up to 12 members',
   'Ad-free (when ads launch)',
-  'Calendar export (coming soon)',
+  'Calendar export',
   'Priority support',
 ];
 
@@ -423,7 +423,7 @@ const getComparisonFeatures = () => [
   'Households',
   'Members per household',
   'Ad-free (when ads launch)',
-  'Calendar export (coming soon)',
+  'Calendar export',
   'Priority support',
 ];
 
