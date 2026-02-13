@@ -482,19 +482,26 @@ export class ShiftService extends BaseService {
     const querySnapshot = await getDocs(q);
     const shifts: Shift[] = [];
     let cursor: DocumentSnapshot | undefined;
+    let hasMore = false;
 
-    querySnapshot.docs.forEach((doc, index) => {
-      const data = doc.data() as any;
-      // Filter out deleted shifts
-      if (data.isDeleted !== true && index < pageSize) {
-        shifts.push({ id: doc.id, ...data } as Shift);
-        cursor = doc;
+    for (const docSnap of querySnapshot.docs) {
+      const data = docSnap.data() as any;
+      // Filter out soft-deleted shifts client-side
+      if (data.isDeleted === true) continue;
+
+      if (shifts.length < pageSize) {
+        shifts.push({ id: docSnap.id, ...data } as Shift);
+        cursor = docSnap;
+      } else {
+        // We found one more non-deleted shift beyond pageSize — there are more pages
+        hasMore = true;
+        break;
       }
-    });
+    }
 
     return {
       shifts,
-      hasMore: querySnapshot.size > pageSize,
+      hasMore,
       cursor,
 };
     } catch (error) {

@@ -81,13 +81,12 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
     const newErrors: Record<string, string> = {};
 
     if (!form.emailOrPhone.trim()) {
-      newErrors.emailOrPhone = 'Email or phone number is required';
+      newErrors.emailOrPhone = 'Email address is required';
     } else {
-      const isEmail = form.emailOrPhone.includes('@');
-      const isPhone = /^\+?[\d\s\-() ]+$/.test(form.emailOrPhone);
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.emailOrPhone);
       
-      if (!isEmail && !isPhone) {
-        newErrors.emailOrPhone = 'Please enter a valid email or phone number';
+      if (!isEmail) {
+        newErrors.emailOrPhone = 'Please enter a valid email address';
       }
     }
 
@@ -287,12 +286,12 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
           </Text>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Email or Phone Number *</Text>
+          <Text style={styles.label}>Email Address *</Text>
           <TextInput
             style={[styles.input, errors.emailOrPhone ? styles.inputError : null]}
             value={form.emailOrPhone}
             onChangeText={(text) => setForm(prev => ({...prev, emailOrPhone: text}))}
-            placeholder="example@email.com or +1234567890"
+            placeholder="example@email.com"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}

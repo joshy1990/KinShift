@@ -272,14 +272,34 @@ class AuthService {
         }
       }
 
-      // Delete user's personal shifts (shifts without householdId or where user is owner)
+      // Delete user's personal shifts (shifts without a household, or whose household was emptied above)
+      // For household shifts where other members remain, only soft-delete
+      const activeHouseholdIds = new Set(
+        householdsSnapshot.docs
+          .filter(d => {
+            const h = d.data();
+            return h.members.filter((id: string) => id !== userId).length > 0;
+          })
+          .map(d => d.id)
+      );
+
       const shiftsQuery = query(
         collection(db, COLLECTIONS.SHIFTS),
         where('ownerId', '==', userId)
       );
       const shiftsSnapshot = await getDocs(shiftsQuery);
       shiftsSnapshot.docs.forEach((shiftDoc: any) => {
-        deleteRefs.push(shiftDoc.ref);
+        const shiftData = shiftDoc.data();
+        if (shiftData.householdId && activeHouseholdIds.has(shiftData.householdId)) {
+          // Soft-delete: household still has other members who may need to see history
+          updateOps.push({
+            ref: shiftDoc.ref,
+            data: { isDeleted: true, updatedAt: new Date() },
+          });
+        } else {
+          // Hard-delete: personal shift or household is being deleted
+          deleteRefs.push(shiftDoc.ref);
+        }
       });
 
       // Delete user's personal day notes
@@ -325,26 +345,19 @@ class AuthService {
       }
 
       // Handle tier downgrade for households where new admin was promoted
-      // This happens asynchronously after the batch commit to avoid delays
       if (householdsToDowngrade.length > 0) {
-        (async () => {
+        for (const {householdId, newAdminId} of householdsToDowngrade) {
           try {
-            for (const {householdId, newAdminId} of householdsToDowngrade) {
-              try {
-                await householdService.handleAdminPromotionAndDowngrade(
-                  householdId,
-                  newAdminId,
-                  userId // Previous admin
-                );
-              } catch {
-                console.warn(`⚠️ Failed to handle downgrade for household ${householdId}`);
-                // Continue with other households
-              }
-            }
+            await householdService.handleAdminPromotionAndDowngrade(
+              householdId,
+              newAdminId,
+              userId // Previous admin
+            );
           } catch {
-            console.warn('⚠️ Failed to process household downgrades');
+            console.warn(`⚠️ Failed to handle downgrade for household ${householdId}`);
+            // Continue with other households — don't block account deletion
           }
-        })();
+        }
       }
 
       // Delete Firebase Auth account

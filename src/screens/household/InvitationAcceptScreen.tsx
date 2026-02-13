@@ -14,8 +14,6 @@ import {HouseholdStackParamList, Invitation} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
 import {invitationService} from '@/services/invitation.service';
 import {notificationService} from '@/services/notification.service';
-import {doc, updateDoc} from '@/config/firestore.compat';
-import {db} from '@/config/firebase.config';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'InvitationAccept'>;
 
@@ -110,9 +108,8 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
     if (!invitation) return;
     setDeclining(true);
     try {
-      // Update invitation status in Firestore
-      const invitationRef = doc(db, 'invitations', invitation.id);
-      await updateDoc(invitationRef, { status: 'declined', declinedAt: new Date() });
+      // Use service layer instead of direct Firestore access
+      await invitationService.declineInvitation(invitation.id);
       
       Alert.alert(
         'Invitation Declined',
@@ -248,7 +245,7 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          Invitation expires on {invitation.expiresAt.toLocaleDateString()}
+          Invitation expires on {((invitation.expiresAt as any)?.toDate ? (invitation.expiresAt as any).toDate() : new Date(invitation.expiresAt)).toLocaleDateString()}
         </Text>
       </View>
     </ScrollView>

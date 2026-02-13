@@ -40,15 +40,28 @@ class InvitationService {
       throw new Error('Cannot send invitation to yourself');
     }
 
+    // Prevent duplicate pending invitations
+    const existingQuery = query(
+      collection(db, COLLECTIONS.INVITATIONS),
+      where('householdId', '==', householdId),
+      where('emailOrPhone', '==', normalizedEmail),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const existingSnapshot = await getDocs(existingQuery);
+    if (!existingSnapshot.empty) {
+      throw new Error('A pending invitation already exists for this email address');
+    }
+
     const inviteCode = this.generateInviteCode();
     const inviterName = (inviterUser as any).displayName || inviterUser.email;
     const invitation: any = {
-      code: inviteCode,
+      inviteCode,
       householdId,
       householdName: household.name,
-      inviterUserId: inviterUser.id,
+      invitedBy: inviterUser.id,
       inviterName,
-      inviteeEmail: normalizedEmail,
+      emailOrPhone: normalizedEmail,
       inviteeName: inviteeName || normalizedEmail,
       role,
       status: 'pending',
@@ -88,7 +101,7 @@ class InvitationService {
 
   async getInvitationByCode(inviteCode: string): Promise<Invitation | null> {
     const invitationsRef = collection(db, COLLECTIONS.INVITATIONS);
-    const q = query(invitationsRef, where('code', '==', inviteCode));
+    const q = query(invitationsRef, where('inviteCode', '==', inviteCode));
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
     const doc = snapshot.docs[0];
@@ -103,15 +116,22 @@ class InvitationService {
     // Check expiration
     const expiresAt = (invitation as any).expiresAt?.toDate ? (invitation as any).expiresAt.toDate() : new Date((invitation as any).expiresAt);
     if (expiresAt < new Date()) {
-      // Update status to expired
       const invitationRef = doc(db, COLLECTIONS.INVITATIONS, invitation.id);
       await updateDoc(invitationRef, { status: 'expired' });
       throw new Error('This invitation has expired');
     }
     
-    await householdService.addMemberToHousehold(invitation.householdId, acceptingUser.id, invitation.role);
+    // Mark invitation as accepted FIRST to prevent double-acceptance (race condition guard)
     const invitationRef = doc(db, COLLECTIONS.INVITATIONS, invitation.id);
-    await updateDoc(invitationRef, { status: 'accepted', acceptedAt: Timestamp.now(), acceptedByUserId: acceptingUser.id });
+    await updateDoc(invitationRef, { status: 'accepted', acceptedAt: Timestamp.now(), acceptedBy: acceptingUser.id });
+
+    try {
+      await householdService.addMemberToHousehold(invitation.householdId, acceptingUser.id, invitation.role);
+    } catch (memberError) {
+      // Revert invitation status if member addition fails
+      await updateDoc(invitationRef, { status: 'pending', acceptedAt: null, acceptedBy: null });
+      throw memberError;
+    }
   }
 
   async getHouseholdInvitations(householdId: string): Promise<Invitation[]> {
@@ -137,6 +157,11 @@ class InvitationService {
     
     // Log successful cancellation
     await auditService.logHouseholdAction(invitation.householdId, cancellingUserId, AuditAction.MEMBER_INVITE, { cancelled: true });
+  }
+
+  async declineInvitation(invitationId: string): Promise<void> {
+    const invitationRef = doc(db, COLLECTIONS.INVITATIONS, invitationId);
+    await updateDoc(invitationRef, { status: 'declined', declinedAt: Timestamp.now() });
   }
 
   // ============================================

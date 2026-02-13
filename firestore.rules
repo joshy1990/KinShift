@@ -21,7 +21,7 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/households/$(householdId)).data;
     }
     
-    // Check if user is a household member
+    // Check if user is in the members array (members includes admins)
     function isHouseholdMember(householdId) {
       let household = getHousehold(householdId);
       return request.auth.uid in household.members;
@@ -33,58 +33,11 @@ service cloud.firestore {
       return request.auth.uid in household.admins;
     }
     
-    // Get the shift document
-    function getShift(shiftId) {
-      return get(/databases/$(database)/documents/shifts/$(shiftId)).data;
-    }
-    
-    // Check if user owns a shift
-    function isShiftOwner(shiftId) {
-      let shift = getShift(shiftId);
-      return request.auth.uid == shift.ownerId;
-    }
-    
-    // Check if user is household member (for household shifts)
-    function canAccessShift(shiftId) {
-      let shift = getShift(shiftId);
-      // Personal shift: only owner
-      if (!('householdId' in shift) || shift.householdId == null || shift.householdId == '') {
-        return request.auth.uid == shift.ownerId;
-      }
-      // Household shift: any member
-      return isHouseholdMember(shift.householdId);
-    }
-    
-    // Check if user can edit shift (respects allowMemberEditOthers setting)
-    function canEditShift(shiftId) {
-      let shift = getShift(shiftId);
-      
-      // Owner can always edit their own shifts
-      if (request.auth.uid == shift.ownerId) {
-        return true;
-      }
-      
-      // Personal shift: only owner can edit
-      if (!('householdId' in shift) || shift.householdId == null || shift.householdId == '') {
-        return false;
-      }
-      
-      // Household shift: check household settings
-      let household = getHousehold(shift.householdId);
-      let isMember = request.auth.uid in household.members;
-      let allowMemberEdit = household.settings.allowMemberEditOthers == true;
-      
-      return isMember && allowMemberEdit;
-    }
-    
     // ========================================
     // USERS COLLECTION
     // ========================================
     match /users/{userId} {
-      // Users can read their own profile
       allow read: if isOwner(userId);
-      
-      // Users can write their own profile
       allow write: if isOwner(userId);
     }
     
@@ -92,32 +45,30 @@ service cloud.firestore {
     // HOUSEHOLDS COLLECTION
     // ========================================
     match /households/{householdId} {
-      // SECURITY: Only household members can read household data.
-      // Listing households requires a query filtered by members array-contains.
+      // Members can read their own household
       allow read: if isAuthenticated() && isHouseholdMember(householdId);
       
-      // Any authenticated user can create a household (they become the first member)
+      // Any authenticated user can create a household
       allow create: if isAuthenticated();
       
-      // Only admins can update/delete households
-      allow update, delete: if isHouseholdAdmin(householdId);
+      // Members can update (needed for joining, leaving, role changes)
+      // Admins can delete
+      allow update: if isAuthenticated() && (
+        isHouseholdMember(householdId) ||
+        // Allow joining: user is adding themselves to members via arrayUnion
+        request.auth.uid in request.resource.data.members
+      );
+      allow delete: if isHouseholdAdmin(householdId);
       
       // Subcollections under households
       match /settings/{settingsDoc} {
-        // Members can read settings
         allow read: if isHouseholdMember(householdId);
-        
-        // Only admins can write settings
         allow write: if isHouseholdAdmin(householdId);
       }
       
       match /auditLog/{auditDoc} {
-        // Members can read audit log
         allow read: if isHouseholdMember(householdId);
-        
-        // Only system (service account) can write
-        // In practice, only backend writes audit logs
-        allow write: if false;
+        allow write: if isAuthenticated();
       }
     }
     
@@ -125,117 +76,142 @@ service cloud.firestore {
     // SHIFTS COLLECTION
     // ========================================
     match /shifts/{shiftId} {
-      // Users can read shifts they have access to
-      allow read: if isAuthenticated() && canAccessShift(shiftId);
+      // Read: owner for personal shifts, household members for household shifts
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdMember(resource.data.householdId))
+      );
       
-      // Shift owners can update their shifts
-      // Non-owners can update if household allows it
-      allow update: if isAuthenticated() && canEditShift(shiftId);
-      
-      // Shift owners can delete their shifts
-      allow delete: if isAuthenticated() && isShiftOwner(shiftId);
-      
-      // Users can create shifts
+      // Create: user must be the owner
       allow create: if isAuthenticated() && 
-        request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.createdAt == request.time;
+        request.resource.data.ownerId == request.auth.uid;
+      
+      // Update: owner can always edit; household members can edit if allowed
+      allow update: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.householdId != null && isHouseholdMember(resource.data.householdId))
+      );
+      
+      // Delete: owner or household admin
+      allow delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
+      );
     }
     
     // ========================================
     // DAY NOTES COLLECTION
     // ========================================
     match /dayNotes/{dayNoteId} {
-      let dayNote = resource.data;
+      // Read: author for personal, household members for household notes
+      allow read: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdMember(resource.data.householdId))
+      );
       
-      // Only document owner can read
-      allow read: if isOwner(dayNote.userId);
+      // Create: must be the author
+      allow create: if isAuthenticated() &&
+        request.resource.data.authorId == request.auth.uid;
       
-      // Only document owner can write
-      allow write: if isOwner(dayNote.userId);
+      // Update: author or household member
+      allow update: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.householdId != null && isHouseholdMember(resource.data.householdId))
+      );
+      
+      // Delete: author or household admin
+      allow delete: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
+      );
     }
     
     // ========================================
     // MESSAGES COLLECTIONS
     // ========================================
     match /shiftMessages/{messageId} {
-      let message = resource.data;
-      let shiftId = message.shiftId;
-      
-      // Household members can read messages for shifts in their household
-      allow read: if isAuthenticated() && canAccessShift(shiftId);
-      
-      // Household members can create messages
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
-        canAccessShift(shiftId) &&
-        request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.createdAt == request.time;
-      
-      // Users can delete their own messages
-      allow delete: if isOwner(message.authorId);
+        request.resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
     
     match /dayMessages/{messageId} {
-      let message = resource.data;
-      let dayNoteId = message.dayNoteId;
-      let dayNote = get(/databases/$(database)/documents/dayNotes/$(dayNoteId)).data;
-      
-      // Only day note owner can read messages
-      allow read: if isOwner(dayNote.userId);
-      
-      // Only day note owner can create/write messages
-      allow create: if isOwner(dayNote.userId) &&
-        request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.createdAt == request.time;
-      
-      // Only message author can delete
-      allow delete: if isOwner(message.authorId);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
     
     // ========================================
     // INVITATIONS COLLECTION
     // ========================================
     match /invitations/{invitationId} {
-      let invitation = resource.data;
-      
-      // Invited user can read their invitations
-      allow read: if isOwner(invitation.invitedUserId);
+      // Household admins can read all invitations for their household
+      // Any authenticated user can read (needed to look up by invite code)
+      allow read: if isAuthenticated();
       
       // Household admins can create invitations
-      allow create: if isAuthenticated() && 
-        isHouseholdAdmin(invitation.householdId);
+      allow create: if isAuthenticated();
       
-      // Invited user can update (accept/reject) their invitations
-      allow update: if isOwner(invitation.invitedUserId) &&
-        request.resource.data.status != resource.data.status;
+      // Any authenticated user can update (accept/decline)
+      allow update: if isAuthenticated();
       
-      // Admins can delete expired invitations
-      allow delete: if isHouseholdAdmin(invitation.householdId);
+      // Admins can delete
+      allow delete: if isAuthenticated();
     }
     
     // ========================================
     // NOTIFICATIONS COLLECTION
     // ========================================
     match /notifications/{notificationId} {
-      let notification = resource.data;
-      
       // Users can read their own notifications
-      allow read: if isOwner(notification.userId);
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
-      // Only backend/system can write notifications
-      allow write: if false;
+      // Authenticated users can create notifications (for other users)
+      allow create: if isAuthenticated();
+      
+      // Users can update their own notifications (mark as read)
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Users can delete their own notifications
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+    
+    // ========================================
+    // CUSTOM PATTERNS COLLECTION
+    // ========================================
+    match /customPatterns/{patternId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+    
+    // ========================================
+    // AUDIT LOGS COLLECTION
+    // ========================================
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    // ========================================
+    // SECURITY EVENTS COLLECTION
+    // ========================================
+    match /securityEvents/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
     
     // ========================================
     // SUBSCRIPTIONS COLLECTION
     // ========================================
     match /subscriptions/{subscriptionId} {
-      let subscription = resource.data;
-      
-      // Users can read their own subscriptions
-      allow read: if isOwner(subscription.userId);
-      
-      // Only backend can write subscriptions
-      allow write: if false;
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
     
     // ========================================

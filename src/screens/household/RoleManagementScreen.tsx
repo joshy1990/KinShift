@@ -26,6 +26,7 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
   const {householdId, householdName} = route.params;
   const {user} = useAuth();
   const [members, setMembers] = useState<HouseholdMember[]>([]);
+  const [creatorId, setCreatorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -39,8 +40,12 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
   const loadMembers = async () => {
     try {
       setLoading(true);
-      const householdMembers = await householdService.getHouseholdMembers(householdId);
+      const [householdMembers, household] = await Promise.all([
+        householdService.getHouseholdMembers(householdId),
+        householdService.getHousehold(householdId),
+      ]);
       setMembers(householdMembers);
+      setCreatorId(household.creatorId || household.admins[0] || null);
     } catch (error) {
       console.error('Error loading members:', error);
       showError('Failed to load household members');
@@ -172,8 +177,8 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
   };
 
   const isOwner = (member: HouseholdMember) => {
-    // First admin in list is the owner
-    return members[0]?.userId === member.userId && member.role === 'admin';
+    // Use creatorId from household data instead of assuming first member is owner
+    return member.userId === creatorId && member.role === 'admin';
   };
 
   if (loading) {

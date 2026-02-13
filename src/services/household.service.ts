@@ -69,7 +69,7 @@ class HouseholdService {
       const currentMemberCount = household.members.length;
       
       // Get household creator's subscription to check limits
-      const creatorId = household.admins[0]; // First admin is creator
+      const creatorId = household.creatorId || household.admins[0];
       const subscriptionCheck = await subscriptionService.canAddMember(creatorId, householdId);
       
       if (!subscriptionCheck.allowed) {
@@ -178,6 +178,7 @@ class HouseholdService {
         joinCode,
         admins: [creatorId],
         members: [creatorId],
+        creatorId,
         memberJoinDates: {
           [creatorId]: now,
         },
@@ -369,6 +370,7 @@ class HouseholdService {
 
       const updateData: any = {
         members: arrayUnion(userId),
+        [`memberJoinDates.${userId}`]: new Date(),
       };
 
       if (role === 'admin') {
@@ -399,16 +401,7 @@ class HouseholdService {
 
       const household = await this.getHousehold(householdId);
 
-      // If removing an admin, we need to reassign household to another member if this is the last admin
-      const updateData: any = {
-        members: arrayRemove(userId),
-        admins: arrayRemove(userId),
-        updatedAt: new Date(),
-      };
-
-      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
-
-      // If no admins remain, promote another member in a separate operation
+      // If removing the last admin, promote another member BEFORE removing
       if (household.admins.length === 1 && household.admins.includes(userId) && household.members.length > 1) {
         const secondMember = household.members.find(m => m !== userId);
         if (secondMember) {
@@ -417,6 +410,23 @@ class HouseholdService {
             updatedAt: new Date(),
           });
         }
+      }
+
+      // Now remove the member
+      const updateData: any = {
+        members: arrayRemove(userId),
+        admins: arrayRemove(userId),
+        updatedAt: new Date(),
+      };
+
+      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
+
+      // Soft-delete the removed member's shifts in this household
+      try {
+        const { shiftService } = require('./shift.service');
+        await shiftService.deleteUserShiftsInHousehold(householdId, userId);
+      } catch (shiftError) {
+        console.warn('[HouseholdService] Failed to clean up member shifts:', shiftError);
       }
 
       // Log audit trail
@@ -520,6 +530,7 @@ class HouseholdService {
 
       await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
         admins: newAdmins,
+        creatorId: newOwnerId,
         updatedAt: new Date(),
       });
 
@@ -599,6 +610,7 @@ class HouseholdService {
               userId: userDoc.id,
               id: userDoc.id,
               name: userData.name || 'Unknown User',
+              email: userData.email || '',
               role: household.admins.includes(userId) ? 'admin' : 'member',
               joinedAt: household.memberJoinDates?.[userId] || new Date(),
             } as HouseholdMember;
@@ -624,10 +636,12 @@ class HouseholdService {
     settings: Partial<HouseholdSettings>,
   ): Promise<void> {
     try {
-      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
-        settings,
-        updatedAt: new Date(),
-      });
+      // Use dot-notation to merge instead of overwriting the entire settings object
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+      for (const [key, value] of Object.entries(settings)) {
+        updateData[`settings.${key}`] = value;
+      }
+      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
     } catch (error) {
       throw new Error('Failed to update household settings');
     }
@@ -661,17 +675,28 @@ class HouseholdService {
         throw new Error('Only admins can delete household');
       }
 
-      // Delete all shifts for this household
-      const shiftsQuery = query(
-        collection(db, COLLECTIONS.SHIFTS),
-        where('householdId', '==', householdId)
-      );
-      const shiftsSnapshot = await getDocs(shiftsQuery);
+      // Collect all document refs to delete: shifts, invitations, dayNotes, notifications, + household doc
+      const collectRefs = async (collectionName: string, field: string = 'householdId') => {
+        const q = query(collection(db, collectionName), where(field, '==', householdId));
+        const snap = await getDocs(q);
+        return snap.docs.map(d => d.ref);
+      };
 
-      // Chunk deletes: household doc + all shifts must respect 500-op batch limit
+      const [shiftRefs, invitationRefs, dayNoteRefs] = await Promise.all([
+        collectRefs(COLLECTIONS.SHIFTS),
+        collectRefs(COLLECTIONS.INVITATIONS),
+        collectRefs(COLLECTIONS.DAY_NOTES),
+      ]);
+
+      const allRefs = [
+        doc(db, COLLECTIONS.HOUSEHOLDS, householdId),
+        ...shiftRefs,
+        ...invitationRefs,
+        ...dayNoteRefs,
+      ];
+
+      // Chunk deletes to respect 500-op batch limit
       const BATCH_LIMIT = 499;
-      const allRefs = [doc(db, COLLECTIONS.HOUSEHOLDS, householdId), ...shiftsSnapshot.docs.map(d => d.ref)];
-
       for (let i = 0; i < allRefs.length; i += BATCH_LIMIT) {
         const chunk = allRefs.slice(i, i + BATCH_LIMIT);
         const batchOp = writeBatch(db);
@@ -715,9 +740,15 @@ class HouseholdService {
       if (household.admins.length === 1 && household.admins.includes(userId) && household.members.length === 1) {
         await this.deleteHousehold(householdId, userId);
       } else if (household.admins.includes(userId) && household.admins.length === 1) {
-        // If you're the only admin but there are other members, promote the next member
+        // If you're the only admin but there are other members, promote the next member first
         const nextMember = household.members.find(m => m !== userId);
         if (nextMember) {
+          // Promote next member to admin BEFORE removing self (otherwise canRemoveMember blocks)
+          await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
+            admins: arrayUnion(nextMember),
+            updatedAt: new Date(),
+          });
+          // Now remove self (there are 2 admins, so canRemoveMember allows it)
           await this.removeMember(householdId, userId, userId);
         }
       } else {
