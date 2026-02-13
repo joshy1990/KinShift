@@ -22,6 +22,11 @@ if (!REVENUECAT_API_KEY) {
 // Product IDs for subscription tiers
 export const SUBSCRIPTION_PRODUCTS = {
   FREE: 'free',
+  STANDARD_MONTHLY: 'kinshift_standard_monthly',
+  STANDARD_ANNUAL: 'kinshift_standard_annual',
+  PREMIUM_MONTHLY: 'kinshift_premium_monthly',
+  PREMIUM_ANNUAL: 'kinshift_premium_annual',
+  // Legacy aliases
   STANDARD: 'kinshift_standard_monthly',
   PREMIUM: 'kinshift_premium_monthly',
 };

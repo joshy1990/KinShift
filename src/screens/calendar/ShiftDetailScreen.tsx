@@ -165,6 +165,15 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
 
   const isOwner = user && shift.ownerId === user.id;
 
+  // Convert Firestore Timestamps to Date objects
+  const toDate = (val: any): Date => {
+    if (val?.toDate) return val.toDate();
+    if (val && typeof val === 'object' && 'seconds' in val) return new Date(val.seconds * 1000);
+    return new Date(val);
+  };
+  const shiftStartDate = toDate(shift.startTime);
+  const shiftEndDate = toDate(shift.endTime);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -180,7 +189,7 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
           <Text style={styles.infoLabel}>Date</Text>
         </View>
         <Text style={styles.infoValue}>
-          {new Date(shift.startTime).toLocaleDateString('en-US', {
+          {shiftStartDate.toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -195,12 +204,12 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
           <Text style={styles.infoLabel}>Time</Text>
         </View>
         <Text style={styles.infoValue}>
-          {new Date(shift.startTime).toLocaleTimeString('en-US', {
+          {shiftStartDate.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
           })}
           {' - '}
-          {new Date(shift.endTime).toLocaleTimeString('en-US', {
+          {shiftEndDate.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
           })}

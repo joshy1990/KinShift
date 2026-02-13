@@ -157,11 +157,17 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
         // Update local tier
         const hasPremium = revenueCatService.hasEntitlement('premium');
         const hasStandard = revenueCatService.hasEntitlement('standard');
+        const restoredTier = hasPremium ? 'premium' : hasStandard ? 'standard' : 'free';
 
         if (hasPremium) {
           setCurrentTier('premium');
         } else if (hasStandard) {
           setCurrentTier('standard');
+        }
+
+        // Sync restored tier with Firestore
+        if (user?.id) {
+          await syncWithFirestore(user.id, restoredTier);
         }
 
         return true;
@@ -174,12 +180,12 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
     }
   };
 
-  // Get tier features
+  // Get tier features — aligned with subscription.service.ts getTierLimits()
   const getFeatures = (tier: string) => {
     switch (tier) {
       case 'premium':
         return {
-          maxHouseholds: 999,
+          maxHouseholds: -1, // unlimited
           maxMembersPerHousehold: 12,
           adsFree: true,
         };
@@ -187,7 +193,7 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
         return {
           maxHouseholds: 1,
           maxMembersPerHousehold: 4,
-          adsFree: false,
+          adsFree: true, // Standard admin is ad-free
         };
       case 'free':
       default:

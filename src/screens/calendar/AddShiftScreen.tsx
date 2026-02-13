@@ -101,7 +101,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const [pickerMinute, setPickerMinute] = useState(0);
   const [customPatterns, setCustomPatterns] = useState<CustomPattern[]>([]);
   
-  const initialStartTime = route.params?.date || new Date();
+  const initialStartTime = new Date(route.params?.date || new Date());
   initialStartTime.setHours(9, 0, 0, 0); // 9 AM default
   const initialEndTime = new Date(initialStartTime);
   initialEndTime.setHours(17, 0, 0, 0); // 5 PM default
@@ -131,10 +131,10 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   // Split shift state - two separate time ranges
-  const [split1StartTime, setSplit1StartTime] = useState(new Date(initialStartTime.setHours(9, 0, 0, 0)));
-  const [split1EndTime, setSplit1EndTime] = useState(new Date(initialStartTime.setHours(12, 0, 0, 0)));
-  const [split2StartTime, setSplit2StartTime] = useState(new Date(initialStartTime.setHours(14, 0, 0, 0)));
-  const [split2EndTime, setSplit2EndTime] = useState(new Date(initialStartTime.setHours(18, 0, 0, 0)));
+  const [split1StartTime, setSplit1StartTime] = useState(() => { const d = new Date(initialStartTime); d.setHours(9, 0, 0, 0); return d; });
+  const [split1EndTime, setSplit1EndTime] = useState(() => { const d = new Date(initialStartTime); d.setHours(12, 0, 0, 0); return d; });
+  const [split2StartTime, setSplit2StartTime] = useState(() => { const d = new Date(initialStartTime); d.setHours(14, 0, 0, 0); return d; });
+  const [split2EndTime, setSplit2EndTime] = useState(() => { const d = new Date(initialStartTime); d.setHours(18, 0, 0, 0); return d; });
   const [split1StartAMPM, setSplit1StartAMPM] = useState<'AM' | 'PM'>('AM');
   const [split1EndAMPM, setSplit1EndAMPM] = useState<'AM' | 'PM'>('PM');
   const [split2StartAMPM, setSplit2StartAMPM] = useState<'AM' | 'PM'>('PM');
@@ -330,16 +330,16 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     
     // For split shifts, initialize split times with sensible defaults
     if (newType === 'split') {
-      const baseDate = route.params?.date || new Date();
+      const baseDate = new Date(route.params?.date || new Date());
       // Shift 1: 9:00 AM - 12:00 PM
-      setSplit1StartTime(new Date(baseDate.setHours(9, 0, 0, 0)));
-      setSplit1EndTime(new Date(baseDate.setHours(12, 0, 0, 0)));
+      const s1s = new Date(baseDate); s1s.setHours(9, 0, 0, 0); setSplit1StartTime(s1s);
+      const s1e = new Date(baseDate); s1e.setHours(12, 0, 0, 0); setSplit1EndTime(s1e);
       setSplit1StartAMPM('AM');
       setSplit1EndAMPM('PM');
       
       // Shift 2: 2:00 PM - 6:00 PM
-      setSplit2StartTime(new Date(baseDate.setHours(14, 0, 0, 0)));
-      setSplit2EndTime(new Date(baseDate.setHours(18, 0, 0, 0)));
+      const s2s = new Date(baseDate); s2s.setHours(14, 0, 0, 0); setSplit2StartTime(s2s);
+      const s2e = new Date(baseDate); s2e.setHours(18, 0, 0, 0); setSplit2EndTime(s2e);
       setSplit2StartAMPM('PM');
       setSplit2EndAMPM('PM');
     }
@@ -882,18 +882,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           // Don't throw - shift was created successfully, just cleanup failed
         }
 
-        // Send notification for single shift creation (only in household mode)
-        if (currentHouseholdId && newShift.id) {
-          try {
-            await notificationService.notifyShiftCreated(
-              newShift,
-              { id: currentHouseholdId }
-            );
-          } catch (notifyError) {
-            console.error('Failed to send shift creation notification:', notifyError);
-            // Don't fail the shift creation if notification fails
-          }
-        }
+        // Notification is already sent by shiftService.createShift() — no need to send here
 
         showSuccess('Shift created successfully!');
       }

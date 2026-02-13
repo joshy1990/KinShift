@@ -115,7 +115,7 @@ export const PlanComparisonScreen: React.FC = () => {
         'Unlimited shifts & notes',
         'All core features',
         'Ad-free (when ads launch)',
-        'Calendar export',
+        'Calendar export (coming soon)',
         'Priority support',
       ],
     },
@@ -176,14 +176,11 @@ export const PlanComparisonScreen: React.FC = () => {
           try {
             setLoading(true);
             
-            // Skip payment on web platform (RevenueCat doesn't support web)
+            // Web platform does not support in-app purchases
             if (Platform.OS === 'web') {
-              console.warn('[PlanComparison] Web platform - updating tier without payment');
-              await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
-              await loadCurrentSubscription();
               showAlert(
-                'Upgrade Successful (Test Mode)',
-                `Welcome to ${plan.name}!\n\n⚠️ Web platform - no payment processed.`
+                'Not Available',
+                'Subscriptions are only available on the mobile app. Please upgrade from iOS or Android.'
               );
               return;
             }

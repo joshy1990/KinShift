@@ -267,7 +267,8 @@ class HouseholdService {
       }
 
       // Check subscription tier limits before adding member
-      const tierCheck = await subscriptionService.canAddMember(userId, householdId);
+      const creatorIdForTier = household.creatorId || household.admins[0];
+      const tierCheck = await subscriptionService.canAddMember(creatorIdForTier, householdId);
       if (!tierCheck.allowed) {
         throw new Error(tierCheck.reason || 'Member limit reached for this household');
       }
@@ -362,8 +363,9 @@ class HouseholdService {
         throw new Error('User is already a member of this household');
       }
 
-      // Check subscription tier limits before adding member
-      const tierCheck = await subscriptionService.canAddMember(userId, householdId);
+      // Check subscription tier limits before adding member (use household creator's tier, not the joining user's)
+      const creatorIdForTier = household.creatorId || household.admins[0];
+      const tierCheck = await subscriptionService.canAddMember(creatorIdForTier, householdId);
       if (!tierCheck.allowed) {
         throw new Error(tierCheck.reason || 'Member limit reached for this household');
       }

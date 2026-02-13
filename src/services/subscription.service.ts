@@ -293,8 +293,8 @@ class SubscriptionService {
       return {allowed: true, currentUsage: currentCount, limit: limits.maxHouseholds};
     } catch (error) {
       console.error('Failed to check household limit:', error);
-      track('tier_check_fail_open', { scope: 'households', error: String(error) }, 'warn');
-      return {allowed: true}; // Fail open - allow on error
+      track('tier_check_fail_closed', { scope: 'households', error: String(error) }, 'warn');
+      return {allowed: false, reason: 'Unable to verify subscription. Please try again.'};
     }
   }
 
@@ -338,8 +338,8 @@ class SubscriptionService {
       return {allowed: true, currentUsage: currentCount, limit: limits.maxMembersPerHousehold};
     } catch (error) {
       console.error('Failed to check member limit:', error);
-      track('tier_check_fail_open', { scope: 'members', householdId, error: String(error) }, 'warn');
-      return {allowed: true}; // Fail open - allow on error
+      track('tier_check_fail_closed', { scope: 'members', householdId, error: String(error) }, 'warn');
+      return {allowed: false, reason: 'Unable to verify subscription. Please try again.'};
     }
   }
 

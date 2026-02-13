@@ -11,8 +11,10 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, Shift, HouseholdMember} from '@/types';
 import {format, addDays, startOfDay, endOfDay, isSameDay} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
+import {householdService} from '@/services/household.service';
 import {getShiftColor} from '@/utils/shiftColors';
 import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
+import {useAuth} from '@/contexts/AuthContext';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'TwoWeekView'>;
@@ -23,6 +25,7 @@ const NAME_COLUMN_WIDTH = 120;
 
 export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   const currentHouseholdId = useCurrentHouseholdId();
+  const {user} = useAuth();
   const insets = useSafeAreaInsets();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [startDate, setStartDate] = useState(new Date());
@@ -31,30 +34,19 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   // Generate 14-day date range
   const dateRange = Array.from({length: 14}, (_, i) => addDays(startDate, i));
   
-  // Sample household members - in real app, fetch from household service
+  // Fetch real household members
   useEffect(() => {
-    const sampleMembers: HouseholdMember[] = [
-      {
-        userId: 'user1',
-        name: 'John Doe',
-        role: 'admin',
-        joinedAt: new Date(),
-      },
-      {
-        userId: 'user2',
-        name: 'Jane Smith',
-        role: 'member',
-        joinedAt: new Date(),
-      },
-      {
-        userId: 'user3',
-        name: 'Mike Wilson',
-        role: 'member',
-        joinedAt: new Date(),
-      },
-    ];
-    setMembers(sampleMembers);
-  }, []);
+    if (!currentHouseholdId) {
+      setMembers([]);
+      return;
+    }
+    householdService.getHouseholdMembers(currentHouseholdId)
+      .then(setMembers)
+      .catch((err) => {
+        console.warn('[TwoWeekView] Failed to load members:', err);
+        setMembers([]);
+      });
+  }, [currentHouseholdId]);
   
   // Load shifts for the 14-day period
   useEffect(() => {
@@ -99,7 +91,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
       setShifts(sampleShifts);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate]);
+  }, [startDate, currentHouseholdId]);
   
   // Get shifts for a specific user and date
   const getShiftsForUserAndDate = (userId: string, date: Date): Shift[] => {
@@ -218,7 +210,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
                           key={shift.id}
                           style={[
                             styles.dayShiftCard,
-                            {backgroundColor: getShiftColor(shift, shift.ownerId)},
+                            {backgroundColor: getShiftColor(shift, user?.id || '')},
                           ]}
                           onPress={() => navigation.navigate('ShiftDetail', {shiftId: shift.id})}>
                           <Text style={styles.dayShiftMember} numberOfLines={1}>

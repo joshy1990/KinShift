@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import {subscriptionService, PricingInfo} from '../../services/subscription.service';
+import {revenueCatService} from '../../services/revenueCat.service';
 import {useAuth} from '../../contexts/AuthContext';
 
 interface PricingScreenProps {
@@ -77,12 +79,63 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
 
     setUpgrading(tier);
     try {
-      // In production, this would integrate with Stripe/App Store
-      // For now, we'll just simulate the upgrade
-      if (tier === 'standard') {
-        await subscriptionService.upgradeToStandard(user.id);
-      } else if (tier === 'premium') {
-        await subscriptionService.upgradeToPremium(user.id);
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Not Available',
+          'Subscriptions are only available on the mobile app. Please upgrade from iOS or Android.'
+        );
+        return;
+      }
+
+      // Get available packages from RevenueCat
+      const offerings = await revenueCatService.getOfferings();
+
+      if (!offerings || offerings.length === 0) {
+        throw new Error('No subscription packages available. Please try again later.');
+      }
+
+      // Find the matching package for the selected tier and billing period
+      const period = billingPeriod === 'yearly' ? 'annual' : 'monthly';
+      let targetPackage = offerings.find(pkg => {
+        const identifier = pkg.identifier.toLowerCase();
+        return identifier.includes(tier.toLowerCase()) && identifier.includes(period);
+      });
+
+      // Fall back to monthly if yearly isn't available
+      if (!targetPackage && billingPeriod === 'yearly') {
+        targetPackage = offerings.find(pkg => {
+          const identifier = pkg.identifier.toLowerCase();
+          return identifier.includes(tier.toLowerCase()) && identifier.includes('monthly');
+        });
+        if (targetPackage) {
+          Alert.alert(
+            'Yearly Not Available',
+            'Yearly billing is not yet available. Proceeding with monthly billing.'
+          );
+        }
+      }
+
+      if (!targetPackage) {
+        throw new Error(`No package found for ${tier}. Please contact support.`);
+      }
+
+      // Initiate purchase via RevenueCat (handles App Store / Play Store payment)
+      const customerInfo = await revenueCatService.purchasePackage(targetPackage);
+
+      if (!customerInfo) {
+        throw new Error('Purchase failed. Please try again.');
+      }
+
+      // Verify entitlement after purchase
+      const hasEntitlement = tier === 'premium'
+        ? revenueCatService.hasEntitlement('premium')
+        : revenueCatService.hasEntitlement('standard');
+
+      if (hasEntitlement) {
+        // Purchase verified — sync tier to Firestore
+        await subscriptionService.changeSubscriptionTier(user.id, tier as any);
+      } else {
+        throw new Error('Purchase verification failed. Please contact support if you were charged.');
       }
 
       Alert.alert(
@@ -98,9 +151,17 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
           },
         ]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error upgrading:', error);
-      Alert.alert('Error', 'Failed to upgrade subscription. Please try again.');
+      const msg = error?.message || '';
+      if (msg.includes('cancelled') || msg.includes('canceled')) {
+        Alert.alert('Purchase Cancelled', 'No charges were made.');
+      } else if (msg.includes('already owned')) {
+        Alert.alert('Already Subscribed', 'You already own this subscription.');
+        setCurrentTier(tier);
+      } else {
+        Alert.alert('Error', msg || 'Failed to upgrade subscription. Please try again.');
+      }
     } finally {
       setUpgrading(null);
     }
@@ -307,7 +368,7 @@ export const PricingScreen: React.FC<PricingScreenProps> = ({navigation}) => {
           • Cancel anytime, no questions asked
         </Text>
         <Text style={styles.footerText}>
-          • Secure payment via Stripe
+          • Secure payment via App Store & Google Play
         </Text>
       </View>
     </ScrollView>

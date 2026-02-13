@@ -265,7 +265,7 @@ export const SubscriptionManagementScreen: React.FC<
 
         <TouchableOpacity
           style={styles.manageBillingButton}
-          onPress={() => Alert.alert('Coming Soon', 'Billing management via Stripe')}>
+          onPress={() => Alert.alert('Manage Subscription', 'You can manage your subscription through the App Store or Google Play Store.')}>
           <Text style={styles.manageBillingButtonText}>Manage Billing</Text>
         </TouchableOpacity>
 

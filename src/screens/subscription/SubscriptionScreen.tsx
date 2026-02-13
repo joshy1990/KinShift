@@ -354,74 +354,76 @@ export const SubscriptionScreen: React.FC = () => {
 
 // Helper functions
 const getTierFeatures = (tierId: string): Array<{ name: string; included: boolean }> => {
-  const baseFeatures = [
-    { name: 'View schedule', included: true },
-    { name: 'Basic shifts', included: true },
-  { name: 'Limited households', included: tierId !== 'kinshift_free' },
-  ];
-
-  if (tierId.includes('standard')) {
-    return [
-      ...baseFeatures,
-      { name: 'Up to 4 members', included: true },
-      { name: 'Shift patterns', included: true },
-      { name: 'Email notifications', included: true },
-    ];
-  }
-
   if (tierId.includes('premium')) {
     return [
-      ...baseFeatures,
-      { name: 'Up to 12 members', included: true },
+      { name: 'Unlimited shifts & notes', included: true },
       { name: 'Shift patterns', included: true },
-      { name: 'Push notifications', included: true },
-      { name: 'No ads', included: true },
+      { name: 'Two-week calendar view', included: true },
+      { name: 'Unlimited households', included: true },
+      { name: 'Up to 12 members', included: true },
+      { name: 'Ad-free (when ads launch)', included: true },
+      { name: 'Calendar export (coming soon)', included: true },
       { name: 'Priority support', included: true },
     ];
   }
 
+  if (tierId.includes('standard')) {
+    return [
+      { name: 'Unlimited shifts & notes', included: true },
+      { name: 'Shift patterns', included: true },
+      { name: 'Two-week calendar view', included: true },
+      { name: '1 household', included: true },
+      { name: 'Up to 4 members', included: true },
+      { name: 'Ad-free (when ads launch)', included: true },
+    ];
+  }
+
+  // Free tier
   return [
-    { name: 'View schedule', included: true },
-    { name: 'Basic shifts', included: true },
+    { name: 'Unlimited shifts & notes', included: true },
+    { name: 'Shift patterns', included: true },
+    { name: 'Two-week calendar view', included: true },
     { name: '1 household', included: true },
-    { name: '2 members', included: true },
+    { name: 'Up to 2 members', included: true },
   ];
 };
 
 const getFreeFeatures = () => [
-  'View schedule',
-  'Basic shifts',
-  'Email support',
+  'Unlimited shifts & notes',
+  'Shift patterns',
+  'Two-week calendar view',
+  '1 household',
+  'Up to 2 members',
 ];
 
 const getStandardFeatures = () => [
-  'View schedule',
-  'Basic shifts',
+  'Unlimited shifts & notes',
   'Shift patterns',
-  'Push notifications',
-  'Email support',
+  'Two-week calendar view',
+  '1 household',
   'Up to 4 members',
+  'Ad-free (when ads launch)',
 ];
 
 const getPremiumFeatures = () => [
-  'View schedule',
-  'Basic shifts',
+  'Unlimited shifts & notes',
   'Shift patterns',
-  'Push notifications',
-  'Email support',
+  'Two-week calendar view',
+  'Unlimited households',
   'Up to 12 members',
-  'No ads',
+  'Ad-free (when ads launch)',
+  'Calendar export (coming soon)',
   'Priority support',
 ];
 
 const getComparisonFeatures = () => [
-  'View schedule',
-  'Basic shifts',
+  'Unlimited shifts & notes',
   'Shift patterns',
+  'Two-week calendar view',
   'Households',
   'Members per household',
-  'Push notifications',
-  'No ads',
+  'Ad-free (when ads launch)',
+  'Calendar export (coming soon)',
   'Priority support',
 ];
 
