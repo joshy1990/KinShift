@@ -13,6 +13,7 @@ import {
   Modal, 
   ScrollView
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '@/styles/theme';
 import { ShiftType } from '@/types';
 import { 
@@ -38,6 +39,7 @@ export const ShiftTypePicker: React.FC<ShiftTypePickerProps> = ({
   disabled = false
 }) => {
   const [showFullPicker, setShowFullPicker] = useState(false);
+  const insets = useSafeAreaInsets();
   
   // Get types to display
   const typesToShow = quickAccessOnly ? getQuickShiftTypes() : getAllShiftTypes();
@@ -110,7 +112,7 @@ export const ShiftTypePicker: React.FC<ShiftTypePickerProps> = ({
           onRequestClose={() => setShowFullPicker(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Shift Type</Text>
                 <TouchableOpacity
@@ -263,7 +265,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: borderRadius.lg,
     borderTopRightRadius: borderRadius.lg,
     maxHeight: '80%',
-    paddingBottom: spacing.xl,
   },
   modalHeader: {
     flexDirection: 'row',

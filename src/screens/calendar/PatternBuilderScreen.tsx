@@ -10,7 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList, ShiftType } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +37,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
   const currentHouseholdId = useCurrentHouseholdId();
+  const insets = useSafeAreaInsets();
   
   const [patternName, setPatternName] = useState('');
   const [patternMode, setPatternMode] = useState<'weekly' | 'repetition'>('weekly');
@@ -175,7 +176,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
     setSaving(true);
     try {
-      const savedPatternId = await customPatternService.savePattern(
+      await customPatternService.savePattern(
         user.id,
         patternName.trim(),
         cells,
@@ -184,14 +185,12 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         patternMode // Pass the current mode!
       );
 
-      // Load the saved pattern to pass as object for pre-selection
-      const savedPattern = await customPatternService.getPattern(savedPatternId);
-
-      // Navigate back to AddShift with the newly created pattern pre-selected
-      navigation.navigate('AddShift', {
-        date: new Date(), // Pass current date (will be hidden for custom patterns)
-        preSelectPattern: savedPattern || { id: savedPatternId, name: patternName.trim() }, // Pass the pattern object
-      });
+      // Show success and navigate back
+      Alert.alert(
+        'Pattern Saved',
+        `"${patternName.trim()}" has been saved successfully.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
     } catch (error) {
       console.error('Failed to save pattern:', error);
       Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
@@ -399,7 +398,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             )}
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.clearButton]}
                 onPress={handleClearCell}

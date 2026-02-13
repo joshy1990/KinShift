@@ -5,11 +5,13 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HouseholdStackParamList, Household} from '@/types';
 import {householdService} from '@/services/household.service';
 import {useAuth} from '@/contexts/AuthContext';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'HouseholdList'>;
 
 export const HouseholdListScreen: React.FC<Props> = ({navigation}) => {
   const {user} = useAuth();
+  const insets = useSafeAreaInsets();
   const [households, setHouseholds] = useState<Household[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,7 +96,7 @@ export const HouseholdListScreen: React.FC<Props> = ({navigation}) => {
         </View>
       )}
 
-      <View style={styles.buttonContainer}>
+      <View style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           style={styles.button}
           onPress={() => navigation.navigate('CreateHousehold')}>
@@ -227,6 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A2E',
     borderTopWidth: 1,
     borderTopColor: '#2A2A3E',
+    // paddingBottom is applied inline via useSafeAreaInsets
   },
   button: {
     backgroundColor: '#6366F1',

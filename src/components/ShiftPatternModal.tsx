@@ -12,6 +12,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { format, addDays, startOfToday } from 'date-fns';
 import { spacing, typography, borderRadius } from '@/utils/responsive';
@@ -102,6 +103,7 @@ export const ShiftPatternModal: React.FC<Props> = ({
   const [rotationWeeks, setRotationWeeks] = useState(4);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const shiftTypes = DEFAULT_SHIFT_TYPES;
+  const insets = useSafeAreaInsets();
 
   const handleDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -507,7 +509,7 @@ export const ShiftPatternModal: React.FC<Props> = ({
         </ScrollView>
 
         {/* Footer */}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           {currentStep !== 'template' && (
             <TouchableOpacity
               style={styles.secondaryButton}

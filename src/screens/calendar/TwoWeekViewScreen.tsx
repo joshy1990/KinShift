@@ -13,6 +13,7 @@ import {format, addDays, startOfDay, endOfDay, isSameDay} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
 import {getShiftColor} from '@/utils/shiftColors';
 import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'TwoWeekView'>;
 
@@ -22,6 +23,7 @@ const NAME_COLUMN_WIDTH = 120;
 
 export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   const currentHouseholdId = useCurrentHouseholdId();
+  const insets = useSafeAreaInsets();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [startDate, setStartDate] = useState(new Date());
   const [members, setMembers] = useState<HouseholdMember[]>([]);
@@ -243,7 +245,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
       </ScrollView>
       
       {/* Summary footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Total Shifts</Text>
           <Text style={styles.summaryValue}>{shifts.length}</Text>

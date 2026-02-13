@@ -22,6 +22,7 @@ import {householdService} from '@/services/household.service';
 import {notificationService} from '@/services/notification.service';
 import {deepLinkService} from '@/utils/deepLink.service';
 import {showAlert, showError, showSuccess, showConfirm} from '@/utils/alert';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<HouseholdStackParamList, 'InviteMembers'>;
 
@@ -34,6 +35,7 @@ interface InviteForm {
 export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
   const {user} = useAuth();
   const {householdId} = route.params;
+  const insets = useSafeAreaInsets();
   
   const [household, setHousehold] = useState<Household | null>(null);
   const [loading, setLoading] = useState(false);
@@ -366,7 +368,7 @@ export const InviteMembersScreen: React.FC<Props> = ({navigation, route}) => {
       onRequestClose={() => setShowShareModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Share Invitation</Text>
             <TouchableOpacity onPress={() => setShowShareModal(false)}>
@@ -621,7 +623,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    paddingBottom: 30,
     maxHeight: '80%',
   },
   modalHeader: {
