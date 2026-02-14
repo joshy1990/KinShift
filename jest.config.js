@@ -1,8 +1,8 @@
 module.exports = {
   preset: 'jest-expo',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.ts?(x)', '**/?(*.)+(spec|test).ts?(x)'],
+  roots: ['<rootDir>/src', '<rootDir>/tests'],
+  testMatch: ['**/?(*.)+(spec|test).ts?(x)'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
@@ -28,7 +28,6 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/**/__tests__/**',
     '!src/**/index.ts',
   ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],

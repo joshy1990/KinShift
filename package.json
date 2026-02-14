@@ -17,7 +17,10 @@
     "test:all": "npm run test:performance && npm run test && npm run lint",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
+    "security:scan": "node scripts/security-scan.js",
+    "security:audit": "npm audit --audit-level=high",
+    "prerelease": "npm run lint && npm run test && npm run security:scan"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
