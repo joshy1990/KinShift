@@ -3,6 +3,7 @@ import {Platform} from 'react-native';
 import {User} from '@/types';
 import {authService} from '@/services/auth.service';
 import {notificationService} from '@/services/notification.service';
+import {rbacService} from '@/services/rbac.service';
 import {revenueCatService} from '@/services/revenueCat.service';
 import {useNotificationSetup} from '@/utils/notificationIntegration';
 import {setSentryUser, clearSentryUser} from '@/config/sentry.config';
@@ -99,6 +100,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     
     // Clear Sentry user context
     clearSentryUser();
+
+    // Clear RBAC permission cache
+    rbacService.clearCache();
     
     setUser(null);
   };
@@ -115,7 +119,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     if (!user) {
       throw new Error('No user logged in');
     }
+    // Clean up notifications BEFORE deletion (requires valid auth)
+    if (Platform.OS !== 'web' && user.id) {
+      try {
+        await notificationService.cleanup(user.id);
+      } catch (error) {
+        console.error('Error cleaning up notifications during deletion:', error);
+      }
+    }
     await authService.deleteAccount(password);
+    clearSentryUser();
+    rbacService.clearCache();
     setUser(null);
   };
 

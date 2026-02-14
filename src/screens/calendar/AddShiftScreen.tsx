@@ -542,10 +542,11 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       if (!usePattern && shiftType === 'off') {
         const selectedDate = route.params?.date || startTime;
         
-        // Get all shifts for this user on this date
+        // Get shifts for this user on this date, scoped to current household
         const result = await shiftService.getShifts(
           {
             ownerId: user.id,
+            ...(currentHouseholdId ? { householdId: currentHouseholdId } : {}),
           },
           {
             pageSize: 1000, // High limit to get ALL shifts
@@ -842,11 +843,12 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         // (Other household members' shifts are NOT affected)
         const selectedDate = route.params?.date || startTime;
         
-        // Query all shifts for this user (with error handling)
+        // Query shifts for this user, scoped to current household
         try {
           const allShifts = await shiftService.getShifts(
             {
               ownerId: user.id, // Only THIS user's shifts
+              ...(currentHouseholdId ? { householdId: currentHouseholdId } : {}),
             },
             {
               pageSize: 1000, // High limit to get ALL shifts for cleanup

@@ -17,6 +17,7 @@ import {Household, HouseholdSettings, HouseholdMember} from '@/types';
 import {COLLECTIONS, db} from '@/config/firebase.config';
 import {subscriptionService} from './subscription.service';
 import { auditService } from './audit.service';
+import { rbacService } from './rbac.service';
 
 interface PermissionCheckResult {
   allowed: boolean;
@@ -435,6 +436,9 @@ class HouseholdService {
       await auditService.logHouseholdAction(householdId, requestingUserId, 'remove_member', {
         targetUserId: userId,
       });
+
+      // Invalidate RBAC cache so permission changes take effect immediately
+      rbacService.invalidateHousehold(householdId);
     } catch (error: any) {
       throw new Error(error.message || 'Failed to remove member');
     }
@@ -459,6 +463,9 @@ class HouseholdService {
       await auditService.logHouseholdAction(householdId, requestingUserId, 'promote_member', {
         targetUserId: userId,
       });
+
+      // Invalidate RBAC cache so permission changes take effect immediately
+      rbacService.invalidateHousehold(householdId);
     } catch (error: any) {
       throw new Error(error.message || 'Failed to promote member');
     }
@@ -501,6 +508,9 @@ class HouseholdService {
       await auditService.logHouseholdAction(householdId, requestingUserId, 'demote_member', {
         targetUserId: userId,
       });
+
+      // Invalidate RBAC cache so permission changes take effect immediately
+      rbacService.invalidateHousehold(householdId);
     } catch (error: any) {
       throw new Error(error.message || 'Failed to demote member');
     }
@@ -775,7 +785,8 @@ class HouseholdService {
         return false;
       }
 
-      const limits = subscriptionService.getTierLimits(subscription.tier);
+      // Use effective tier (accounts for cancellation/expiry)
+      const limits = subscriptionService.getEffectiveTierLimits(subscription);
       
       // Check member limit
       if (household.members.length > limits.maxMembersPerHousehold) {

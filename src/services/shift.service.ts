@@ -189,9 +189,8 @@ export class ShiftService extends BaseService {
         }
 
         // Validate tier limit
-        const compliance = await householdService.validateHouseholdCompliance(shiftData.householdId);
-        const complianceObj = compliance as any;
-        if (complianceObj && !complianceObj.compliant && complianceObj.violation) {
+        const isCompliant = await householdService.validateHouseholdCompliance(shiftData.householdId);
+        if (!isCompliant) {
           throw new Error('Household has exceeded member limit for subscription tier');
         }
       }
@@ -451,8 +450,12 @@ export class ShiftService extends BaseService {
     // Build query constraints array
     const constraints: any[] = [];
     
-    // Add base filters
-    if (filters.householdId) {
+    // Add base filters — allow combining householdId + ownerId for scoped queries
+    if (filters.householdId && filters.ownerId) {
+      // Both specified: scope to this user's shifts within this household
+      constraints.push(where('householdId', '==', filters.householdId));
+      constraints.push(where('ownerId', '==', filters.ownerId));
+    } else if (filters.householdId) {
       constraints.push(where('householdId', '==', filters.householdId));
     } else if (filters.ownerId) {
       constraints.push(where('ownerId', '==', filters.ownerId));
@@ -623,9 +626,8 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
           throw new Error('Unauthorized: You are not a member of this household');
         }
         // Check tier compliance
-        const compliance = await householdService.validateHouseholdCompliance(householdId);
-        const complianceObj = compliance as any;
-        if (complianceObj && !complianceObj.compliant && complianceObj.violation) {
+        const isCompliant = await householdService.validateHouseholdCompliance(householdId);
+        if (!isCompliant) {
           throw new Error('Household has exceeded member limit for subscription tier');
         }
         requiresApproval = !!household.settings?.requireApprovalForShifts;

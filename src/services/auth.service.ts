@@ -312,6 +312,66 @@ class AuthService {
         deleteRefs.push(noteDoc.ref);
       });
 
+      // Delete user's custom patterns
+      const patternsQuery = query(
+        collection(db, 'customPatterns'),
+        where('userId', '==', userId)
+      );
+      const patternsSnapshot = await getDocs(patternsQuery);
+      patternsSnapshot.docs.forEach((patDoc: any) => {
+        deleteRefs.push(patDoc.ref);
+      });
+
+      // Delete user's notifications
+      const notificationsQuery = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        where('userId', '==', userId)
+      );
+      const notificationsSnapshot = await getDocs(notificationsQuery);
+      notificationsSnapshot.docs.forEach((notifDoc: any) => {
+        deleteRefs.push(notifDoc.ref);
+      });
+
+      // Delete user's subscription record
+      const subQuery = query(
+        collection(db, COLLECTIONS.SUBSCRIPTIONS),
+        where('userId', '==', userId)
+      );
+      const subSnapshot = await getDocs(subQuery);
+      subSnapshot.docs.forEach((subDoc: any) => {
+        deleteRefs.push(subDoc.ref);
+      });
+
+      // Delete user's invitations (created by or for the user)
+      const invitesFromQuery = query(
+        collection(db, COLLECTIONS.INVITATIONS),
+        where('inviterId', '==', userId)
+      );
+      const invitesFromSnapshot = await getDocs(invitesFromQuery);
+      invitesFromSnapshot.docs.forEach((invDoc: any) => {
+        deleteRefs.push(invDoc.ref);
+      });
+
+      // Delete user's shift messages
+      const shiftMsgsQuery = query(
+        collection(db, 'shiftMessages'),
+        where('authorId', '==', userId)
+      );
+      const shiftMsgsSnapshot = await getDocs(shiftMsgsQuery);
+      shiftMsgsSnapshot.docs.forEach((msgDoc: any) => {
+        deleteRefs.push(msgDoc.ref);
+      });
+
+      // Delete user's day messages
+      const dayMsgsQuery = query(
+        collection(db, 'dayMessages'),
+        where('authorId', '==', userId)
+      );
+      const dayMsgsSnapshot = await getDocs(dayMsgsQuery);
+      dayMsgsSnapshot.docs.forEach((msgDoc: any) => {
+        deleteRefs.push(msgDoc.ref);
+      });
+
       // Delete user document
       const userDocRef = doc(db, COLLECTIONS.USERS, userId);
       deleteRefs.push(userDocRef);

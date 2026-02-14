@@ -34,6 +34,9 @@ export const SignupScreen: React.FC<Props> = ({navigation}) => {
   const [confirmPasswordError, setConfirmPasswordError] = useState(false);
 
   const handleSignup = async () => {
+    // Prevent double-tap
+    if (loading) return;
+    
     // Reset errors
     setError('');
     setNameError(false);

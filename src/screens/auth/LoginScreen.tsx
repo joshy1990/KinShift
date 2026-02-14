@@ -49,6 +49,9 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
   const [passwordError, setPasswordError] = useState(false);
 
   const handleLogin = async () => {
+    // Prevent double-tap
+    if (loading) return;
+    
     // Reset errors
     setError('');
     setEmailError(false);
@@ -104,7 +107,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
         setLoading(true);
         try {
           await auth().sendPasswordResetEmail(email);
-          showSuccess('Password reset email sent! Check the Firebase Emulator console for the link.');
+          showSuccess('Password reset email sent! Check your email inbox for the link.');
         } catch (error: any) {
           console.error('❌ Password reset error:', error);
           let errorMessage = 'Failed to send reset email. Please try again.';
