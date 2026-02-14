@@ -7,6 +7,53 @@
 import firestore from '@react-native-firebase/firestore';
 import { db } from './firebase.config';
 
+// ========================================
+// OPTIMISTIC WRITE HELPER
+// ========================================
+// @react-native-firebase writes to local cache instantly (real-time listeners
+// fire), but the returned Promise waits for the server ACK. On slow or flaky
+// connections the ACK can take many seconds, blocking the UI.
+//
+// This helper races the actual write against a short timeout. If the server
+// responds within the window → normal flow. If not → the data IS already in
+// local cache and will sync in the background, so we return success.
+const WRITE_TIMEOUT_MS = 3000;
+
+class WriteTimeoutError extends Error {
+  constructor() { super('WRITE_TIMEOUT'); this.name = 'WriteTimeoutError'; }
+}
+
+async function optimisticWrite<T>(
+  writePromise: Promise<T>,
+  label: string = 'write',
+): Promise<T | undefined> {
+  const start = Date.now();
+
+  try {
+    const result = await Promise.race([
+      writePromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new WriteTimeoutError()), WRITE_TIMEOUT_MS),
+      ),
+    ]);
+    const elapsed = Date.now() - start;
+    if (elapsed > 1000) {
+      console.log(`[Firestore] ${label} completed in ${elapsed}ms (slow)`);
+    }
+    return result;
+  } catch (err: any) {
+    if (err instanceof WriteTimeoutError) {
+      console.log(`[Firestore] ${label} cached locally, server sync pending (>${WRITE_TIMEOUT_MS}ms)`);
+      // Server sync continues in the background — log outcome but don't block
+      writePromise
+        .then(() => console.log(`[Firestore] ${label} server sync completed`))
+        .catch(e => console.warn(`[Firestore] ${label} server sync failed:`, e));
+      return undefined;
+    }
+    throw err; // Real error — propagate immediately
+  }
+}
+
 /**
  * Get a document reference
  */
@@ -73,29 +120,33 @@ export const getDocs = async (queryRef: any | any) => {
 };
 
 /**
- * Set a document
+ * Set a document (optimistic — returns once cached locally)
  */
 export const setDoc = async (docRef: any, data: any, options?: { merge?: boolean }) => {
-  if (options?.merge) {
-    await docRef.set(data, { merge: true });
-  } else {
-    await docRef.set(data);
-  }
+  const writePromise = options?.merge
+    ? docRef.set(data, { merge: true })
+    : docRef.set(data);
+  await optimisticWrite(writePromise, `setDoc(${docRef.path || 'unknown'})`);
 };
 
 /**
- * Update a document
+ * Update a document (optimistic — returns once cached locally)
  */
 export const updateDoc = async (docRef: any, data: any) => {
-  await docRef.update(data);
+  await optimisticWrite(docRef.update(data), `updateDoc(${docRef.path || 'unknown'})`);
 };
 
 /**
- * Add a document to a collection
+ * Add a document to a collection (optimistic — returns once cached locally)
+ * Pre-generates the document ID so we can return it immediately even if
+ * the server ACK hasn't arrived yet.
  */
 export const addDoc = async (collectionRef: any, data: any) => {
   try {
-    const docRef = await collectionRef.add(data);
+    // Pre-generate a document ID so we can return it immediately
+    const docRef = collectionRef.doc();
+    const writePromise = docRef.set(data);
+    await optimisticWrite(writePromise, `addDoc(${collectionRef.path || 'unknown'})`);
     return { id: docRef.id };
   } catch (error) {
     console.error('[Firestore Compat] addDoc failed:', error);
@@ -104,10 +155,10 @@ export const addDoc = async (collectionRef: any, data: any) => {
 };
 
 /**
- * Delete a document
+ * Delete a document (optimistic — returns once cached locally)
  */
 export const deleteDoc = async (docRef: any) => {
-  await docRef.delete();
+  await optimisticWrite(docRef.delete(), `deleteDoc(${docRef.path || 'unknown'})`);
 };
 
 /**
@@ -197,7 +248,7 @@ export const writeBatch = (firestoreInstance: any) => {
     delete: (docRef: any) => {
       batch.delete(docRef);
     },
-    commit: () => batch.commit(),
+    commit: () => optimisticWrite(batch.commit(), 'batch.commit'),
   };
 };
 

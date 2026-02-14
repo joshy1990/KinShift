@@ -93,6 +93,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const {user} = useAuth();
   const currentHouseholdId = useCurrentHouseholdId();
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [is24HourFormat, setIs24HourFormat] = useState(true);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -535,16 +536,6 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     }
 
     setLoading(true);
-
-    // Optimistic save — Firestore caches writes locally so data is available
-    // immediately via real-time listeners even if server ACK is slow
-    let didTimeout = false;
-    const optimisticTimeout = setTimeout(() => {
-      didTimeout = true;
-      setLoading(false);
-      showSuccess('Shifts saved! They will sync when connection improves.');
-      navigation.goBack();
-    }, 10000);
     
     try {
       // SPECIAL CASE: OFF shift type just deletes existing shifts (no new shift created)
@@ -579,9 +570,9 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         } else {
           showSuccess('Day marked as OFF');
         }
-        clearTimeout(optimisticTimeout);
         setLoading(false);
-        navigation.goBack();
+        setSaved(true);
+        setTimeout(() => navigation.goBack(), 900);
         return; // Don't create any shift, just delete and exit
       }
       if (usePattern) {
@@ -811,7 +802,11 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           }
         }
         
-        if (!didTimeout) showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
+        showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
+        setLoading(false);
+        setSaved(true);
+        setTimeout(() => navigation.goBack(), 900);
+        return;
       } else {
         // Create single shift
         const shiftData: any = {
@@ -907,17 +902,15 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           console.warn('Failed to schedule shift reminder:', reminderError);
         }
 
-        if (!didTimeout) showSuccess('Shift created successfully!');
+        showSuccess('Shift created successfully!');
       }
       
-      if (!didTimeout) navigation.goBack();
+      setLoading(false);
+      setSaved(true);
+      setTimeout(() => navigation.goBack(), 900);
     } catch (error) {
-      if (!didTimeout) {
-        console.error('Failed to create shift:', error);
-        showError('Failed to create shift. Please try again.');
-      }
-    } finally {
-      clearTimeout(optimisticTimeout);
+      console.error('Failed to create shift:', error);
+      showError('Failed to create shift. Please try again.');
       setLoading(false);
     }
   };
@@ -1327,14 +1320,14 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+            style={[styles.saveButton, loading && styles.saveButtonDisabled, saved && styles.saveButtonSaved]}
             onPress={handleSave}
-            disabled={loading}>
+            disabled={loading || saved}>
             {loading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.saveButtonText}>
-                {usePattern ? 'Create Pattern' : 'Create Shift'}
+                {saved ? 'Saved ✓' : usePattern ? 'Create Pattern' : 'Create Shift'}
               </Text>
             )}
           </TouchableOpacity>
@@ -1716,6 +1709,9 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.6,
+  },
+  saveButtonSaved: {
+    backgroundColor: '#10B981',
   },
   saveButtonText: {
     fontSize: 16,

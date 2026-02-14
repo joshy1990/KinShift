@@ -55,6 +55,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
   const [tempStartTime, setTempStartTime] = useState('09:00');
   const [tempEndTime, setTempEndTime] = useState('17:00');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   if (!user) {
     return (
@@ -175,20 +176,6 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     setSaving(true);
-
-    // Optimistic save — Firestore caches writes locally so data is available
-    // immediately via real-time listeners even if server ACK is slow
-    let didTimeout = false;
-    const optimisticTimeout = setTimeout(() => {
-      didTimeout = true;
-      setSaving(false);
-      Alert.alert(
-        'Pattern Saved',
-        `"${patternName.trim()}" has been saved. It will sync when connection improves.`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    }, 8000);
-
     try {
       await customPatternService.savePattern(
         user.id,
@@ -199,22 +186,13 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         patternMode // Pass the current mode!
       );
 
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        // Show success and navigate back
-        Alert.alert(
-          'Pattern Saved',
-          `"${patternName.trim()}" has been saved successfully.`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
-      }
+      // Show "Saved ✓" on the button briefly, then navigate back
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => navigation.goBack(), 900);
     } catch (error) {
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        console.error('Failed to save pattern:', error);
-        Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
-      }
-    } finally {
+      console.error('Failed to save pattern:', error);
+      Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
       setSaving(false);
     }
   };
@@ -349,12 +327,12 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, styles.saveButton]}
+            style={[styles.button, styles.saveButton, saved && styles.savedButton]}
             onPress={handleSavePattern}
-            disabled={saving}
+            disabled={saving || saved}
           >
             <Text style={styles.saveButtonText}>
-              {saving ? 'Saving...' : 'Save Pattern'}
+              {saved ? 'Saved ✓' : saving ? 'Saving...' : 'Save Pattern'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -629,6 +607,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#6366F1', // Purple save button to match app
+  },
+  savedButton: {
+    backgroundColor: '#10B981', // Green when saved
   },
   saveButtonText: {
     fontSize: 16,

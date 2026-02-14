@@ -46,6 +46,7 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
   // ── Loading / error state ──
   const [loadingShift, setLoadingShift] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [shift, setShift] = useState<Shift | null>(null);
 
   // ── Form state ──
@@ -184,16 +185,6 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
     setSaving(true);
 
-    // Optimistic save — Firestore caches writes locally so data is available
-    // immediately via real-time listeners even if server ACK is slow
-    let didTimeout = false;
-    const optimisticTimeout = setTimeout(() => {
-      didTimeout = true;
-      setSaving(false);
-      showSuccess('Shift saved! It will sync when connection improves.');
-      navigation.goBack();
-    }, 8000);
-
     try {
       const updates: any = {
         title: title.trim(),
@@ -217,18 +208,13 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
       }
 
       await shiftService.updateShift(shiftId, updates, user.id);
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        showSuccess('Shift updated successfully!');
-        navigation.goBack();
-      }
+      showSuccess('Shift updated successfully!');
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => navigation.goBack(), 900);
     } catch (error: any) {
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        console.error('[EditShift] Save failed:', error);
-        showError(error?.message || 'Failed to update shift');
-      }
-    } finally {
+      console.error('[EditShift] Save failed:', error);
+      showError(error?.message || 'Failed to update shift');
       setSaving(false);
     }
   }, [validateForm, title, shiftType, notes, startTime, endTime, split1StartTime, split1EndTime, split2StartTime, split2EndTime, shiftId, user, navigation]);
@@ -420,13 +406,13 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                style={[styles.saveButton, saving && styles.saveButtonDisabled, saved && styles.saveButtonSaved]}
                 onPress={handleSave}
-                disabled={saving}>
+                disabled={saving || saved}>
                 {saving ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                  <Text style={styles.saveButtonText}>{saved ? 'Saved ✓' : 'Save Changes'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -680,6 +666,9 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.5,
+  },
+  saveButtonSaved: {
+    backgroundColor: '#10B981',
   },
   saveButtonText: {
     fontSize: 16,

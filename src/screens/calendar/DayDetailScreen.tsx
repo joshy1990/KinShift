@@ -43,6 +43,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [noteCategory, setNoteCategory] = useState<DayNote['category']>('other');
   const [notifyWorking, setNotifyWorking] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const dateObj = new Date(date);
   const dateString = format(dateObj, 'yyyy-MM-dd');
@@ -229,22 +230,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
     setSaving(true);
 
-    // Optimistic save — Firestore caches writes locally so data is available
-    // immediately via real-time listeners even if server ACK is slow
-    let didTimeout = false;
-    const optimisticTimeout = setTimeout(() => {
-      didTimeout = true;
-      setSaving(false);
-      // Reset form optimistically
-      setNoteContent('');
-      setNoteTime(null);
-      setNoteTimeText('');
-      setNoteCategory('other');
-      setNotifyWorking(true);
-      setShowAddNote(false);
-      showSuccess('Note saved! It will sync when connection improves.');
-    }, 8000);
-
     try {
       await dayNoteService.createNote({
         householdId: currentHouseholdId || undefined, // undefined for personal notes
@@ -257,28 +242,24 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         notifyWorkingMembers: isPersonalMode ? false : notifyWorking, // No notifications in personal mode
       });
 
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        // Reset form
-        setNoteContent('');
-        setNoteTime(null);
-        setNoteTimeText('');
-        setNoteCategory('other');
-        setNotifyWorking(true);
-        setShowAddNote(false);
+      // Reset form
+      setNoteContent('');
+      setNoteTime(null);
+      setNoteTimeText('');
+      setNoteCategory('other');
+      setNotifyWorking(true);
+      setShowAddNote(false);
 
-        // Reload data to show new note
-        await loadDayData();
+      // Reload data to show new note
+      await loadDayData();
 
-        showSuccess('Note added successfully!' + (notifyWorking ? '\n\nWorking members have been notified.' : ''));
-      }
+      showSuccess('Note added successfully!' + (notifyWorking ? '\n\nWorking members have been notified.' : ''));
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
     } catch (error) {
-      if (!didTimeout) {
-        clearTimeout(optimisticTimeout);
-        console.error('Failed to add note:', error);
-        showError('Failed to add note');
-      }
-    } finally {
+      console.error('Failed to add note:', error);
+      showError('Failed to add note');
       setSaving(false);
     }
   };
@@ -630,13 +611,13 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                style={[styles.saveButton, saving && styles.saveButtonDisabled, saved && styles.saveButtonSaved]}
                 onPress={handleAddNote}
-                disabled={saving}>
+                disabled={saving || saved}>
                 {saving ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Add Note</Text>
+                  <Text style={styles.saveButtonText}>{saved ? 'Saved ✓' : 'Add Note'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -928,6 +909,9 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.6,
+  },
+  saveButtonSaved: {
+    backgroundColor: '#10B981',
   },
   saveButtonText: {
     color: '#FFFFFF',
