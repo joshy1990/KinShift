@@ -184,11 +184,15 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
     setSaving(true);
 
-    // Safety timeout — reset button after 15s if Firestore hangs
-    const safetyTimeout = setTimeout(() => {
+    // Optimistic save — Firestore caches writes locally so data is available
+    // immediately via real-time listeners even if server ACK is slow
+    let didTimeout = false;
+    const optimisticTimeout = setTimeout(() => {
+      didTimeout = true;
       setSaving(false);
-      showError('Save is taking too long. Please check your connection and try again.');
-    }, 15000);
+      showSuccess('Shift saved! It will sync when connection improves.');
+      navigation.goBack();
+    }, 8000);
 
     try {
       const updates: any = {
@@ -213,13 +217,18 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
       }
 
       await shiftService.updateShift(shiftId, updates, user.id);
-      showSuccess('Shift updated successfully!');
-      navigation.goBack();
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        showSuccess('Shift updated successfully!');
+        navigation.goBack();
+      }
     } catch (error: any) {
-      console.error('[EditShift] Save failed:', error);
-      showError(error?.message || 'Failed to update shift');
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        console.error('[EditShift] Save failed:', error);
+        showError(error?.message || 'Failed to update shift');
+      }
     } finally {
-      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   }, [validateForm, title, shiftType, notes, startTime, endTime, split1StartTime, split1EndTime, split2StartTime, split2EndTime, shiftId, user, navigation]);

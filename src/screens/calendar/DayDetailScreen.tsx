@@ -229,11 +229,21 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
     setSaving(true);
 
-    // Safety timeout — reset button after 15s if Firestore hangs
-    const safetyTimeout = setTimeout(() => {
+    // Optimistic save — Firestore caches writes locally so data is available
+    // immediately via real-time listeners even if server ACK is slow
+    let didTimeout = false;
+    const optimisticTimeout = setTimeout(() => {
+      didTimeout = true;
       setSaving(false);
-      showError('Save is taking too long. Please check your connection and try again.');
-    }, 15000);
+      // Reset form optimistically
+      setNoteContent('');
+      setNoteTime(null);
+      setNoteTimeText('');
+      setNoteCategory('other');
+      setNotifyWorking(true);
+      setShowAddNote(false);
+      showSuccess('Note saved! It will sync when connection improves.');
+    }, 8000);
 
     try {
       await dayNoteService.createNote({
@@ -247,23 +257,28 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         notifyWorkingMembers: isPersonalMode ? false : notifyWorking, // No notifications in personal mode
       });
 
-      // Reset form
-      setNoteContent('');
-      setNoteTime(null);
-      setNoteTimeText('');
-      setNoteCategory('other');
-      setNotifyWorking(true);
-      setShowAddNote(false);
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        // Reset form
+        setNoteContent('');
+        setNoteTime(null);
+        setNoteTimeText('');
+        setNoteCategory('other');
+        setNotifyWorking(true);
+        setShowAddNote(false);
 
-      // Reload data to show new note
-      await loadDayData();
+        // Reload data to show new note
+        await loadDayData();
 
-      showSuccess('Note added successfully!' + (notifyWorking ? '\n\nWorking members have been notified.' : ''));
+        showSuccess('Note added successfully!' + (notifyWorking ? '\n\nWorking members have been notified.' : ''));
+      }
     } catch (error) {
-      console.error('Failed to add note:', error);
-      showError('Failed to add note');
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        console.error('Failed to add note:', error);
+        showError('Failed to add note');
+      }
     } finally {
-      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   };

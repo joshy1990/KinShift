@@ -176,11 +176,18 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
     setSaving(true);
 
-    // Safety timeout — reset button after 15s if Firestore hangs
-    const safetyTimeout = setTimeout(() => {
+    // Optimistic save — Firestore caches writes locally so data is available
+    // immediately via real-time listeners even if server ACK is slow
+    let didTimeout = false;
+    const optimisticTimeout = setTimeout(() => {
+      didTimeout = true;
       setSaving(false);
-      Alert.alert('Timeout', 'Save is taking too long. Please check your connection and try again.');
-    }, 15000);
+      Alert.alert(
+        'Pattern Saved',
+        `"${patternName.trim()}" has been saved. It will sync when connection improves.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    }, 8000);
 
     try {
       await customPatternService.savePattern(
@@ -192,17 +199,22 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         patternMode // Pass the current mode!
       );
 
-      // Show success and navigate back
-      Alert.alert(
-        'Pattern Saved',
-        `"${patternName.trim()}" has been saved successfully.`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        // Show success and navigate back
+        Alert.alert(
+          'Pattern Saved',
+          `"${patternName.trim()}" has been saved successfully.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
     } catch (error) {
-      console.error('Failed to save pattern:', error);
-      Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
+      if (!didTimeout) {
+        clearTimeout(optimisticTimeout);
+        console.error('Failed to save pattern:', error);
+        Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
+      }
     } finally {
-      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   };

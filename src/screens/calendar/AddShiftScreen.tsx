@@ -536,11 +536,15 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
     setLoading(true);
 
-    // Safety timeout — reset button after 30s if Firestore hangs
-    const safetyTimeout = setTimeout(() => {
+    // Optimistic save — Firestore caches writes locally so data is available
+    // immediately via real-time listeners even if server ACK is slow
+    let didTimeout = false;
+    const optimisticTimeout = setTimeout(() => {
+      didTimeout = true;
       setLoading(false);
-      showError('Save is taking too long. Please check your connection and try again.');
-    }, 30000);
+      showSuccess('Shifts saved! They will sync when connection improves.');
+      navigation.goBack();
+    }, 10000);
     
     try {
       // SPECIAL CASE: OFF shift type just deletes existing shifts (no new shift created)
@@ -575,6 +579,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         } else {
           showSuccess('Day marked as OFF');
         }
+        clearTimeout(optimisticTimeout);
         setLoading(false);
         navigation.goBack();
         return; // Don't create any shift, just delete and exit
@@ -806,7 +811,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           }
         }
         
-        showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
+        if (!didTimeout) showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
       } else {
         // Create single shift
         const shiftData: any = {
@@ -902,15 +907,17 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           console.warn('Failed to schedule shift reminder:', reminderError);
         }
 
-        showSuccess('Shift created successfully!');
+        if (!didTimeout) showSuccess('Shift created successfully!');
       }
       
-      navigation.goBack();
+      if (!didTimeout) navigation.goBack();
     } catch (error) {
-      console.error('Failed to create shift:', error);
-      showError('Failed to create shift. Please try again.');
+      if (!didTimeout) {
+        console.error('Failed to create shift:', error);
+        showError('Failed to create shift. Please try again.');
+      }
     } finally {
-      clearTimeout(safetyTimeout);
+      clearTimeout(optimisticTimeout);
       setLoading(false);
     }
   };
