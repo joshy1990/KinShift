@@ -19,7 +19,7 @@ import { format, isSameDay } from 'date-fns';
 import { shiftService } from '@/services/shift.service';
 import { dayNoteService } from '@/services/dayNote.service';
 import { householdService } from '@/services/household.service';
-import { getShiftTypeIcon, SHIFT_TYPE_COLORS } from '@/utils/shiftColors';
+import { getShiftTypeIcon, getShiftColor } from '@/utils/shiftColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentHouseholdId } from '@/contexts/HouseholdContext';
 import { showError, showSuccess, showConfirm } from '@/utils/alert';
@@ -145,56 +145,70 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         usersRef.current = personalUsers;
       } else {
         // Household mode - fetch real household members
-        const members = await householdService.getHouseholdMembers(currentHouseholdId!);
-        const usersMap: Record<string, { name: string; email: string }> = {};
-        
-        members.forEach(member => {
-          usersMap[member.userId] = {
-            name: member.name || `${member.email?.split('@')[0] || 'Unknown'}`,
-            email: member.email || ''
-          };
-        });
-        
-        // Add current user if not in household data
-        if (!usersMap[user.id]) {
-          usersMap[user.id] = { name: user.name || 'You', email: user.email || '' };
+        try {
+          const members = await householdService.getHouseholdMembers(currentHouseholdId!);
+          const usersMap: Record<string, { name: string; email: string }> = {};
+          
+          members.forEach(member => {
+            usersMap[member.userId] = {
+              name: member.name || `${member.email?.split('@')[0] || 'Unknown'}`,
+              email: member.email || ''
+            };
+          });
+          
+          // Add current user if not in household data
+          if (!usersMap[user.id]) {
+            usersMap[user.id] = { name: user.name || 'You', email: user.email || '' };
+          }
+          
+          setUsers(usersMap);
+          usersRef.current = usersMap;
+        } catch (userError) {
+          console.warn('Failed to load household members, using current user only:', userError);
+          const fallbackUsers = { [user.id]: { name: user.name || 'You', email: user.email || '' } };
+          setUsers(fallbackUsers);
+          usersRef.current = fallbackUsers;
         }
-        
-        setUsers(usersMap);
-        usersRef.current = usersMap;
       }
       
       // Load shifts for this day
-      let dayShifts: Shift[] = [];
-      if (passedShifts && passedShifts.length > 0) {
-        // Use passed shifts if available (quick initial load)
-        dayShifts = passedShifts;
-      } else if (isPersonalMode) {
-        // Fallback to loading from DB if no passed shifts
-        const result = await shiftService.getShifts({ 
-          ownerId: user.id, 
-          startDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
-          endDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59)
-        });
-        dayShifts = result.shifts;
-      } else {
-        dayShifts = await shiftService.getHouseholdShifts(
-          currentHouseholdId!, 
-          new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
-          new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59)
-        );
+      let dayShifts: Shift[] = passedShifts || [];
+      try {
+        if (!passedShifts || passedShifts.length === 0) {
+          if (isPersonalMode) {
+            const result = await shiftService.getShifts({ 
+              ownerId: user.id, 
+              startDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
+              endDate: new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59)
+            });
+            dayShifts = result.shifts;
+          } else {
+            dayShifts = await shiftService.getHouseholdShifts(
+              currentHouseholdId!, 
+              new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0),
+              new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59)
+            );
+          }
+        }
+      } catch (shiftError) {
+        console.warn('Failed to load shifts, using passed data:', shiftError);
       }
       
       // Get notes - personal mode or household mode
-      const dayNotes = isPersonalMode
-        ? await dayNoteService.getNotesByDate(user.id, dateObj, true) // Personal notes
-        : await dayNoteService.getNotesByDate(currentHouseholdId!, dateObj, false); // Household notes
+      let dayNotes: DayNote[] = [];
+      try {
+        dayNotes = isPersonalMode
+          ? await dayNoteService.getNotesByDate(user.id, dateObj, true) // Personal notes
+          : await dayNoteService.getNotesByDate(currentHouseholdId!, dateObj, false); // Household notes
+      } catch (noteError) {
+        console.warn('Failed to load notes:', noteError);
+      }
 
       setShifts(dayShifts);
       setNotes(dayNotes);
     } catch (error) {
       console.error('Failed to load day data:', error);
-      showError('Failed to load day information');
+      // Don't show error popup — real-time subscriptions will provide the data
     } finally {
       setLoading(false);
     }
@@ -214,6 +228,13 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     const isPersonalMode = !currentHouseholdId;
 
     setSaving(true);
+
+    // Safety timeout — reset button after 15s if Firestore hangs
+    const safetyTimeout = setTimeout(() => {
+      setSaving(false);
+      showError('Save is taking too long. Please check your connection and try again.');
+    }, 15000);
+
     try {
       await dayNoteService.createNote({
         householdId: currentHouseholdId || undefined, // undefined for personal notes
@@ -229,7 +250,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       // Reset form
       setNoteContent('');
       setNoteTime(null);
-  setNoteTimeText('');
+      setNoteTimeText('');
       setNoteCategory('other');
       setNotifyWorking(true);
       setShowAddNote(false);
@@ -242,6 +263,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       console.error('Failed to add note:', error);
       showError('Failed to add note');
     } finally {
+      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   };
@@ -336,7 +358,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <View
                 style={[
                   styles.shiftColorBar,
-                  { backgroundColor: SHIFT_TYPE_COLORS[shift.shiftType] },
+                  { backgroundColor: getShiftColor(shift, user?.id || '', shift.ownerId === user?.id) },
                 ]}
               />
               <View style={styles.shiftContent}>

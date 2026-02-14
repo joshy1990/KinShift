@@ -47,7 +47,7 @@ const INSECURE_PATTERNS = [
 ];
 
 // ── Results tracking ──────────────────────────────────────────────────────
-let findings = [];
+const findings = [];
 let filesScanned = 0;
 
 function shouldIgnore(filePath) {

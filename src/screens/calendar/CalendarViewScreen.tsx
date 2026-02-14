@@ -38,6 +38,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
   const [lastTapDate, setLastTapDate] = useState<Date | null>(null);
   const [lastTapTime, setLastTapTime] = useState<number>(0);
+  const isNavigatingRef = useRef(false);
 
   // Debounce currentDate for Firestore subscriptions (prevents listener churn on rapid swipes)
   const [debouncedDate, setDebouncedDate] = useState(new Date());
@@ -278,6 +279,11 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     const isDoubleTap = lastTapDate && isSameDay(lastTapDate, date) && now - lastTapTime < 300;
 
     if (isDoubleTap) {
+      // Guard against rapid re-navigation
+      if (isNavigatingRef.current) return;
+      isNavigatingRef.current = true;
+      setTimeout(() => { isNavigatingRef.current = false; }, 1000);
+
       // Double tap - navigate to day detail with shifts for that day
       const dayShifts = getShiftsForDate(date);
       navigation.navigate('DayDetail', {

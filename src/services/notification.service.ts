@@ -696,6 +696,80 @@ const sendNotification = async (notification: any): Promise<boolean> => {
 };
 
 // ========================================
+// SHIFT REMINDERS (Local Notifications)
+// ========================================
+
+/**
+ * Schedule a local notification reminder before a shift starts.
+ * Uses Expo Notifications to fire a notification 30 minutes before the shift.
+ *
+ * @param shift - The shift to schedule a reminder for
+ * @param minutesBefore - How many minutes before the shift to send the reminder (default: 30)
+ * @returns The scheduled notification identifier, or null on failure
+ */
+const scheduleShiftReminder = async (
+  shift: { id: string; title: string; shiftType: string; startTime: Date | any },
+  minutesBefore: number = 30
+): Promise<string | null> => {
+  try {
+    // Parse shift start time
+    let startDate: Date;
+    if (shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
+      startDate = new Date((shift.startTime as any).seconds * 1000);
+    } else {
+      startDate = new Date(shift.startTime);
+    }
+
+    // Calculate trigger time (X minutes before shift)
+    const triggerTime = new Date(startDate.getTime() - minutesBefore * 60 * 1000);
+
+    // Don't schedule if the reminder time is already past
+    if (triggerTime <= new Date()) {
+      console.log('Shift reminder time already passed, skipping schedule');
+      return null;
+    }
+
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `⏰ Shift starting soon`,
+        body: `Your ${shift.shiftType || 'shift'} "${shift.title}" starts at ${timeStr}`,
+        data: {
+          type: 'shift_reminder',
+          shiftId: shift.id,
+        },
+        sound: 'default',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: triggerTime,
+      },
+    });
+
+    console.log(`Shift reminder scheduled for ${triggerTime.toISOString()} (${minutesBefore}min before)`);
+    return identifier;
+  } catch (error) {
+    console.error('Error scheduling shift reminder:', error);
+    return null;
+  }
+};
+
+/**
+ * Cancel a previously scheduled shift reminder
+ */
+const cancelShiftReminder = async (notificationId: string): Promise<void> => {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+  } catch (error) {
+    console.error('Error cancelling shift reminder:', error);
+  }
+};
+
+// ========================================
 // EXPORT SERVICE OBJECT
 // ========================================
 
@@ -720,4 +794,6 @@ export const notificationService = {
   notifyShiftCreated,
   notifyMultipleShiftsCreated,
   notifyShiftDeleted,
+  scheduleShiftReminder,
+  cancelShiftReminder,
 };

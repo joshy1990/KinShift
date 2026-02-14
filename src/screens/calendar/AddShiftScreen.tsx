@@ -535,6 +535,12 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     }
 
     setLoading(true);
+
+    // Safety timeout — reset button after 30s if Firestore hangs
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false);
+      showError('Save is taking too long. Please check your connection and try again.');
+    }, 30000);
     
     try {
       // SPECIAL CASE: OFF shift type just deletes existing shifts (no new shift created)
@@ -884,6 +890,18 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
         // Notification is already sent by shiftService.createShift() — no need to send here
 
+        // Schedule a local shift reminder 30 minutes before shift start
+        try {
+          await notificationService.scheduleShiftReminder({
+            id: newShift.id,
+            title: title.trim() || 'Shift',
+            shiftType: shiftType,
+            startTime: shiftType === 'split' ? split1StartTime : startTime,
+          });
+        } catch (reminderError) {
+          console.warn('Failed to schedule shift reminder:', reminderError);
+        }
+
         showSuccess('Shift created successfully!');
       }
       
@@ -892,6 +910,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       console.error('Failed to create shift:', error);
       showError('Failed to create shift. Please try again.');
     } finally {
+      clearTimeout(safetyTimeout);
       setLoading(false);
     }
   };

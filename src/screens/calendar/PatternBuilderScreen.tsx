@@ -175,6 +175,13 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     setSaving(true);
+
+    // Safety timeout — reset button after 15s if Firestore hangs
+    const safetyTimeout = setTimeout(() => {
+      setSaving(false);
+      Alert.alert('Timeout', 'Save is taking too long. Please check your connection and try again.');
+    }, 15000);
+
     try {
       await customPatternService.savePattern(
         user.id,
@@ -195,6 +202,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
       console.error('Failed to save pattern:', error);
       Alert.alert('Save Failed', 'Could not save pattern. Please try again.');
     } finally {
+      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   };

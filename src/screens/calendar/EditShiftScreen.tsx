@@ -183,6 +183,13 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
     }
 
     setSaving(true);
+
+    // Safety timeout — reset button after 15s if Firestore hangs
+    const safetyTimeout = setTimeout(() => {
+      setSaving(false);
+      showError('Save is taking too long. Please check your connection and try again.');
+    }, 15000);
+
     try {
       const updates: any = {
         title: title.trim(),
@@ -212,6 +219,7 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
       console.error('[EditShift] Save failed:', error);
       showError(error?.message || 'Failed to update shift');
     } finally {
+      clearTimeout(safetyTimeout);
       setSaving(false);
     }
   }, [validateForm, title, shiftType, notes, startTime, endTime, split1StartTime, split1EndTime, split2StartTime, split2EndTime, shiftId, user, navigation]);

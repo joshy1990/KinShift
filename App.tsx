@@ -74,7 +74,7 @@ function App() {
                 <StatusBar
                   barStyle="light-content"
                   backgroundColor="#0F0F23"
-                  translucent={Platform.OS === 'android'}
+                  translucent={false}
                 />
                 <RootNavigator />
               </NavigationContainer>
