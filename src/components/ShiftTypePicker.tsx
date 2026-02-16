@@ -125,7 +125,7 @@ export const ShiftTypePicker: React.FC<ShiftTypePickerProps> = ({
                 </TouchableOpacity>
               </View>
               
-              <ScrollView style={styles.modalScroll}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 40 }}>
                 <View style={styles.modalGrid}>
                   {getAllShiftTypes().map((type) => {
                     const isSelected = type === selectedType;

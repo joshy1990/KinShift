@@ -908,7 +908,10 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       style={{flex: 1}}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.container} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{paddingBottom: 40}}>
         <View style={styles.form}>
           {/* Title */}
           <View style={styles.section}>
