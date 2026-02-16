@@ -30,7 +30,9 @@ import {
   SHIFT_TYPE_COLORS,
 } from '@/utils/shiftColors';
 import {ShiftTypePicker} from '@/components/ShiftTypePicker';
+import {TimePickerModal} from '@/components/TimePickerModal';
 import {requiresStartEndTime, getShiftTypeName} from '@/utils/shiftTypeHelpers';
+import {trackShiftCreated, maybeRequestReview} from '@/utils/reviewPrompt';
 
 // Default times for each shift type
 const getDefaultTimesForShiftType = (type: ShiftType, baseDate: Date): { start: Date; end: Date; title: string } => {
@@ -80,11 +82,14 @@ const getDefaultTimesForShiftType = (type: ShiftType, baseDate: Date): { start: 
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'AddShift'>;
 
-// Simple pattern presets
+// Simple pattern presets — common shift rotations
 const SIMPLE_PATTERNS = {
-  '4on4off': { name: '4 On, 4 Off', workDays: 4, restDays: 4 },
-  '2on3off': { name: '2 On, 3 Off', workDays: 2, restDays: 3 },
-  '5on2off': { name: '5 On, 2 Off (Mon-Fri)', workDays: 5, restDays: 2 },
+  '5on2off': { name: '5 On, 2 Off', workDays: 5, restDays: 2, description: 'Mon–Fri (standard week)' },
+  '4on4off': { name: '4 On, 4 Off', workDays: 4, restDays: 4, description: 'Common 12-hour rotation' },
+  '3on3off': { name: '3 On, 3 Off', workDays: 3, restDays: 3, description: '6-day cycle' },
+  '2on2off': { name: '2 On, 2 Off', workDays: 2, restDays: 2, description: 'Rapid rotation' },
+  '7on7off': { name: '7 On, 7 Off', workDays: 7, restDays: 7, description: 'Week on, week off' },
+  '6on4off': { name: '6 On, 4 Off', workDays: 6, restDays: 4, description: '10-day cycle' },
 };
 
 import {customPatternService, CustomPattern} from '@/services/customPattern.service';
@@ -441,40 +446,9 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
   };
 
   // Helper function to calculate actual cycle length for a pattern
+  // Delegates to the service's battle-tested implementation
   const calculatePatternCycleLength = (cells: any[]): number => {
-    // Try all possible cycle lengths from 1 to 14
-    // Start with smallest to find the true repeating unit
-    for (let cycleLength = 1; cycleLength <= 14; cycleLength++) {
-      // For each potential cycle, check if entire 14-day pattern repeats correctly
-      let repeats = true;
-      
-      for (let i = 0; i < 14; i++) {
-        const currentCell = cells[i];
-        const referenceCell = cells[i % cycleLength];
-        
-        // Check if shift type matches
-        if (currentCell.shiftType !== referenceCell.shiftType) {
-          repeats = false;
-          break;
-        }
-        
-        // If both have shift times, verify times match exactly
-        if (currentCell.shiftType !== null && referenceCell.shiftType !== null) {
-          if (currentCell.startTime !== referenceCell.startTime ||
-              currentCell.endTime !== referenceCell.endTime) {
-            repeats = false;
-            break;
-          }
-        }
-      }
-      
-      if (repeats) {
-        return cycleLength; // Found the smallest repeating cycle
-      }
-    }
-    
-    // Fallback (should never happen since 14-day always repeats)
-    return 14;
+    return customPatternService.calculateCycleLength(cells);
   };
 
   const validateForm = (): boolean => {
@@ -584,6 +558,13 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
         // Check if custom pattern is selected
         if (selectedCustomPattern) {
+          // Guard against malformed pattern data
+          if (!Array.isArray(selectedCustomPattern.cells) || selectedCustomPattern.cells.length === 0) {
+            showError('This pattern has no cell data. Please recreate it.');
+            setLoading(false);
+            return;
+          }
+
           // Determine cycle length based on pattern mode
           let cycleLength: number;
           if (selectedCustomPattern.patternMode === 'weekly') {
@@ -806,6 +787,8 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         showSuccess(`Created ${shiftsToCreate.length} shifts successfully!`);
         setLoading(false);
         setSaved(true);
+        // Track for review prompt (fire-and-forget)
+        trackShiftCreated().then(() => maybeRequestReview()).catch(() => {});
         setTimeout(() => navigation.goBack(), 900);
         return;
       } else {
@@ -909,6 +892,8 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
       
       setLoading(false);
       setSaved(true);
+      // Track for review prompt (fire-and-forget)
+      trackShiftCreated().then(() => maybeRequestReview()).catch(() => {});
       setTimeout(() => navigation.goBack(), 900);
     } catch (error) {
       console.error('Failed to create shift:', error);
@@ -1246,15 +1231,15 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
                       styles.patternDesc,
                       selectedPattern === key && !selectedCustomPattern && styles.patternDescActive,
                     ]}>
-                      {pattern.workDays} days on, {pattern.restDays} days off
+                      {pattern.description}
                     </Text>
                   </TouchableOpacity>
                 ))}
 
                 {/* Custom Patterns */}
-                {customPatterns.map((customPattern) => {
+                {customPatterns.filter(cp => Array.isArray(cp.cells) && cp.cells.length > 0).map((customPattern) => {
                   const workingDays = customPattern.cells.filter(c => c.shiftType !== null).length;
-                  const daysOff = 14 - workingDays;
+                  const daysOff = customPattern.cells.length - workingDays;
                   return (
                     <TouchableOpacity
                       key={customPattern.id}
@@ -1338,84 +1323,18 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     </ScrollView>
 
       {/* Time Picker Modal */}
-      <Modal
+      <TimePickerModal
         visible={showTimePicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowTimePicker(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              Select {timePickerType === 'start' ? 'Start' : 'End'} Time
-            </Text>
-            
-            <View style={styles.pickerContainer}>
-              {/* Hour Picker */}
-              <View style={styles.pickerColumn}>
-                <Text style={styles.pickerLabel}>Hour</Text>
-                <ScrollView 
-                  style={styles.pickerScroll}
-                  showsVerticalScrollIndicator={false}>
-                  {Array.from({length: 24}, (_, i) => i).map((hour) => (
-                    <TouchableOpacity
-                      key={hour}
-                      style={[
-                        styles.pickerItem,
-                        pickerHour === hour && styles.pickerItemActive
-                      ]}
-                      onPress={() => setPickerHour(hour)}>
-                      <Text style={[
-                        styles.pickerItemText,
-                        pickerHour === hour && styles.pickerItemTextActive
-                      ]}>
-                        {String(hour).padStart(2, '0')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Minute Picker */}
-              <View style={styles.pickerColumn}>
-                <Text style={styles.pickerLabel}>Minute</Text>
-                <ScrollView 
-                  style={styles.pickerScroll}
-                  showsVerticalScrollIndicator={false}>
-                  {Array.from({length: 12}, (_, i) => i * 5).map((minute) => (
-                    <TouchableOpacity
-                      key={minute}
-                      style={[
-                        styles.pickerItem,
-                        pickerMinute === minute && styles.pickerItemActive
-                      ]}
-                      onPress={() => setPickerMinute(minute)}>
-                      <Text style={[
-                        styles.pickerItemText,
-                        pickerMinute === minute && styles.pickerItemTextActive
-                      ]}>
-                        {String(minute).padStart(2, '0')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setShowTimePicker(false)}>
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={applyPickerTime}>
-                <Text style={styles.modalSaveButtonText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        title={`Select ${activeSplitPicker
+          ? activeSplitPicker.replace('split', 'Shift ').replace('Start', ' Start').replace('End', ' End')
+          : timePickerType === 'start' ? 'Start' : 'End'} Time`}
+        hour={pickerHour}
+        minute={pickerMinute}
+        onHourChange={setPickerHour}
+        onMinuteChange={setPickerMinute}
+        onApply={applyPickerTime}
+        onCancel={() => setShowTimePicker(false)}
+      />
 
       {/* Date Picker for Holiday Start Date */}
       {showStartDatePicker && Platform.OS !== 'web' && (
@@ -1878,96 +1797,6 @@ const styles = StyleSheet.create({
   timePickerHint: {
     fontSize: 13,
     color: '#9CA3AF',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#1A1A2E',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: '#2A2A3E',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 24,
-  },
-  pickerColumn: {
-    flex: 1,
-  },
-  pickerLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pickerScroll: {
-    maxHeight: 200,
-    borderWidth: 1,
-    borderColor: '#2A2A3E',
-    borderRadius: 12,
-    backgroundColor: '#0F0F23',
-  },
-  pickerItem: {
-    padding: 16,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A3E',
-  },
-  pickerItemActive: {
-    backgroundColor: '#6366F1',
-  },
-  pickerItemText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#9CA3AF',
-  },
-  pickerItemTextActive: {
-    color: '#FFFFFF',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalCancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-  },
-  modalCancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalSaveButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#6366F1',
-    alignItems: 'center',
-  },
-  modalSaveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   // Conflict Modal Styles
   conflictModalContent: {

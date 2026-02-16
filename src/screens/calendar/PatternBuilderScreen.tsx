@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,6 +19,7 @@ import { useCurrentHouseholdId } from '@/contexts/HouseholdContext';
 import { customPatternService, PatternCell } from '@/services/customPattern.service';
 import { SHIFT_TYPE_COLORS } from '@/utils/shiftColors';
 import { spacing, borderRadius } from '@/utils/responsive';
+import { TimePickerModal } from '@/components/TimePickerModal';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'PatternBuilder'>;
 
@@ -54,6 +56,10 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
   const [showShiftPicker, setShowShiftPicker] = useState(false);
   const [tempStartTime, setTempStartTime] = useState('09:00');
   const [tempEndTime, setTempEndTime] = useState('17:00');
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end'>('start');
+  const [pickerHour, setPickerHour] = useState(9);
+  const [pickerMinute, setPickerMinute] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -93,6 +99,25 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
     setShowShiftPicker(true);
   };
 
+  const openTimePicker = (target: 'start' | 'end') => {
+    const timeStr = target === 'start' ? tempStartTime : tempEndTime;
+    const [h, m] = timeStr.split(':').map(Number);
+    setPickerHour(isNaN(h) ? 9 : h);
+    setPickerMinute(isNaN(m) ? 0 : m);
+    setTimePickerTarget(target);
+    setShowTimePicker(true);
+  };
+
+  const applyPickerTime = () => {
+    const timeStr = `${String(pickerHour).padStart(2, '0')}:${String(pickerMinute).padStart(2, '0')}`;
+    if (timePickerTarget === 'start') {
+      setTempStartTime(timeStr);
+    } else {
+      setTempEndTime(timeStr);
+    }
+    setShowTimePicker(false);
+  };
+
   const handleSelectShift = (shiftType: ShiftType | null, defaultStart: string, defaultEnd: string) => {
     if (selectedDay === null) return;
 
@@ -119,13 +144,6 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSaveCell = () => {
     if (selectedDay === null) return;
-
-    // Validate time format
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(tempStartTime) || !timeRegex.test(tempEndTime)) {
-      Alert.alert('Invalid Time', 'Please use HH:mm format (e.g., 09:00)');
-      return;
-    }
 
     const newCells = [...cells];
     newCells[selectedDay - 1] = {
@@ -199,7 +217,6 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderCell = (cell: PatternCell) => {
     const dayOfWeek = DAY_NAMES[(cell.day - 1) % 7];
-    const weekNumber = Math.floor((cell.day - 1) / 7) + 1;
 
     return (
       <TouchableOpacity
@@ -345,7 +362,10 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setShowShiftPicker(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               Select Shift for Day {selectedDay}
@@ -372,29 +392,36 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.timeLabel}>Customize Times</Text>
                 <View style={styles.timeInputRow}>
                   <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>Start Time</Text>
-                    <TextInput
-                      style={styles.timeInput}
-                      value={tempStartTime}
-                      onChangeText={setTempStartTime}
-                      placeholder="HH:mm"
-                      maxLength={5}
-                    />
+                    <Text style={styles.timeInputLabel}>Starting at</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => openTimePicker('start')}>
+                      <Text style={styles.timePickerButtonText}>{tempStartTime}</Text>
+                    </TouchableOpacity>
                   </View>
                   <Text style={styles.timeSeparator}>—</Text>
                   <View style={styles.timeInputGroup}>
-                    <Text style={styles.timeInputLabel}>End Time</Text>
-                    <TextInput
-                      style={styles.timeInput}
-                      value={tempEndTime}
-                      onChangeText={setTempEndTime}
-                      placeholder="HH:mm"
-                      maxLength={5}
-                    />
+                    <Text style={styles.timeInputLabel}>Ending at</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => openTimePicker('end')}>
+                      <Text style={styles.timePickerButtonText}>{tempEndTime}</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
             )}
+
+            <TimePickerModal
+              visible={showTimePicker}
+              title={`Select ${timePickerTarget === 'start' ? 'Start' : 'End'} Time`}
+              hour={pickerHour}
+              minute={pickerMinute}
+              onHourChange={setPickerHour}
+              onMinuteChange={setPickerMinute}
+              onApply={applyPickerTime}
+              onCancel={() => setShowTimePicker(false)}
+            />
 
             <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               <TouchableOpacity
@@ -422,7 +449,7 @@ export const PatternBuilderScreen: React.FC<Props> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -671,11 +698,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2A2A3E', // Dark border
   },
+  timeLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
   timeLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF', // White label
+    color: '#FFFFFF',
     marginBottom: spacing.sm,
+  },
+  timePickerButton: {
+    backgroundColor: '#1A1A2E',
+    borderWidth: 2,
+    borderColor: '#6366F1',
+    borderRadius: borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  timePickerButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   timeInputRow: {
     flexDirection: 'row',
@@ -686,18 +733,8 @@ const styles = StyleSheet.create({
   },
   timeInputLabel: {
     fontSize: 14,
-    color: '#9CA3AF', // Gray label
+    color: '#9CA3AF',
     marginBottom: spacing.xs,
-  },
-  timeInput: {
-    backgroundColor: '#1A1A2E', // Dark input
-    borderWidth: 1,
-    borderColor: '#2A2A3E', // Dark border
-    borderRadius: borderRadius.sm,
-    padding: spacing.sm,
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#FFFFFF', // White text
   },
   timeSeparator: {
     fontSize: 20,

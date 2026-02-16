@@ -1,166 +1,276 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { Shift } from '@/types';
-import { shiftService, ShiftFilters } from '@/services/shift.service';
-import { dayNoteService } from '@/services/dayNote.service';
-import { eachDayOfInterval } from 'date-fns';
-import { householdService } from '@/services/household.service';
-import { useViewModelState, BaseViewModelState } from '@/viewmodels/base/BaseViewModel';
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  addDays,
-  isSameDay,
+/**
+ * CalendarViewModel - Manages business logic for calendar views
+ * Separates presentation logic from UI components
+ */
+
+import { useCallback, useMemo } from 'react';
+import { 
+  startOfWeek, 
+  addDays, 
+  isSameDay, 
+  startOfMonth, 
+  eachDayOfInterval 
 } from 'date-fns';
+import { Shift } from '@/types';
+import { shiftService } from '@/services/shift.service';
+import { householdService } from '@/services/household.service';
+import { ServiceError } from '@/services/base.service';
+import { analyzeMultiPersonShifts } from '@/utils/shiftColors';
+import { useViewModelState } from '../base/BaseViewModel';
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
+export type ViewMode = 'week' | 'month';
 
-export interface CalendarState extends BaseViewModelState {
-  shifts: Shift[];
-  users: Record<string, { name: string; email: string }>;
-  noteCounts: Record<string, number>;
+export interface CalendarState {
   currentDate: Date;
   selectedDate: Date;
-  viewMode: 'week' | 'month';
+  shifts: Shift[];
+  viewMode: ViewMode;
+  users: Record<string, { name: string; email: string }>;
+  noteCounts: Record<string, number>;
+  loading: boolean;
+  error: ServiceError | null;
 }
 
-const initialState: CalendarState = {
-  loading: true,
-  error: null,
-  refreshing: false,
-  shifts: [],
-  users: {},
-  noteCounts: {},
-  currentDate: new Date(),
-  selectedDate: new Date(),
-  viewMode: 'week',
-};
+export interface DateColorIndicators {
+  colors: string[];
+  count: number;
+  displayStrategy?: 'single' | 'split' | 'multi';
+}
 
-// ---------------------------------------------------------------------------
-// ViewModel hook
-// ---------------------------------------------------------------------------
+/**
+ * Hook that provides calendar business logic
+ */
+export function useCalendarViewModel(
+  userId: string | undefined,
+  _householdId: string | null
+) {
+  const [state, setState] = useViewModelState<CalendarState>({
+    currentDate: new Date(),
+    selectedDate: new Date(),
+    shifts: [],
+    viewMode: 'week',
+    users: {},
+    noteCounts: {},
+    loading: true,
+    error: null,
+  });
 
-export function useCalendarViewModel(userId: string, householdId: string | undefined) {
-  const { state, setState, withLoading } = useViewModelState<CalendarState>(initialState);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  // Computed: Week dates
+  const weekDates = useMemo(() => {
+    const start = startOfWeek(state.currentDate, { weekStartsOn: 1 });
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }, [state.currentDate]);
 
-  // ---- data fetching -------------------------------------------------------
+  // Computed: Month dates
+  const monthDates = useMemo(() => {
+    const start = startOfMonth(state.currentDate);
+    const startDate = startOfWeek(start, { weekStartsOn: 1 });
+    const endDate = addDays(startDate, 41); // 6 weeks = 42 days
+    return eachDayOfInterval({ start: startDate, end: endDate });
+  }, [state.currentDate]);
 
-  const loadShifts = useCallback(async () => {
-    if (!userId) return;
+  // Computed: Display dates based on view mode
+  const displayDates = useMemo(
+    () => (state.viewMode === 'month' ? monthDates : weekDates),
+    [state.viewMode, monthDates, weekDates]
+  );
 
-    const start = state.viewMode === 'week'
-      ? startOfWeek(state.currentDate, { weekStartsOn: 1 })
-      : startOfMonth(state.currentDate);
-    const end = state.viewMode === 'week'
-      ? endOfWeek(state.currentDate, { weekStartsOn: 1 })
-      : endOfMonth(state.currentDate);
-
-    await withLoading(async () => {
-      const filters: ShiftFilters = {
-        householdId: householdId || undefined,
-        ownerId: householdId ? undefined : userId,
-        startDate: start,
-        endDate: end,
-      };
-      const result = await shiftService.getShifts(filters);
-      setState({ shifts: result.shifts });
-    });
-  }, [userId, householdId, state.currentDate, state.viewMode, setState, withLoading]);
-
-  const loadUsers = useCallback(async () => {
-    if (!householdId) return;
-    try {
-      const members = await householdService.getHouseholdMembers(householdId);
-      const userMap: Record<string, { name: string; email: string }> = {};
-      members.forEach((m) => {
-        userMap[m.userId] = { name: m.name, email: m.email || '' };
+  /**
+   * Navigate to previous/next week or month
+   */
+  const navigateWeek = useCallback(
+    (direction: 'prev' | 'next') => {
+      setState(prev => {
+        const newDate = new Date(prev.currentDate);
+        if (prev.viewMode === 'month') {
+          newDate.setMonth(prev.currentDate.getMonth() + (direction === 'next' ? 1 : -1));
+        } else {
+          return {
+            ...prev,
+            currentDate: addDays(prev.currentDate, direction === 'next' ? 7 : -7),
+          };
+        }
+        return { ...prev, currentDate: newDate };
       });
-      setState({ users: userMap });
-    } catch {
-      // non-critical — proceed without user names
-    }
-  }, [householdId, setState]);
-
-  const loadNoteCounts = useCallback(async () => {
-    if (!userId) return;
-    const targetId = householdId || userId;
-    try {
-      const monthStart = startOfMonth(state.currentDate);
-      const monthEnd = endOfMonth(state.currentDate);
-      const dates = eachDayOfInterval({ start: monthStart, end: monthEnd });
-      const counts = await dayNoteService.getNoteCounts(
-        targetId,
-        dates,
-      );
-      setState({ noteCounts: counts });
-    } catch {
-      // non-critical
-    }
-  }, [userId, householdId, state.currentDate, setState]);
-
-  // ---- lifecycle -----------------------------------------------------------
-
-  useEffect(() => {
-    loadShifts();
-    loadUsers();
-    loadNoteCounts();
-  }, [loadShifts, loadUsers, loadNoteCounts]);
-
-  // ---- actions -------------------------------------------------------------
-
-  const setViewMode = useCallback(
-    (mode: 'week' | 'month') => setState({ viewMode: mode }),
-    [setState],
+    },
+    [setState]
   );
 
-  const navigateDate = useCallback(
-    (days: number) => setState({ currentDate: addDays(state.currentDate, days) }),
-    [state.currentDate, setState],
-  );
+  /**
+   * Toggle between week and month view
+   */
+  const toggleViewMode = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      viewMode: prev.viewMode === 'week' ? 'month' : 'week',
+    }));
+  }, [setState]);
 
+  /**
+   * Set selected date
+   */
   const selectDate = useCallback(
-    (date: Date) => setState({ selectedDate: date }),
-    [setState],
+    (date: Date) => {
+      setState(prev => ({ ...prev, selectedDate: date }));
+    },
+    [setState]
   );
 
-  const refresh = useCallback(async () => {
-    setState({ refreshing: true });
-    await loadShifts();
-    await loadNoteCounts();
-    setState({ refreshing: false });
-  }, [loadShifts, loadNoteCounts, setState]);
-
-  // ---- derived data --------------------------------------------------------
-
+  /**
+   * Get shifts for a specific date
+   */
   const getShiftsForDate = useCallback(
-    (date: Date) => state.shifts.filter((s) => isSameDay(new Date(s.startTime), date)),
-    [state.shifts],
+    (date: Date): Shift[] => {
+      return state.shifts.filter(shift => {
+        let shiftDate: Date;
+        if (shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
+          shiftDate = new Date((shift.startTime as any).seconds * 1000);
+        } else {
+          shiftDate = new Date(shift.startTime);
+        }
+        return isSameDay(shiftDate, date);
+      });
+    },
+    [state.shifts]
   );
 
-  // ---- cleanup -------------------------------------------------------------
+  /**
+   * Get users working on a specific date
+   */
+  const getUsersWorkingOnDate = useCallback(
+    (date: Date): string[] => {
+      const dayShifts = getShiftsForDate(date);
+      const uniqueUsers = new Set(dayShifts.map(s => s.ownerId));
+      return Array.from(uniqueUsers);
+    },
+    [getShiftsForDate]
+  );
 
-  useEffect(() => {
-    const currentUnsub = unsubscribeRef.current;
-    return () => {
-      currentUnsub?.();
-    };
-  }, []);
+  /**
+   * Get color indicators for a date
+   */
+  const getDateColorIndicators = useCallback(
+    (date: Date): DateColorIndicators => {
+      if (!userId) return { colors: [], count: 0 };
+
+      const dayShifts = getShiftsForDate(date);
+
+      if (dayShifts.length === 0) {
+        return { colors: [], count: 0 };
+      }
+
+      const shiftInfo = analyzeMultiPersonShifts(dayShifts, userId);
+
+      return {
+        colors: shiftInfo.colors,
+        count: shiftInfo.workingCount,
+        displayStrategy: shiftInfo.displayStrategy,
+      };
+    },
+    [getShiftsForDate, userId]
+  );
+
+  /**
+   * Initialize data subscriptions
+   */
+  const initialize = useCallback(
+    (currentUserId: string | undefined, currentHouseholdId: string | null) => {
+      let unsubscribeShifts: (() => void) | undefined;
+      let unsubscribeNotes: (() => void) | undefined;
+
+      if (!currentHouseholdId) {
+        // Personal mode
+        if (currentUserId) {
+          setState(prev => ({
+            ...prev,
+            users: {
+              [currentUserId]: { 
+                name: prev.users[currentUserId]?.name || 'You', 
+                email: prev.users[currentUserId]?.email || '' 
+              },
+            },
+          }));
+
+          unsubscribeShifts = shiftService.subscribeToShifts(
+            { ownerId: currentUserId },
+            (updatedShifts: Shift[]) => {
+              const shiftsWithTypes = updatedShifts.map(shift => ({
+                ...shift,
+                shiftType: shift.shiftType || 'custom',
+              }));
+              setState(prev => ({ ...prev, shifts: shiftsWithTypes, loading: false }));
+            },
+            (error) => {
+              console.error('Failed to load shifts:', error);
+              setState(prev => ({ ...prev, loading: false }));
+            }
+          );
+        }
+      } else {
+        // Household mode
+        unsubscribeShifts = shiftService.subscribeToShifts(
+          { householdId: currentHouseholdId },
+          (updatedShifts: Shift[]) => {
+            const shiftsWithTypes = updatedShifts.map(shift => ({
+              ...shift,
+              shiftType: shift.shiftType || 'custom',
+            }));
+            setState(prev => ({ ...prev, shifts: shiftsWithTypes, loading: false }));
+          },
+          (error) => {
+            console.error('Failed to load shifts:', error);
+            setState(prev => ({ ...prev, loading: false }));
+          }
+        );
+
+        // Load household members
+        householdService
+          .getHouseholdMembers(currentHouseholdId)
+          .then(members => {
+            const usersMap: Record<string, { name: string; email: string }> = {};
+            members.forEach(member => {
+              usersMap[member.userId] = {
+                name: member.name,
+                email: member.email || '',
+              };
+            });
+            setState(prev => ({ ...prev, users: usersMap }));
+          })
+          .catch(error => {
+            console.error('Failed to load household members:', error);
+          });
+
+        // Subscribe to day notes for all dates
+        // Note: subscribeToDateNotes requires a specific date, so we'll load notes differently
+        // For now, skip real-time note count subscription as it requires date-specific queries
+      }
+
+      return () => {
+        unsubscribeShifts?.();
+        unsubscribeNotes?.();
+      };
+    },
+    [setState]
+  );
 
   return {
+    // State
     state,
-    actions: {
-      loadShifts,
-      refresh,
-      setViewMode,
-      navigateDate,
-      selectDate,
-    },
-    derived: {
-      getShiftsForDate,
-    },
+    
+    // Computed values
+    displayDates,
+    weekDates,
+    monthDates,
+    
+    // Actions
+    navigateWeek,
+    toggleViewMode,
+    selectDate,
+    initialize,
+    
+    // Queries
+    getShiftsForDate,
+    getUsersWorkingOnDate,
+    getDateColorIndicators,
   };
 }

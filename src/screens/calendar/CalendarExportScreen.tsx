@@ -57,7 +57,7 @@ export const CalendarExportScreen: React.FC = () => {
         'Calendar export is available on the Premium plan. Upgrade to export your shifts.',
         [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'View Plans', onPress: () => (navigation as any).navigate('PlanComparison') },
+          { text: 'View Plans', onPress: () => (navigation as any).navigate('Profile', { screen: 'PlanComparison' }) },
         ]
       );
       return;
@@ -124,7 +124,7 @@ export const CalendarExportScreen: React.FC = () => {
             </View>
             <TouchableOpacity
               style={styles.upgradeButton}
-              onPress={() => (navigation as any).navigate('PlanComparison')}>
+              onPress={() => (navigation as any).navigate('Profile', { screen: 'PlanComparison' })}>
               <Text style={styles.upgradeButtonText}>Upgrade</Text>
             </TouchableOpacity>
           </View>
@@ -194,9 +194,9 @@ export const CalendarExportScreen: React.FC = () => {
       {/* Export button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.exportButton, (!isPremium || exporting) && styles.exportButtonDisabled]}
+          style={[styles.exportButton, exporting && styles.exportButtonDisabled]}
           onPress={handleExport}
-          disabled={!isPremium || exporting}>
+          disabled={exporting}>
           {exporting ? (
             <ActivityIndicator color="#FFF" />
           ) : (

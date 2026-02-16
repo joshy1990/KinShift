@@ -203,7 +203,7 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
           </View>
         </View>
         <Text style={styles.joinedDate}>
-          Joined {new Date(item.joinedAt).toLocaleDateString()}
+          Joined {(item.joinedAt?.toDate ? item.joinedAt.toDate() : new Date(item.joinedAt)).toLocaleDateString()}
         </Text>
       </View>
     );
@@ -323,7 +323,7 @@ export const HouseholdDetailScreen: React.FC<Props> = ({navigation, route}) => {
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Created</Text>
           <Text style={styles.infoValue}>
-            {new Date(household.createdAt).toLocaleDateString()}
+            {(household.createdAt?.toDate ? household.createdAt.toDate() : new Date(household.createdAt)).toLocaleDateString()}
           </Text>
         </View>
         
@@ -451,9 +451,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   memberInfo: {
     flex: 1,
@@ -482,6 +479,7 @@ const styles = StyleSheet.create({
   joinedDate: {
     fontSize: 12,
     color: '#A1A1AA',
+    marginTop: 8,
   },
   infoItem: {
     flexDirection: 'row',

@@ -70,7 +70,6 @@ export const getMemberStatus = (userId: string, shifts: Shift[]): MemberStatusIn
     status: 'available',
     color: '#10B981', // Green
     label: 'Available',
-    reason: 'No shifts or appointments',
   };
 };
 

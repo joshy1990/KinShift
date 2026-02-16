@@ -492,7 +492,10 @@ class AuthService {
       case 'auth/user-not-found':
         return new Error('No account found with this email');
       case 'auth/wrong-password':
-        return new Error('Incorrect password');
+      case 'auth/invalid-credential':
+        return new Error('Invalid email or password');
+      case 'auth/user-disabled':
+        return new Error('This account has been disabled. Please contact support.');
       case 'auth/too-many-requests':
         return new Error('Too many attempts. Please try again later');
       case 'auth/network-request-failed':

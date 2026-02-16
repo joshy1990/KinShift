@@ -1,27 +1,43 @@
-import { useRef, useCallback } from 'react';
-
 /**
- * Hook for detecting double-tap gestures.
- * Useful for actions like quick-editing a shift by double-tapping a calendar day.
- *
- * @param onDoubleTap Callback fired when a double-tap is detected
- * @param delay Maximum interval (ms) between taps to count as a double-tap (default: 300)
+ * useDoubleTab - Hook for detecting double-tap gestures on dates
+ * Extracted UI interaction logic that can be reused across components
  */
-export function useDoubleTap(
-  onDoubleTap: () => void,
-  delay: number = 300
-): () => void {
-  const lastTapRef = useRef<number>(0);
 
-  const handleTap = useCallback(() => {
-    const now = Date.now();
-    if (now - lastTapRef.current < delay) {
-      onDoubleTap();
-      lastTapRef.current = 0; // Reset to avoid triple-tap triggering again
-    } else {
-      lastTapRef.current = now;
-    }
-  }, [onDoubleTap, delay]);
+import { useState, useCallback } from 'react';
+import { isSameDay } from 'date-fns';
 
-  return handleTap;
+export interface UseDoubleTapResult {
+  handleTap: (date: Date, onSingleTap: () => void, onDoubleTap: () => void) => void;
+  reset: () => void;
+}
+
+export function useDoubleTap(threshold = 300): UseDoubleTapResult {
+  const [lastTapDate, setLastTapDate] = useState<Date | null>(null);
+  const [lastTapTime, setLastTapTime] = useState<number>(0);
+
+  const handleTap = useCallback(
+    (date: Date, onSingleTap: () => void, onDoubleTap: () => void) => {
+      const now = Date.now();
+      const isDoubleTap =
+        lastTapDate && isSameDay(lastTapDate, date) && now - lastTapTime < threshold;
+
+      if (isDoubleTap) {
+        onDoubleTap();
+        setLastTapDate(null);
+        setLastTapTime(0);
+      } else {
+        onSingleTap();
+        setLastTapDate(date);
+        setLastTapTime(now);
+      }
+    },
+    [lastTapDate, lastTapTime, threshold]
+  );
+
+  const reset = useCallback(() => {
+    setLastTapDate(null);
+    setLastTapTime(0);
+  }, []);
+
+  return { handleTap, reset };
 }

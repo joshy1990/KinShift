@@ -10,13 +10,11 @@ import {
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, Shift} from '@/types';
-import {format, startOfWeek, addDays, isSameDay, isToday, startOfMonth, endOfMonth, eachDayOfInterval} from 'date-fns';
+import {format, startOfWeek, addDays, isSameDay, isToday, startOfMonth, eachDayOfInterval, endOfDay} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
 import {dayNoteService} from '@/services/dayNote.service';
 import {householdService} from '@/services/household.service';
-import {getShiftColor, getShiftTypeIcon, analyzeMultiPersonShifts} from '@/utils/shiftColors';
-import {getShiftTypeLabel} from '@/utils/shiftTypeHelpers';
-import {getResponsiveValue, spacing, typography, borderRadius, isTablet, isDesktop} from '@/utils/responsive';
+import {getShiftColor, analyzeMultiPersonShifts, generateMemberInitials, getHouseholdMemberColors} from '@/utils/shiftColors';
 import {getScreenBottomPadding} from '@/utils/bottomSpacing';
 import {useCurrentHouseholdId} from '@/contexts/HouseholdContext';
 import {useAuth} from '@/contexts/AuthContext';
@@ -96,8 +94,19 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     return eachDayOfInterval({start: startDate, end: endDate});
   }, [debouncedDate]);
 
-  // Memoize user initials calculation (used internally)
-    // Memoize navigation function
+  // Compute unique short initials for each household member (handles name collisions)
+  const memberInitials = useMemo(() => {
+    if (!user?.id) return {};
+    return generateMemberInitials(users, user.id);
+  }, [users, user?.id]);
+
+  // Compute member color info for the legend
+  const householdMemberColors = useMemo(() => {
+    if (!user?.id || !currentHouseholdId) return [];
+    return getHouseholdMemberColors(users, user.id);
+  }, [users, user?.id, currentHouseholdId]);
+
+  // Memoize navigation function
   const navigateWeek = useCallback((direction: 'prev' | 'next') => {
     if (viewMode === 'month') {
       // Navigate by month
@@ -215,7 +224,8 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         
         // Now set up shifts listener with the current users map (uses debounced dates to avoid churn)
         const startDate = viewMode === 'month' ? debouncedMonthDates[0] : debouncedWeekDates[0];
-        const endDate = viewMode === 'month' ? debouncedMonthDates[debouncedMonthDates.length - 1] : debouncedWeekDates[debouncedWeekDates.length - 1];
+        const lastDate = viewMode === 'month' ? debouncedMonthDates[debouncedMonthDates.length - 1] : debouncedWeekDates[debouncedWeekDates.length - 1];
+        const endDate = endOfDay(lastDate);
         
         try {
           unsubscribeShifts = shiftService.listenToHouseholdShifts(
@@ -356,8 +366,12 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
               owners.forEach(ownerId => {
                 const ownerShifts = dayShifts.filter(s => s.ownerId === ownerId);
                 ownerShifts.sort((a, b) => {
-                  const aTime = a.startTime instanceof Date ? a.startTime.getTime() : new Date(a.startTime).getTime();
-                  const bTime = b.startTime instanceof Date ? b.startTime.getTime() : new Date(b.startTime).getTime();
+                  const aTime = a.startTime && typeof a.startTime === 'object' && 'seconds' in a.startTime
+                    ? (a.startTime as any).seconds * 1000
+                    : new Date(a.startTime).getTime();
+                  const bTime = b.startTime && typeof b.startTime === 'object' && 'seconds' in b.startTime
+                    ? (b.startTime as any).seconds * 1000
+                    : new Date(b.startTime).getTime();
                   return bTime - aTime;
                 });
                 byOwner[ownerId] = ownerShifts[0];
@@ -416,15 +430,9 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     const dateString = format(date, 'yyyy-MM-dd');
     const noteCount = noteCounts[dateString] || 0;
 
-    // Helper to get user initials for display
+    // Helper to get user initials for display (uses precomputed unique initials)
     const getUserInitialsForShift = (shiftOwnerId: string): string => {
-      const ownerUser = users[shiftOwnerId];
-      if (!ownerUser) return '?';
-      const names = ownerUser.name.split(' ');
-      if (names.length >= 2) {
-        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-      }
-      return names[0].slice(0, 2).toUpperCase();
+      return memberInitials[shiftOwnerId] || '?';
     };
 
     return (
@@ -655,7 +663,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
       </View>
 
       {/* Calendar Legend */}
-      <CalendarLegend defaultExpanded={false} />
+      <CalendarLegend defaultExpanded={false} householdMembers={householdMemberColors} />
 
       {/* Add Shift Button */}
       <TouchableOpacity

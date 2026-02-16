@@ -14,7 +14,7 @@ import {
   QuerySnapshot 
 } from '@/config/firestore.compat';
 import {Household, HouseholdSettings, HouseholdMember} from '@/types';
-import {COLLECTIONS, db} from '@/config/firebase.config';
+import {COLLECTIONS, db, JOIN_CODE_EXPIRY_DAYS} from '@/config/firebase.config';
 import {subscriptionService} from './subscription.service';
 import { auditService } from './audit.service';
 import { rbacService } from './rbac.service';
@@ -177,6 +177,7 @@ class HouseholdService {
       const householdData: Omit<Household, 'id'> = {
         name,
         joinCode,
+        joinCodeCreatedAt: now,
         admins: [creatorId],
         members: [creatorId],
         creatorId,
@@ -265,6 +266,17 @@ class HouseholdService {
       // Check if user is already a member
       if (household.members.includes(userId)) {
         throw new Error('You are already a member of this household');
+      }
+
+      // Check join code expiry
+      if (JOIN_CODE_EXPIRY_DAYS > 0 && (household as any).joinCodeCreatedAt) {
+        const codeCreated = (household as any).joinCodeCreatedAt?.toDate
+          ? (household as any).joinCodeCreatedAt.toDate()
+          : new Date((household as any).joinCodeCreatedAt);
+        const expiryMs = JOIN_CODE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        if (Date.now() - codeCreated.getTime() > expiryMs) {
+          throw new Error('This join code has expired. Ask a household admin to regenerate it.');
+        }
       }
 
       // Check subscription tier limits before adding member
@@ -665,9 +677,11 @@ class HouseholdService {
   async regenerateJoinCode(householdId: string): Promise<string> {
     try {
       const newCode = this.generateJoinCode();
+      const now = new Date();
       await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
         joinCode: newCode,
-        updatedAt: new Date(),
+        joinCodeCreatedAt: now,
+        updatedAt: now,
       });
       return newCode;
     } catch (error) {

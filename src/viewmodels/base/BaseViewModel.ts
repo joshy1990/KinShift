@@ -1,54 +1,69 @@
-import { useState, useCallback, useRef } from 'react';
-
 /**
- * Base state shape for all ViewModels.
- * Every ViewModel state extends this with its own data fields.
+ * Base ViewModel class providing common patterns for all ViewModels
+ * Implements observable state management and lifecycle methods
  */
-export interface BaseViewModelState {
+
+import { useState, useEffect, useCallback } from 'react';
+
+export interface ViewModelState<T> {
+  data: T | null;
   loading: boolean;
-  error: string | null;
+  error: Error | null;
   refreshing: boolean;
 }
 
-/**
- * Utility hook that provides managed state for ViewModels.
- * Follows the MVVM pattern described in ARCHITECTURE.md.
- *
- * @template T The ViewModel-specific state (must extend BaseViewModelState)
- * @param initialState The starting state values
- */
-export function useViewModelState<T extends BaseViewModelState>(initialState: T) {
-  const [state, setState] = useState<T>(initialState);
-  const mountedRef = useRef(true);
+export abstract class BaseViewModel<TState = any> {
+  protected abstract getInitialState(): TState;
+  
+  /**
+   * Initialize the ViewModel - called when component mounts
+   */
+  abstract initialize(...args: any[]): Promise<void> | void;
+  
+  /**
+   * Cleanup the ViewModel - called when component unmounts
+   */
+  cleanup(): void {
+    // Override in subclasses if needed
+  }
+}
 
-  /** Safely update state only if the component is still mounted */
-  const safeSetState = useCallback((updates: Partial<T>) => {
-    if (mountedRef.current) {
-      setState((prev) => ({ ...prev, ...updates }));
+/**
+ * Hook to create and manage a ViewModel instance
+ */
+export function useViewModel<T extends BaseViewModel>(
+  ViewModelClass: new (...args: any[]) => T,
+  ...args: any[]
+): T {
+  const [viewModel] = useState(() => new ViewModelClass(...args));
+  
+  useEffect(() => {
+    viewModel.initialize(...args);
+    
+    return () => {
+      viewModel.cleanup();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewModel]);
+  
+  return viewModel;
+}
+
+/**
+ * Custom hook for managing ViewModel state in React components
+ */
+export function useViewModelState<T>(
+  initialState: T
+): [T, (updates: Partial<T> | ((prev: T) => T)) => void] {
+  const [state, setState] = useState<T>(initialState);
+  
+  const updateState = useCallback((updates: Partial<T> | ((prev: T) => T)) => {
+    if (typeof updates === 'function') {
+      setState(updates);
+    } else {
+      setState(prev => ({ ...prev, ...updates }));
     }
   }, []);
-
-  /** Reset state to initial values */
-  const resetState = useCallback(() => {
-    setState(initialState);
-  }, [initialState]);
-
-  /** Helper: wrap an async operation with loading / error handling */
-  const withLoading = useCallback(
-    async <R>(operation: () => Promise<R>): Promise<R | undefined> => {
-      safeSetState({ loading: true, error: null } as Partial<T>);
-      try {
-        const result = await operation();
-        safeSetState({ loading: false } as Partial<T>);
-        return result;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'An error occurred';
-        safeSetState({ loading: false, error: message } as Partial<T>);
-        return undefined;
-      }
-    },
-    [safeSetState],
-  );
-
-  return { state, setState: safeSetState, resetState, withLoading, mountedRef };
+  
+  return [state, updateState];
 }

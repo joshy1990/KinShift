@@ -1,23 +1,20 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * useDataSubscription - Generic hook for managing real-time data subscriptions
+ * Provides consistent pattern for subscribing/unsubscribing to data sources
+ */
+
+import { useState, useEffect, useCallback } from 'react';
 import { ServiceError } from '@/services/base.service';
 
-/**
- * Generic hook for real-time Firestore data subscriptions.
- * Provides loading, error, and refresh states with automatic cleanup.
- *
- * @template T The type of data being subscribed to
- */
 export interface UseDataSubscriptionOptions<T> {
-  /** Function that sets up the Firestore onSnapshot listener. Should return an unsubscribe function. */
-  subscribe: (onData: (data: T) => void, onError: (error: Error) => void) => () => void;
-  /** Optional initial data to use before the subscription fires */
-  initialData?: T;
-  /** Whether the subscription should be active (default: true) */
+  subscribe: (onData: (data: T) => void, onError: (error: any) => void) => (() => void) | undefined;
   enabled?: boolean;
+  onSuccess?: (data: T) => void;
+  onError?: (error: ServiceError) => void;
 }
 
 export interface UseDataSubscriptionResult<T> {
-  data: T | undefined;
+  data: T | null;
   loading: boolean;
   error: ServiceError | null;
   refresh: () => void;
@@ -26,15 +23,14 @@ export interface UseDataSubscriptionResult<T> {
 export function useDataSubscription<T>(
   options: UseDataSubscriptionOptions<T>
 ): UseDataSubscriptionResult<T> {
-  const { subscribe, initialData, enabled = true } = options;
-  const [data, setData] = useState<T | undefined>(initialData);
+  const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ServiceError | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const { subscribe, enabled = true, onSuccess, onError } = options;
 
   const refresh = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
+    setLoading(true);
+    setError(null);
   }, []);
 
   useEffect(() => {
@@ -43,36 +39,42 @@ export function useDataSubscription<T>(
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    let unsubscribe: (() => void) | undefined;
 
-    // Clean up previous subscription
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
+    try {
+      unsubscribe = subscribe(
+        (newData: T) => {
+          setData(newData);
+          setLoading(false);
+          setError(null);
+          onSuccess?.(newData);
+        },
+        (err: any) => {
+          const serviceError: ServiceError = {
+            code: err.code || 'unknown',
+            message: err.message || 'An error occurred',
+            details: err,
+          };
+          setError(serviceError);
+          setLoading(false);
+          onError?.(serviceError);
+        }
+      );
+    } catch (err: any) {
+      const serviceError: ServiceError = {
+        code: err.code || 'subscription-error',
+        message: err.message || 'Failed to subscribe to data',
+        details: err,
+      };
+      setError(serviceError);
+      setLoading(false);
+      onError?.(serviceError);
     }
 
-    const unsubscribe = subscribe(
-      (newData) => {
-        setData(newData);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        setError({
-          code: 'subscription-error',
-          message: err.message,
-        } as ServiceError);
-        setLoading(false);
-      }
-    );
-
-    unsubscribeRef.current = unsubscribe;
-
     return () => {
-      unsubscribe();
-      unsubscribeRef.current = null;
+      unsubscribe?.();
     };
-  }, [subscribe, enabled, refreshKey]);
+  }, [subscribe, enabled, onSuccess, onError]);
 
   return { data, loading, error, refresh };
 }

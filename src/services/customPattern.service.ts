@@ -152,6 +152,11 @@ export class CustomPatternService {
 
       snapshot.docs.forEach(doc => {
         const data = doc.data();
+        // Skip patterns with missing or invalid cells data
+        if (!Array.isArray(data.cells) || data.cells.length === 0) {
+          console.warn(`Skipping pattern ${doc.id}: missing or empty cells`);
+          return;
+        }
         patterns.push({
           id: doc.id,
           userId: data.userId,

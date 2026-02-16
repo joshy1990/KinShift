@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarStackParamList, Shift, DayNote } from '@/types';
 import { format, isSameDay } from 'date-fns';
@@ -23,6 +22,7 @@ import { getShiftTypeIcon, getShiftColor } from '@/utils/shiftColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentHouseholdId } from '@/contexts/HouseholdContext';
 import { showError, showSuccess, showConfirm } from '@/utils/alert';
+import { TimePickerModal } from '@/components/TimePickerModal';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'DayDetail'>;
 
@@ -38,8 +38,9 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [noteTime, setNoteTime] = useState<Date | null>(null);
-  const [noteTimeText, setNoteTimeText] = useState<string>(''); // Web input text for time
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerHour, setPickerHour] = useState(9);
+  const [pickerMinute, setPickerMinute] = useState(0);
   const [noteCategory, setNoteCategory] = useState<DayNote['category']>('other');
   const [notifyWorking, setNotifyWorking] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,6 +85,16 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             setShifts(shiftsOnThisDate);
           }
         );
+
+        // Subscribe to real-time notes updates (personal mode)
+        unsubscribeNotes = dayNoteService.subscribeToDateNotes(
+          user.id,
+          dateObj,
+          (updatedNotes) => {
+            setNotes(updatedNotes);
+          },
+          true // personal mode
+        );
       } else if (currentHouseholdId) {
         // Household mode - subscribe to shifts for this household
         unsubscribeShifts = shiftService.subscribeToShifts(
@@ -105,7 +116,7 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         );
         
-        // Subscribe to real-time notes updates (household mode only)
+        // Subscribe to real-time notes updates (household mode)
         unsubscribeNotes = dayNoteService.subscribeToDateNotes(
           currentHouseholdId,
           dateObj,
@@ -245,7 +256,6 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       // Reset form
       setNoteContent('');
       setNoteTime(null);
-      setNoteTimeText('');
       setNoteCategory('other');
       setNotifyWorking(true);
       setShowAddNote(false);
@@ -420,13 +430,20 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 
                 {shift.notes && <Text style={styles.shiftNotes}>📝 {shift.notes}</Text>}
                 
-                {/* Delete Button - only show if user owns the shift */}
+                {/* Edit & Delete Buttons - only show if user owns the shift */}
                 {user && shift.ownerId === user.id && (
-                  <TouchableOpacity
-                    style={styles.deleteShiftButton}
-                    onPress={() => handleDeleteShift(shift)}>
-                    <Text style={styles.deleteShiftButtonText}>🗑️ Delete Shift</Text>
-                  </TouchableOpacity>
+                  <View style={styles.shiftActions}>
+                    <TouchableOpacity
+                      style={styles.editShiftButton}
+                      onPress={() => navigation.navigate('EditShift', { shiftId: shift.id })}>
+                      <Text style={styles.editShiftButtonText}>✏️ Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteShiftButton}
+                      onPress={() => handleDeleteShift(shift)}>
+                      <Text style={styles.deleteShiftButtonText}>🗑️ Delete</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </View>
@@ -459,106 +476,48 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             />
 
             <Text style={styles.formLabel}>Time (optional)</Text>
-            {Platform.OS === 'web' ? (
-              // Web: Use text input with time parsing
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g., 18:00 or 6:00 PM"
-                value={noteTimeText}
-                onChangeText={(text) => {
-                  const input = (text || '');
-                  setNoteTimeText(input);
-                  const trimmed = input.trim();
-                  if (!trimmed) {
-                    setNoteTime(null);
-                    return;
+            <View style={styles.noteTimeSection}>
+              <TouchableOpacity
+                style={styles.noteTimePickerButton}
+                onPress={() => {
+                  if (noteTime) {
+                    setPickerHour(noteTime.getHours());
+                    setPickerMinute(noteTime.getMinutes());
+                  } else {
+                    setPickerHour(9);
+                    setPickerMinute(0);
                   }
-
-                  // Helper: try to parse a flexible time string
-                  const trySetTime = (h: number, m: number) => {
-                    if (Number.isNaN(h) || Number.isNaN(m)) return false;
-                    if (h < 0 || h > 23 || m < 0 || m > 59) return false;
-                    const d = new Date();
-                    d.setHours(h, m, 0, 0);
-                    setNoteTime(d);
-                    return true;
-                  };
-
-                  const lower = trimmed.toLowerCase();
-
-                  // 1) AM/PM formats: "6pm", "6 pm", "6:30pm", "6:30 pm", "12am", etc.
-                  const ampm = lower.match(/^(\d{1,2})(?::|\.|\s)?(\d{2})?\s*(am|pm)$/i);
-                  if (ampm) {
-                    const hour = parseInt(ampm[1], 10);
-                    const minute = ampm[2] ? parseInt(ampm[2], 10) : 0;
-                    const meridiem = ampm[3];
-                    if (hour >= 1 && hour <= 12 && minute >= 0 && minute < 60) {
-                      let h24 = hour % 12; // 12am -> 0
-                      if (meridiem === 'pm') h24 += 12; // add 12 for pm (12pm stays 12)
-                      if (trySetTime(h24, minute)) return;
-                    }
-                  }
-
-                  // 2) 24-hour with separator: "18:00", "6:30", also allow dot or space
-                  const sep24 = lower.match(/^(\d{1,2})(?::|\.|\s)(\d{2})$/);
-                  if (sep24) {
-                    const h = parseInt(sep24[1], 10);
-                    const m = parseInt(sep24[2], 10);
-                    if (trySetTime(h, m)) return;
-                  }
-
-                  // 3) 4-digit military: "1830"
-                  const mil = lower.match(/^(\d{4})$/);
-                  if (mil) {
-                    const h = parseInt(mil[1].slice(0, 2), 10);
-                    const m = parseInt(mil[1].slice(2, 4), 10);
-                    if (trySetTime(h, m)) return;
-                  }
-
-                  // 4) Hour only: "6" or "18" (assume :00)
-                  const hourOnly = lower.match(/^(\d{1,2})$/);
-                  if (hourOnly) {
-                    const h = parseInt(hourOnly[1], 10);
-                    if (trySetTime(h, 0)) return;
-                  }
-
-                  // If nothing matched, don't update noteTime (allows user to keep typing)
-                }}
-              />
-            ) : (
-              // Native: Use DateTimePicker
-              <>
+                  setShowTimePicker(true);
+                }}>
+                <Text style={styles.noteTimePickerText}>
+                  {noteTime ? format(noteTime, 'HH:mm') : 'Tap to set time'}
+                </Text>
+                <Text style={styles.noteTimePickerHint}>🕐</Text>
+              </TouchableOpacity>
+              {noteTime && (
                 <TouchableOpacity
-                  style={styles.timePickerButton}
-                  onPress={() => setShowTimePicker(true)}>
-                  <Text style={styles.timePickerText}>
-                    {noteTime ? format(noteTime, 'h:mm a') : 'Select time...'}
-                  </Text>
+                  style={styles.clearTimeButton}
+                  onPress={() => setNoteTime(null)}>
+                  <Text style={styles.clearTimeText}>✕ Clear time</Text>
                 </TouchableOpacity>
-                {noteTime && (
-                  <TouchableOpacity
-                    style={styles.clearTimeButton}
-                    onPress={() => setNoteTime(null)}>
-                    <Text style={styles.clearTimeText}>✕ Clear</Text>
-                  </TouchableOpacity>
-                )}
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={noteTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      setShowTimePicker(Platform.OS === 'ios');
-                      if (selectedDate) {
-                        setNoteTime(selectedDate);
-                        // Keep web text in sync if user switches platforms (no-op on native web separation)
-                        setNoteTimeText(format(selectedDate, 'HH:mm'));
-                      }
-                    }}
-                  />
-                )}
-              </>
-            )}
+              )}
+            </View>
+
+            <TimePickerModal
+              visible={showTimePicker}
+              title="Select Note Time"
+              hour={pickerHour}
+              minute={pickerMinute}
+              onHourChange={setPickerHour}
+              onMinuteChange={setPickerMinute}
+              onApply={() => {
+                const d = new Date();
+                d.setHours(pickerHour, pickerMinute, 0, 0);
+                setNoteTime(d);
+                setShowTimePicker(false);
+              }}
+              onCancel={() => setShowTimePicker(false)}
+            />
 
             <Text style={styles.formLabel}>Category</Text>
             <View style={styles.categoryContainer}>
@@ -793,13 +752,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
-  deleteShiftButton: {
+  shiftActions: {
+    flexDirection: 'row',
+    gap: 8,
     marginTop: 12,
+  },
+  editShiftButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#6366F1',
+    borderRadius: 8,
+  },
+  editShiftButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  deleteShiftButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#DC2626',
     borderRadius: 8,
-    alignSelf: 'flex-start',
   },
   deleteShiftButtonText: {
     color: '#FFFFFF',
@@ -842,12 +815,34 @@ const styles = StyleSheet.create({
   },
   clearTimeButton: {
     alignSelf: 'flex-start',
+    marginTop: 8,
     marginBottom: 16,
   },
   clearTimeText: {
     fontSize: 12,
     color: '#EF4444',
     fontWeight: '600',
+  },
+  noteTimeSection: {
+    marginBottom: 16,
+  },
+  noteTimePickerButton: {
+    backgroundColor: '#1A1A2E',
+    borderWidth: 2,
+    borderColor: '#6366F1',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  noteTimePickerText: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  noteTimePickerHint: {
+    fontSize: 18,
   },
   categoryContainer: {
     flexDirection: 'row',

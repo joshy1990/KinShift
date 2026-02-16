@@ -40,10 +40,17 @@ export const COLLECTIONS = {
   USERS: 'users',
   HOUSEHOLDS: 'households',
   SHIFTS: 'shifts',
+  DAY_NOTES: 'dayNotes',
   INVITATIONS: 'invitations',
   NOTIFICATIONS: 'notifications',
-  CONFLICTS: 'conflicts',
+  SUBSCRIPTIONS: 'subscriptions',
+  SHIFT_MESSAGES: 'shiftMessages',
+  DAY_MESSAGES: 'dayMessages',
 };
+
+// Household join code configuration
+export const JOIN_CODE_LENGTH = 6;
+export const JOIN_CODE_EXPIRY_DAYS = 2;
 
 export const firebaseConfig = {
   apiKey: 'test-api-key',

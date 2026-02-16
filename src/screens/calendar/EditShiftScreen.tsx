@@ -15,7 +15,6 @@ import {
   Platform,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -25,6 +24,7 @@ import {shiftService} from '@/services/shift.service';
 import {useAuth} from '@/contexts/AuthContext';
 import {showSuccess, showError} from '@/utils/alert';
 import {ShiftTypePicker} from '@/components/ShiftTypePicker';
+import {TimePickerModal} from '@/components/TimePickerModal';
 import {requiresStartEndTime} from '@/utils/shiftTypeHelpers';
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'EditShift'>;
@@ -420,77 +420,18 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
         </ScrollView>
 
         {/* Time Picker Modal */}
-        <Modal
+        <TimePickerModal
           visible={showTimePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowTimePicker(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                Select {activeSplitPicker
-                  ? activeSplitPicker.replace('split', 'Shift ').replace('Start', ' Start').replace('End', ' End')
-                  : timePickerType === 'start' ? 'Start' : 'End'}{' '}
-                Time
-              </Text>
-
-              <View style={styles.pickerContainer}>
-                {/* Hour */}
-                <View style={styles.pickerColumn}>
-                  <Text style={styles.pickerLabel}>Hour</Text>
-                  <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
-                    {Array.from({length: 24}, (_, i) => i).map(hour => (
-                      <TouchableOpacity
-                        key={hour}
-                        style={[styles.pickerItem, pickerHour === hour && styles.pickerItemActive]}
-                        onPress={() => setPickerHour(hour)}>
-                        <Text
-                          style={[
-                            styles.pickerItemText,
-                            pickerHour === hour && styles.pickerItemTextActive,
-                          ]}>
-                          {String(hour).padStart(2, '0')}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                {/* Minute */}
-                <View style={styles.pickerColumn}>
-                  <Text style={styles.pickerLabel}>Minute</Text>
-                  <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
-                    {Array.from({length: 12}, (_, i) => i * 5).map(minute => (
-                      <TouchableOpacity
-                        key={minute}
-                        style={[styles.pickerItem, pickerMinute === minute && styles.pickerItemActive]}
-                        onPress={() => setPickerMinute(minute)}>
-                        <Text
-                          style={[
-                            styles.pickerItemText,
-                            pickerMinute === minute && styles.pickerItemTextActive,
-                          ]}>
-                          {String(minute).padStart(2, '0')}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalCancelButton}
-                  onPress={() => setShowTimePicker(false)}>
-                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalSaveButton} onPress={applyPickerTime}>
-                  <Text style={styles.modalSaveButtonText}>Apply</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          title={`Select ${activeSplitPicker
+            ? activeSplitPicker.replace('split', 'Shift ').replace('Start', ' Start').replace('End', ' End')
+            : timePickerType === 'start' ? 'Start' : 'End'} Time`}
+          hour={pickerHour}
+          minute={pickerMinute}
+          onHourChange={setPickerHour}
+          onMinuteChange={setPickerMinute}
+          onApply={applyPickerTime}
+          onCancel={() => setShowTimePicker(false)}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -671,91 +612,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#1A1A2E',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    maxHeight: '60%',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-  },
-  pickerColumn: {
-    alignItems: 'center',
-    width: 80,
-  },
-  pickerLabel: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  pickerScroll: {
-    maxHeight: 200,
-  },
-  pickerItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginVertical: 2,
-    alignItems: 'center',
-  },
-  pickerItemActive: {
-    backgroundColor: '#6366F1',
-  },
-  pickerItemText: {
-    fontSize: 18,
-    color: '#9CA3AF',
-    fontWeight: '500',
-  },
-  pickerItemTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  modalCancelButton: {
-    flex: 1,
-    backgroundColor: '#374151',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  modalCancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalSaveButton: {
-    flex: 1,
-    backgroundColor: '#6366F1',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  modalSaveButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',

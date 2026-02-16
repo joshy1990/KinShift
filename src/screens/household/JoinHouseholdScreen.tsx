@@ -67,6 +67,8 @@ export const JoinHouseholdScreen: React.FC<Props> = ({navigation}) => {
         setError('This join code has expired. Please ask for a new one.');
       } else if (errorMessage.includes('Member limit') || errorMessage.includes('limit reached')) {
         setError('This household has reached its member limit. Ask the admin to upgrade their subscription plan.');
+      } else if (errorMessage.includes('tier limited') || errorMessage.includes('does not allow')) {
+        setError('Your free plan allows 1 household. Upgrade to join more.');
       } else {
         setError(errorMessage);
       }

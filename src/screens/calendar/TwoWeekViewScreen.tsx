@@ -23,6 +23,14 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const DAY_COLUMN_WIDTH = 65;
 const NAME_COLUMN_WIDTH = 120;
 
+/** Safely convert a shift startTime (Date or Firestore Timestamp) to a JS Date */
+const toDate = (value: any): Date => {
+  if (value && typeof value === 'object' && 'seconds' in value) {
+    return new Date(value.seconds * 1000);
+  }
+  return new Date(value);
+};
+
 export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   const currentHouseholdId = useCurrentHouseholdId();
   const {user} = useAuth();
@@ -97,7 +105,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
   const getShiftsForUserAndDate = (userId: string, date: Date): Shift[] => {
     return shifts.filter(shift => 
       shift.ownerId === userId &&
-      isSameDay(new Date(shift.startTime), date)
+      isSameDay(toDate(shift.startTime), date)
     );
   };
   
@@ -123,7 +131,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
     overlap: boolean;
   } => {
     const shiftsOnDate = shifts.filter(shift =>
-      isSameDay(new Date(shift.startTime), date)
+      isSameDay(toDate(shift.startTime), date)
     );
     
     const uniqueUsers = new Set(shiftsOnDate.map(s => s.ownerId));
@@ -178,7 +186,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
           {/* Day columns - days across top with shifts underneath */}
           {dateRange.map((date, index) => {
             const dayShifts = shifts.filter(shift =>
-              isSameDay(new Date(shift.startTime), date)
+              isSameDay(toDate(shift.startTime), date)
             );
             const coverage = analyzeCoverage(date);
             let coverageColor = '#374151'; // Default gray
@@ -217,7 +225,7 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
                             {member?.name.split(' ')[0] || 'Unknown'}
                           </Text>
                           <Text style={styles.dayShiftTime}>
-                            {format(new Date(shift.startTime), 'HH:mm')}
+                            {format(toDate(shift.startTime), 'HH:mm')}
                           </Text>
                         </TouchableOpacity>
                       );

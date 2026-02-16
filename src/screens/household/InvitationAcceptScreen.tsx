@@ -12,6 +12,7 @@ import {
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HouseholdStackParamList, Invitation} from '@/types';
 import {useAuth} from '@/contexts/AuthContext';
+import {useHousehold} from '@/contexts/HouseholdContext';
 import {invitationService} from '@/services/invitation.service';
 import {notificationService} from '@/services/notification.service';
 
@@ -19,6 +20,7 @@ type Props = NativeStackScreenProps<HouseholdStackParamList, 'InvitationAccept'>
 
 export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => {
   const {user} = useAuth();
+  const {refreshHouseholds, setCurrentHousehold, households} = useHousehold();
   const {inviteCode} = route.params;
   
   const [invitation, setInvitation] = useState<Invitation | null>(null);
@@ -72,6 +74,13 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
       
       await invitationService.acceptInvitation(inviteCode, user);
       
+      // Refresh household list and set newly joined household as current
+      await refreshHouseholds();
+      const joinedHousehold = households.find(h => h.id === invitation.householdId);
+      if (joinedHousehold) {
+        setCurrentHousehold(joinedHousehold);
+      }
+
       // Optionally notify invitee (or inviter) - using available helper signature
       try {
         await notificationService.notifyInvitationAccepted(

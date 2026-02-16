@@ -16,6 +16,7 @@ export interface Household {
   id: string;
   name: string;
   joinCode: string; // Short 6-8 character code for easy joining
+  joinCodeCreatedAt?: Date; // When the join code was generated (for expiry enforcement)
   admins: string[]; // Array of user IDs
   members: string[]; // Array of user IDs
   memberJoinDates?: Record<string, Date>; // Track when each member joined for promotion ordering

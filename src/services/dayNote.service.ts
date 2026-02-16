@@ -20,6 +20,7 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 import { shiftService } from './shift.service';
 import { householdService } from './household.service';
 import { rbacService, AuditAction } from './rbac.service';
+import { notificationService } from './notification.service';
 
 /**
  * Service for managing day notes - household plans and events
@@ -33,24 +34,30 @@ class DayNoteService {
     noteData: Omit<DayNote, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<DayNote> {
     try {
-      // Build note object, omitting householdId if undefined (personal note)
-      const baseNote = {
+      // Build note object, omitting undefined fields (Firestore rejects undefined values)
+      const baseNote: Record<string, any> = {
         date: noteData.date,
         authorId: noteData.authorId,
         authorName: noteData.authorName,
         content: noteData.content,
-        time: noteData.time,
-        category: noteData.category,
         notifyWorkingMembers: noteData.notifyWorkingMembers,
-        isDeleted: false, // CRITICAL: Must be set so queries with where('isDeleted', '!=', true) can find this note
+        isDeleted: false, // CRITICAL: Must be set so queries with where('isDeleted', '==', false) can find this note
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      // Only add householdId if it exists (personal notes won't have it)
-      const note: any = noteData.householdId
-        ? { ...baseNote, householdId: noteData.householdId }
-        : baseNote;
+      // Only include optional fields if they have a value (Firestore rejects undefined)
+      if (noteData.time) {
+        baseNote.time = noteData.time;
+      }
+      if (noteData.category) {
+        baseNote.category = noteData.category;
+      }
+      if (noteData.householdId) {
+        baseNote.householdId = noteData.householdId;
+      }
+
+      const note: any = baseNote;
 
       const docRef = await addDoc(collection(db, COLLECTIONS.DAY_NOTES), note);
 
@@ -62,6 +69,22 @@ class DayNoteService {
       // If notifyWorkingMembers is true AND in household mode, use smart category-based notification
       if (noteData.notifyWorkingMembers && noteData.householdId) {
         await this.notifyByCategory(createdNote);
+      }
+
+      // Send push notification to household members (regardless of notifyWorkingMembers toggle)
+      if (noteData.householdId) {
+        try {
+          await notificationService.notifyDayNoteAdded(
+            createdNote.id,
+            noteData.authorName,
+            noteData.date,
+            noteData.householdId,
+            noteData.authorId
+          );
+        } catch (notifyError) {
+          console.error('Failed to send day note notification:', notifyError);
+          // Don't fail note creation if notification fails
+        }
       }
 
       return createdNote;
@@ -81,7 +104,7 @@ class DayNoteService {
 
       const constraints: any[] = [
         where('date', '==', dateString),
-        where('isDeleted', '!=', true),
+        where('isDeleted', '==', false),
       ];
 
       // In personal mode, query by authorId; in household mode, query by householdId
@@ -123,7 +146,7 @@ class DayNoteService {
         where('householdId', '==', householdId),
         where('date', '>=', startDateString),
         where('date', '<=', endDateString),
-        where('isDeleted', '!=', true),
+        where('isDeleted', '==', false),
         orderBy('date', 'asc'),
         orderBy('createdAt', 'asc')
       );
@@ -245,20 +268,32 @@ class DayNoteService {
 
   /**
    * Subscribe to notes for a specific date (real-time)
+   * Supports both household mode (householdId) and personal mode (authorId)
    */
   subscribeToDateNotes(
-    householdId: string,
+    householdIdOrAuthorId: string,
     date: Date,
-    callback: (notes: DayNote[]) => void
+    callback: (notes: DayNote[]) => void,
+    isPersonalMode: boolean = false
   ): () => void {
     const dateString = format(date, 'yyyy-MM-dd');
 
+    const constraints: any[] = [
+      where('date', '==', dateString),
+      where('isDeleted', '==', false),
+    ];
+
+    if (isPersonalMode) {
+      constraints.push(where('authorId', '==', householdIdOrAuthorId));
+    } else {
+      constraints.push(where('householdId', '==', householdIdOrAuthorId));
+    }
+
+    constraints.push(orderBy('createdAt', 'asc'));
+
     const q = query(
       collection(db, COLLECTIONS.DAY_NOTES),
-      where('householdId', '==', householdId),
-      where('date', '==', dateString),
-      where('isDeleted', '!=', true),
-      orderBy('createdAt', 'asc')
+      ...constraints
     );
 
     const unsubscribe = onSnapshot(
@@ -480,7 +515,7 @@ class DayNoteService {
         collection(db, COLLECTIONS.DAY_NOTES),
         where('householdId', '==', householdId),
         where('date', '==', dateString),
-        where('isDeleted', '!=', true),
+        where('isDeleted', '==', false),
         limit(1)
       );
 
@@ -511,7 +546,7 @@ class DayNoteService {
         where('householdId', '==', householdId),
         where('date', '>=', startDateString),
         where('date', '<=', endDateString),
-        where('isDeleted', '!=', true)
+        where('isDeleted', '==', false)
       );
 
       const snapshot = await getDocs(q);

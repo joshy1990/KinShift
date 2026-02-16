@@ -24,12 +24,11 @@ import { db } from '@/config/firebase.config';
 import { Notification, Shift } from '@/types';
 import {
   shiftCreatedTemplate,
-  shiftUpdatedTemplate,
   shiftDeletedTemplate,
   invitationTemplate,
-  messageTemplate,
   subscriptionDowngradeTemplate,
   subscriptionCanceledTemplate,
+  dayNoteAddedTemplate,
   templateToNotification,
   NotificationPayload,
 } from '@/utils/notificationTemplates';
@@ -769,6 +768,48 @@ const cancelShiftReminder = async (notificationId: string): Promise<void> => {
   }
 };
 
+/**
+ * Notify household members when a day note is added
+ */
+const notifyDayNoteAdded = async (
+  noteId: string,
+  authorName: string,
+  date: string,
+  householdId: string,
+  authorId: string
+): Promise<void> => {
+  try {
+    // Get household members
+    const householdRef = doc(db, 'households', householdId);
+    const householdSnap = await getDoc(householdRef);
+    if (!householdSnap.exists()) return;
+
+    const householdData = householdSnap.data();
+    const members: string[] = householdData?.members || [];
+
+    const payload = dayNoteAddedTemplate(authorName, date, noteId);
+
+    // Notify each household member (except the author)
+    for (const memberId of members) {
+      if (memberId !== authorId) {
+        const notification = templateToNotification(
+          memberId,
+          householdId,
+          payload,
+          'day_note_added'
+        );
+        const notificationId = await createNotification(notification);
+
+        if (notificationId) {
+          await sendPushNotificationToUser(memberId, payload);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error notifying day note added:', error);
+  }
+};
+
 // ========================================
 // EXPORT SERVICE OBJECT
 // ========================================
@@ -794,6 +835,7 @@ export const notificationService = {
   notifyShiftCreated,
   notifyMultipleShiftsCreated,
   notifyShiftDeleted,
+  notifyDayNoteAdded,
   scheduleShiftReminder,
   cancelShiftReminder,
 };

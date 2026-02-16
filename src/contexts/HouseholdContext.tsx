@@ -132,6 +132,13 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
       throw new Error('Must be logged in to join household');
     }
 
+    // Check if the joining user has reached their household limit
+    const limitCheck = await subscriptionService.canAddHousehold(user.id);
+    if (!limitCheck.allowed) {
+      const msg = limitCheck.reason || 'Your plan does not allow joining another household';
+      throw new Error(msg);
+    }
+
     const household = await householdService.joinHouseholdByCode(joinCode, user.id);
     await refreshHouseholds();
     setCurrentHousehold(household);

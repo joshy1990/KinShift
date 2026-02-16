@@ -43,6 +43,12 @@ export const generateDeepLink = (notification: Notifications.Notification): stri
         }
         break;
 
+      case 'day_note_added':
+        if (data.date) {
+          return `kinshift://calendar/${data.date}`;
+        }
+        break;
+
       case 'conflict':
       case 'conflict_detected':
         if (data.householdId) {

@@ -74,6 +74,138 @@ export const OTHER_USER_COLORS: Record<ShiftType, string> = {
 // Color for 3+ people working (brighter for visibility on dark theme)
 export const MULTI_PERSON_COLOR = '#A78BFA'; // Light Purple (stands out on dark)
 
+// Per-user color palette for household members (excluding current user)
+// These are distinct, high-contrast colors to differentiate members on the calendar
+const MEMBER_COLORS = [
+  '#F97316', // Orange
+  '#06B6D4', // Cyan
+  '#EC4899', // Pink
+  '#14B8A6', // Teal
+  '#EAB308', // Yellow
+  '#8B5CF6', // Violet
+  '#EF4444', // Red
+  '#22C55E', // Green
+];
+
+// Cache for user → color mapping (stable per session)
+const userColorMap = new Map<string, string>();
+
+/**
+ * Get a stable, unique color for a household member
+ * Current user always gets their shift-type-based color; other members each get a unique hue
+ */
+export function getMemberColor(userId: string, currentUserId: string): string {
+  if (userId === currentUserId) return ''; // Current user uses shift type colors
+  
+  if (!userColorMap.has(userId)) {
+    const index = userColorMap.size % MEMBER_COLORS.length;
+    userColorMap.set(userId, MEMBER_COLORS[index]);
+  }
+  return userColorMap.get(userId)!;
+}
+
+/**
+ * Generate unique, short initials for each member in a household.
+ * - Single member with a unique first letter: "M" for Mark
+ * - Collision on first letter: extend to disambiguate, e.g. "Ma" for Mark, "Mi" for Mike
+ * - Current user is labelled "You"
+ * Returns a map of userId → initials string
+ */
+export function generateMemberInitials(
+  usersMap: Record<string, { name: string; email: string }>,
+  currentUserId: string
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  const entries = Object.entries(usersMap);
+
+  // Build candidate names (sanitised)
+  const candidates: { id: string; name: string }[] = entries.map(([id, u]) => {
+    let name = (u.name || '').trim();
+    // Guard against undefined/empty names
+    if (!name || name.toLowerCase() === 'undefined' || name === 'Unknown User' || name === 'Unknown') {
+      // Derive from email or use fallback
+      const emailPrefix = (u.email || '').split('@')[0];
+      name = emailPrefix || `User`;
+    }
+    return { id, name };
+  });
+
+  // Current user always labelled "You"
+  for (const c of candidates) {
+    if (c.id === currentUserId) {
+      result[c.id] = 'You';
+    }
+  }
+
+  // Process other members
+  const others = candidates.filter(c => c.id !== currentUserId);
+
+  // Group by first character (uppercase) to detect collisions
+  const byFirstChar = new Map<string, typeof others>();
+  for (const c of others) {
+    const key = c.name[0].toUpperCase();
+    if (!byFirstChar.has(key)) byFirstChar.set(key, []);
+    byFirstChar.get(key)!.push(c);
+  }
+
+  for (const [, group] of byFirstChar) {
+    if (group.length === 1) {
+      // Unique first letter — single char initial
+      result[group[0].id] = group[0].name[0].toUpperCase();
+    } else {
+      // Collision — extend initials until unique
+      // Try increasing prefix length until all are unique
+      let len = 2;
+      while (len <= 4) {
+        const prefixes = group.map(c => c.name.slice(0, len).charAt(0).toUpperCase() + c.name.slice(1, len).toLowerCase());
+        const uniquePrefixes = new Set(prefixes);
+        if (uniquePrefixes.size === group.length) {
+          group.forEach((c, i) => {
+            result[c.id] = prefixes[i];
+          });
+          break;
+        }
+        len++;
+      }
+      // If still not unique at len 4, append index
+      if (!group.every(c => result[c.id])) {
+        group.forEach((c, i) => {
+          if (!result[c.id]) {
+            const prefix = c.name.slice(0, 2).charAt(0).toUpperCase() + c.name.slice(1, 2).toLowerCase();
+            result[c.id] = `${prefix}${i + 1}`;
+          }
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Get the list of household members and their assigned colors.
+ * Useful for building legends.
+ * Returns array of { userId, name, color } for non-current-user members.
+ */
+export function getHouseholdMemberColors(
+  usersMap: Record<string, { name: string; email: string }>,
+  currentUserId: string
+): { userId: string; name: string; color: string }[] {
+  return Object.entries(usersMap)
+    .filter(([id]) => id !== currentUserId)
+    .map(([id, u]) => {
+      let name = (u.name || '').trim();
+      if (!name || name.toLowerCase() === 'undefined' || name === 'Unknown User') {
+        name = (u.email || '').split('@')[0] || 'Member';
+      }
+      return {
+        userId: id,
+        name,
+        color: getMemberColor(id, currentUserId),
+      };
+    });
+}
+
 // Pattern templates that users can easily select
 export const SHIFT_PATTERNS = {
   '4on4off': {
@@ -120,12 +252,14 @@ export function getShiftColor(shift: Shift, currentUserId: string, isCurrentUser
     isCurrentUser = shift.ownerId === currentUserId;
   }
   
-  // Use primary colors for current user, other colors for other users
+  // Current user: color by shift type
   if (isCurrentUser) {
     return SHIFT_TYPE_COLORS[shift.shiftType];
-  } else {
-    return OTHER_USER_COLORS[shift.shiftType];
   }
+  
+  // Other users: use their stable member color
+  const memberColor = getMemberColor(shift.ownerId, currentUserId);
+  return memberColor || OTHER_USER_COLORS[shift.shiftType];
 }
 
 /**

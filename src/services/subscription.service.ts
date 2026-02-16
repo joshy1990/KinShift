@@ -300,7 +300,9 @@ class SubscriptionService {
     try {
       const subscription = await this.getUserSubscription(userId);
       if (!subscription) {
-        return {allowed: false, reason: 'No subscription found'};
+        // getUserSubscription always returns a sub (creates free default), but guard just in case
+        // Default to allowing so users aren't blocked
+        return {allowed: true};
       }
 
       const effectiveTier = this.getEffectiveTier(subscription);
@@ -333,7 +335,8 @@ class SubscriptionService {
     } catch (error) {
       console.error('Failed to check household limit:', error);
       track('tier_check_fail_closed', { scope: 'households', error: String(error) }, 'warn');
-      return {allowed: false, reason: 'Unable to verify subscription. Please try again.'};
+      // Fail-open: allow the operation rather than blocking on transient errors
+      return {allowed: true};
     }
   }
 
@@ -344,7 +347,9 @@ class SubscriptionService {
     try {
       const subscription = await this.getUserSubscription(userId);
       if (!subscription) {
-        return {allowed: false, reason: 'No subscription found'};
+        // getUserSubscription always returns a sub (creates free default), but guard just in case
+        // Default to allowing so users aren't blocked
+        return {allowed: true};
       }
 
       const effectiveTier = this.getEffectiveTier(subscription);
@@ -359,7 +364,7 @@ class SubscriptionService {
       const householdDocRef = doc(db, COLLECTIONS.HOUSEHOLDS, householdId);
       const householdDoc = await getDoc(householdDocRef);
 
-      if (!householdDoc.exists) {
+      if (!householdDoc.exists()) {
         return {allowed: false, reason: 'Household not found'};
       }
 
@@ -379,7 +384,9 @@ class SubscriptionService {
     } catch (error) {
       console.error('Failed to check member limit:', error);
       track('tier_check_fail_closed', { scope: 'members', householdId, error: String(error) }, 'warn');
-      return {allowed: false, reason: 'Unable to verify subscription. Please try again.'};
+      // Fail-open for free tier: allow the join rather than blocking on transient errors
+      // The member count check in Firestore rules provides a safety net
+      return {allowed: true};
     }
   }
 

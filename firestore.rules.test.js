@@ -510,6 +510,287 @@ describe('Notification Access Tests', () => {
   });
 });
 
+// ========================================
+// TEST SUITE 7: HOUSEHOLD JOIN SECURITY
+// Tests for the tightened household update rules
+// Non-members can ONLY update members, memberJoinDates, updatedAt
+// ========================================
+
+describe('Household Join Security Tests', () => {
+  test('Non-member can join by adding themselves to members + memberJoinDates + updatedAt only', async () => {
+    const joiningUser = 'joiner123';
+    const adminId = 'admin123';
+    const householdId = 'householdJoin1';
+    const db = testEnv.authenticatedContext(joiningUser).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [adminId],
+        members: [adminId],
+        name: 'Join Test Household',
+        joinCode: 'ABC123',
+        updatedAt: new Date(),
+      });
+    });
+
+    // Allowed: only changing members, memberJoinDates, updatedAt
+    await assertSucceeds(setDoc(doc(db, 'households', householdId), {
+      admins: [adminId],
+      members: [adminId, joiningUser],
+      name: 'Join Test Household',
+      joinCode: 'ABC123',
+      memberJoinDates: { [joiningUser]: new Date() },
+      updatedAt: new Date(),
+    }));
+  });
+
+  test('Non-member CANNOT change household name when joining', async () => {
+    const joiningUser = 'joiner456';
+    const adminId = 'admin123';
+    const householdId = 'householdJoin2';
+    const db = testEnv.authenticatedContext(joiningUser).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [adminId],
+        members: [adminId],
+        name: 'Original Name',
+        joinCode: 'DEF456',
+        updatedAt: new Date(),
+      });
+    });
+
+    // Blocked: trying to change name while joining
+    await assertFails(setDoc(doc(db, 'households', householdId), {
+      admins: [adminId],
+      members: [adminId, joiningUser],
+      name: 'Hacked Name',
+      joinCode: 'DEF456',
+      memberJoinDates: { [joiningUser]: new Date() },
+      updatedAt: new Date(),
+    }));
+  });
+
+  test('Non-member CANNOT change admins when joining', async () => {
+    const joiningUser = 'joiner789';
+    const adminId = 'admin123';
+    const householdId = 'householdJoin3';
+    const db = testEnv.authenticatedContext(joiningUser).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [adminId],
+        members: [adminId],
+        name: 'Family',
+        joinCode: 'GHI789',
+        updatedAt: new Date(),
+      });
+    });
+
+    // Blocked: trying to promote self to admin while joining
+    await assertFails(setDoc(doc(db, 'households', householdId), {
+      admins: [adminId, joiningUser],
+      members: [adminId, joiningUser],
+      name: 'Family',
+      joinCode: 'GHI789',
+      memberJoinDates: { [joiningUser]: new Date() },
+      updatedAt: new Date(),
+    }));
+  });
+
+  test('Non-member CANNOT change joinCode when joining', async () => {
+    const joiningUser = 'joiner000';
+    const adminId = 'admin123';
+    const householdId = 'householdJoin4';
+    const db = testEnv.authenticatedContext(joiningUser).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [adminId],
+        members: [adminId],
+        name: 'Family',
+        joinCode: 'JKL000',
+        updatedAt: new Date(),
+      });
+    });
+
+    // Blocked: trying to change join code while joining
+    await assertFails(setDoc(doc(db, 'households', householdId), {
+      admins: [adminId],
+      members: [adminId, joiningUser],
+      name: 'Family',
+      joinCode: 'HACKED',
+      memberJoinDates: { [joiningUser]: new Date() },
+      updatedAt: new Date(),
+    }));
+  });
+
+  test('Existing member CAN update household freely', async () => {
+    const memberId = 'admin123';
+    const householdId = 'householdJoin5';
+    const db = testEnv.authenticatedContext(memberId).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [memberId],
+        members: [memberId],
+        name: 'Family',
+        joinCode: 'MNO012',
+        updatedAt: new Date(),
+      });
+    });
+
+    // Allowed: member can change any field
+    await assertSucceeds(setDoc(doc(db, 'households', householdId), {
+      admins: [memberId],
+      members: [memberId],
+      name: 'Updated Family',
+      joinCode: 'NEWCODE',
+      updatedAt: new Date(),
+    }));
+  });
+});
+
+// ========================================
+// TEST SUITE 8: INVITATION TIGHTENED RULES
+// Tests for tightened invitation create/update/delete
+// ========================================
+
+describe('Invitation Tightened Rules', () => {
+  test('Household member can create invitation', async () => {
+    const memberId = 'member123';
+    const householdId = 'householdInv1';
+    const db = testEnv.authenticatedContext(memberId).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [memberId],
+        members: [memberId],
+      });
+    });
+
+    await assertSucceeds(setDoc(doc(db, 'invitations', 'inv-1'), {
+      householdId,
+      invitedBy: memberId,
+      emailOrPhone: 'test@example.com',
+      status: 'pending',
+    }));
+  });
+
+  test('Non-member CANNOT create invitation for a household', async () => {
+    const outsider = 'outsider123';
+    const adminId = 'admin123';
+    const householdId = 'householdInv2';
+    const db = testEnv.authenticatedContext(outsider).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'households', householdId), {
+        admins: [adminId],
+        members: [adminId],
+      });
+    });
+
+    await assertFails(setDoc(doc(db, 'invitations', 'inv-2'), {
+      householdId,
+      invitedBy: outsider,
+      emailOrPhone: 'hack@example.com',
+      status: 'pending',
+    }));
+  });
+
+  test('Invitation creator can update (cancel) their own invitation', async () => {
+    const creator = 'creator123';
+    const invId = 'inv-3';
+    const db = testEnv.authenticatedContext(creator).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'invitations', invId), {
+        householdId: 'hh-1',
+        invitedBy: creator,
+        emailOrPhone: 'test@test.com',
+        status: 'pending',
+      });
+    });
+
+    await assertSucceeds(setDoc(doc(db, 'invitations', invId), {
+      householdId: 'hh-1',
+      invitedBy: creator,
+      emailOrPhone: 'test@test.com',
+      status: 'cancelled',
+    }));
+  });
+
+  test('Accepting user can update invitation with their own acceptedBy', async () => {
+    const acceptor = 'acceptor123';
+    const invId = 'inv-4';
+    const db = testEnv.authenticatedContext(acceptor).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'invitations', invId), {
+        householdId: 'hh-1',
+        invitedBy: 'someone',
+        emailOrPhone: 'acceptor@test.com',
+        status: 'pending',
+      });
+    });
+
+    await assertSucceeds(setDoc(doc(db, 'invitations', invId), {
+      householdId: 'hh-1',
+      invitedBy: 'someone',
+      emailOrPhone: 'acceptor@test.com',
+      status: 'accepted',
+      acceptedBy: acceptor,
+    }));
+  });
+
+  test('Random user CANNOT update invitation setting someone else as acceptedBy', async () => {
+    const attacker = 'attacker123';
+    const invId = 'inv-5';
+    const db = testEnv.authenticatedContext(attacker).firestore();
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'invitations', invId), {
+        householdId: 'hh-1',
+        invitedBy: 'someone',
+        emailOrPhone: 'victim@test.com',
+        status: 'pending',
+      });
+    });
+
+    // Attacker tries to accept on behalf of victim
+    await assertFails(setDoc(doc(db, 'invitations', invId), {
+      householdId: 'hh-1',
+      invitedBy: 'someone',
+      emailOrPhone: 'victim@test.com',
+      status: 'accepted',
+      acceptedBy: 'victim123',
+    }));
+  });
+
+  test('Only invitation creator can delete an invitation', async () => {
+    const creator = 'creator123';
+    const other = 'other123';
+    const invId = 'inv-6';
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'invitations', invId), {
+        householdId: 'hh-1',
+        invitedBy: creator,
+        emailOrPhone: 'test@test.com',
+        status: 'pending',
+      });
+    });
+
+    // Other user cannot delete
+    const dbOther = testEnv.authenticatedContext(other).firestore();
+    await assertFails(deleteDoc(doc(dbOther, 'invitations', invId)));
+
+    // Creator can delete
+    const dbCreator = testEnv.authenticatedContext(creator).firestore();
+    await assertSucceeds(deleteDoc(doc(dbCreator, 'invitations', invId)));
+  });
+});
+
 module.exports = {
   // Export for test running
 };
