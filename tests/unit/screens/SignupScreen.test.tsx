@@ -47,43 +47,48 @@ jest.mock('@react-navigation/native-stack', () => ({
 
 import { SignupScreen } from '@/screens/auth/SignupScreen';
 
+const mockProps = {
+  navigation: { navigate: mockNavigate, goBack: jest.fn() } as any,
+  route: { key: 'Signup', name: 'Signup' as const, params: undefined },
+};
+
 describe('SignupScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('renders name input', () => {
-    const { getByPlaceholderText } = render(<SignupScreen />);
+    const { getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     expect(getByPlaceholderText(/name/i)).toBeTruthy();
   });
 
   it('renders email input', () => {
-    const { getByPlaceholderText } = render(<SignupScreen />);
+    const { getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     expect(getByPlaceholderText('you@example.com')).toBeTruthy();
   });
 
   it('renders password input', () => {
-    const { getByPlaceholderText } = render(<SignupScreen />);
+    const { getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     expect(getByPlaceholderText('Create a secure password')).toBeTruthy();
   });
 
   it('renders confirm password input', () => {
-    const { getByPlaceholderText } = render(<SignupScreen />);
+    const { getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     expect(getByPlaceholderText(/confirm/i)).toBeTruthy();
   });
 
   it('renders sign up button', () => {
-    const { getByText } = render(<SignupScreen />);
+    const { getByText } = render(<SignupScreen {...mockProps} />);
     expect(getByText(/sign up|create account|register/i)).toBeTruthy();
   });
 
   it('shows link to login', () => {
-    const { getByText } = render(<SignupScreen />);
+    const { getByText } = render(<SignupScreen {...mockProps} />);
     expect(getByText(/log in|sign in|already have/i)).toBeTruthy();
   });
 
   it('validates passwords must match', async () => {
-    const { getByText, getByPlaceholderText } = render(<SignupScreen />);
+    const { getByText, getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     
     fireEvent.changeText(getByPlaceholderText(/name/i), 'Test User');
     fireEvent.changeText(getByPlaceholderText('you@example.com'), 'test@test.com');
@@ -100,7 +105,7 @@ describe('SignupScreen', () => {
   it('calls signUp with correct args', async () => {
     mockSignUp.mockResolvedValue(undefined);
 
-    const { getByText, getByPlaceholderText } = render(<SignupScreen />);
+    const { getByText, getByPlaceholderText } = render(<SignupScreen {...mockProps} />);
     
     fireEvent.changeText(getByPlaceholderText(/name/i), 'Test User');
     fireEvent.changeText(getByPlaceholderText('you@example.com'), 'test@test.com');

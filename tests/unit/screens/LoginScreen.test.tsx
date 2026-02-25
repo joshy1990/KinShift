@@ -49,36 +49,41 @@ jest.mock('@react-navigation/native-stack', () => ({
 
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 
+const mockProps = {
+  navigation: { navigate: mockNavigate, goBack: mockGoBack } as any,
+  route: { key: 'Login', name: 'Login' as const, params: undefined },
+};
+
 describe('LoginScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('renders email input', () => {
-    const { getByPlaceholderText } = render(<LoginScreen />);
+    const { getByPlaceholderText } = render(<LoginScreen {...mockProps} />);
     expect(getByPlaceholderText('you@example.com')).toBeTruthy();
   });
 
   it('renders password input', () => {
-    const { getByPlaceholderText } = render(<LoginScreen />);
+    const { getByPlaceholderText } = render(<LoginScreen {...mockProps} />);
     expect(getByPlaceholderText('Enter your password')).toBeTruthy();
   });
 
   it('renders sign in button', () => {
-    const { getAllByText } = render(<LoginScreen />);
+    const { getAllByText } = render(<LoginScreen {...mockProps} />);
     // "Sign In" appears as both button text and in header
     const matches = getAllByText(/Sign In/);
     expect(matches.length).toBeGreaterThan(0);
   });
 
   it('shows link to sign up', () => {
-    const { getByText } = render(<LoginScreen />);
+    const { getByText } = render(<LoginScreen {...mockProps} />);
     const signUpLink = getByText(/sign up|create.*account|register/i);
     expect(signUpLink).toBeTruthy();
   });
 
   it('shows validation error when submitting empty email', async () => {
-    const { getAllByText, getByPlaceholderText } = render(<LoginScreen />);
+    const { getAllByText, getByPlaceholderText } = render(<LoginScreen {...mockProps} />);
     
     // Type password but leave email empty
     fireEvent.changeText(getByPlaceholderText('Enter your password'), 'password123');
@@ -96,7 +101,7 @@ describe('LoginScreen', () => {
   it('calls signIn with email and password', async () => {
     mockSignIn.mockResolvedValue(undefined);
 
-    const { getAllByText, getByPlaceholderText } = render(<LoginScreen />);
+    const { getAllByText, getByPlaceholderText } = render(<LoginScreen {...mockProps} />);
     
     fireEvent.changeText(getByPlaceholderText('you@example.com'), 'test@example.com');
     fireEvent.changeText(getByPlaceholderText('Enter your password'), 'password123');

@@ -49,14 +49,14 @@ describe('EditProfileScreen', () => {
 
   it('renders the edit form with user data', () => {
     const { getByDisplayValue } = render(
-      <EditProfileScreen navigation={mockNavigation} route={{} as any} />
+      <EditProfileScreen />
     );
     expect(getByDisplayValue('Test User')).toBeTruthy();
   });
 
   it('renders save button', () => {
     const { getByText } = render(
-      <EditProfileScreen navigation={mockNavigation} route={{} as any} />
+      <EditProfileScreen />
     );
     expect(getByText(/Save Changes/i)).toBeTruthy();
   });
@@ -64,7 +64,7 @@ describe('EditProfileScreen', () => {
   it('validates empty name', async () => {
     const { showError } = require('@/utils/alert');
     const { getByText, getByDisplayValue } = render(
-      <EditProfileScreen navigation={mockNavigation} route={{} as any} />
+      <EditProfileScreen />
     );
 
     const nameInput = getByDisplayValue('Test User');

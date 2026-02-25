@@ -40,7 +40,7 @@ export const PlanComparisonScreen: React.FC = () => {
   const navigation = useNavigation();
   const {user} = useAuth();
   const [currentTier, setCurrentTier] = useState<SubscriptionTier>('free');
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   
   // Reload subscription when screen comes into focus (e.g., after payment success)
   useFocusEffect(

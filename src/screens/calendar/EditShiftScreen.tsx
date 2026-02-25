@@ -115,7 +115,7 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
       }
     };
     load();
-  }, [shiftId, navigation]);
+  }, [shiftId, navigation, user?.id]);
 
   // ── Handlers ──
 

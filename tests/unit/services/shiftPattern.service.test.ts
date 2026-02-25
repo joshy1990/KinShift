@@ -66,6 +66,7 @@ describe('ShiftPatternService', () => {
         type: 'rotation',
         workDays: 3,
         restDays: 2,
+        startDate: new Date(),
       });
       expect(result.valid).toBe(true);
     });
@@ -75,6 +76,7 @@ describe('ShiftPatternService', () => {
         type: 'rotation',
         workDays: 0,
         restDays: 2,
+        startDate: new Date(),
       });
       expect(result.valid).toBe(false);
     });
@@ -84,6 +86,7 @@ describe('ShiftPatternService', () => {
         type: 'rotation',
         workDays: 3,
         restDays: -1,
+        startDate: new Date(),
       });
       expect(result.valid).toBe(false);
     });
@@ -154,6 +157,7 @@ describe('ShiftPatternService', () => {
         type: 'rotation',
         workDays: 1,
         restDays: 1,
+        startDate: new Date(),
       });
       // alt: work, off, work, off, work, off, work, off, work, off → 5 work days
       expect(dates).toHaveLength(5);
