@@ -110,7 +110,7 @@ export const ProfileScreen: React.FC = () => {
           // Delete all shifts using bulk delete
           const shiftIds = allShifts.map(shift => shift.id);
           
-          await shiftService.deleteBulkShifts(shiftIds);
+          await shiftService.deleteBulkShifts(shiftIds, user!.id);
           
           showSuccess(`Deleted ${allShifts.length} shift${allShifts.length !== 1 ? 's' : ''}. Your schedule is now clear.`);
         } catch (error) {
@@ -135,7 +135,7 @@ export const ProfileScreen: React.FC = () => {
       async () => {
         try {
           setClearingShifts(true);
-          await customPatternService.deletePattern(patternId);
+          await customPatternService.deletePattern(patternId, user!.id);
           // Reload patterns list
           if (user) {
             const patterns = await customPatternService.getUserPatterns(user.id);
@@ -351,7 +351,8 @@ export const ProfileScreen: React.FC = () => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Made with ❤️ for families</Text>
+          <Text style={styles.footerText}>© 2026 Offeryn Software Ltd</Text>
+          <Text style={styles.footerSubText}>Made with ❤️ for families</Text>
         </View>
       </ScrollView>
 
@@ -686,6 +687,11 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: typography.caption,
     color: '#6B7280',
+  },
+  footerSubText: {
+    fontSize: typography.caption,
+    color: '#6B7280',
+    marginTop: 4,
   },
   // Modal Styles
   modalContainer: {

@@ -18,7 +18,7 @@
  * 4. ⚠️  Configure webhooks for payment status updates (optional but recommended)
  */
 
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -26,13 +26,11 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-  Alert,
-  ActivityIndicator,
   Platform,
   Linking,
 } from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
-import {PricingInfo, subscriptionService, Subscription, SubscriptionTier} from '@/services/subscription.service';
+import {PricingInfo, subscriptionService, SubscriptionTier} from '@/services/subscription.service';
 import {revenueCatService} from '@/services/revenueCat.service';
 import {spacing, typography, borderRadius} from '@/utils/responsive';
 import {useAuth} from '@/contexts/AuthContext';
@@ -87,7 +85,6 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 2 members',
         'Unlimited shifts & notes',
         'All core features',
-        'All core features',
       ],
     },
     {
@@ -101,21 +98,21 @@ export const PlanComparisonScreen: React.FC = () => {
         'Up to 4 members',
         'Unlimited shifts & notes',
         'All core features',
-        'Ad-free (when ads launch)',
+        'Ad-free',
       ],
     },
     {
       tier: 'premium',
       name: 'Premium',
-      priceMonthly: 7.99,
-      priceYearly: 79.99,
+      priceMonthly: 4.99,
+      priceYearly: 49.99,
       currency: 'GBP',
       features: [
         'Unlimited households',
         'Up to 12 members per household',
         'Unlimited shifts & notes',
         'All core features',
-        'Ad-free (when ads launch)',
+        'Ad-free',
         'Calendar export',
         'Priority support',
       ],
@@ -164,7 +161,7 @@ export const PlanComparisonScreen: React.FC = () => {
       
       showConfirm(
         'Upgrade Plan',
-        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year (save 16%)\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
+        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
         async () => {
           try {
             setLoading(true);
@@ -386,7 +383,10 @@ export const PlanComparisonScreen: React.FC = () => {
         {/* Support */}
         <View style={styles.supportSection}>
           <Text style={styles.supportText}>
-            Have questions? Contact us at joshlee_990@hotmail.co.uk
+            Have questions? Contact us at support@offeryn.co.uk
+          </Text>
+          <Text style={styles.companyText}>
+            © 2026 Offeryn Software Ltd
           </Text>
         </View>
       </ScrollView>
@@ -606,5 +606,11 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#6366F1',
     textAlign: 'center',
+  },
+  companyText: {
+    fontSize: typography.caption,
+    color: '#555',
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });

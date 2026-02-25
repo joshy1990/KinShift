@@ -22,7 +22,7 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
 }) => {
   const tierColor = upgradeToTier === 'premium' ? '#F59E0B' : '#6366F1';
   const tierName = upgradeToTier === 'premium' ? 'Premium' : 'Standard';
-  const tierPrice = upgradeToTier === 'premium' ? '£7.99/mo' : '£2.99/mo';
+  const tierPrice = upgradeToTier === 'premium' ? '£4.99/mo' : '£2.99/mo';
 
   return (
     <Modal
@@ -55,8 +55,8 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
               <Text style={styles.upgradePrice}>{tierPrice}</Text>
               <Text style={styles.upgradeFeature}>
                 {upgradeToTier === 'premium'
-                  ? '✓ Unlimited households\n✓ Up to 12 members\n✓ Ad-free (when ads launch)\n✓ Priority support'
-                  : '✓ Up to 4 members\n✓ Ad-free (when ads launch)\n✓ All features'}
+                  ? '✓ Unlimited households\n✓ Up to 12 members\n✓ Ad-free\n✓ Priority support'
+                  : '✓ Up to 4 members\n✓ Ad-free\n✓ All features'}
               </Text>
             </View>
           </View>

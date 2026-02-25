@@ -26,10 +26,10 @@ describe('SubscriptionService', () => {
       expect(std.currency).toBe('GBP');
     });
 
-    it('premium tier is £7.99/mo, £79.99/yr', () => {
+    it('premium tier is £4.99/mo, £49.99/yr', () => {
       const prem = subscriptionService.getPricingInfo().find(p => p.tier === 'premium')!;
-      expect(prem.priceMonthly).toBe(7.99);
-      expect(prem.priceYearly).toBe(79.99);
+      expect(prem.priceMonthly).toBe(4.99);
+      expect(prem.priceYearly).toBe(49.99);
     });
 
     it('yearly price provides discount vs monthly', () => {

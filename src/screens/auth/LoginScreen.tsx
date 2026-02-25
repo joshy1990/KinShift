@@ -1,4 +1,4 @@
-﻿import React, {useState} from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -109,7 +109,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
           await auth().sendPasswordResetEmail(email);
           showSuccess('Password reset email sent! Check your email inbox for the link.');
         } catch (error: any) {
-          console.error('❌ Password reset error:', error);
+          console.error('? Password reset error:', error);
           let errorMessage = 'Failed to send reset email. Please try again.';
           if (error.code === 'auth/user-not-found') {
             errorMessage = 'No account found with this email address';
@@ -137,7 +137,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← Back</Text>
+            <Text style={styles.backButtonText}>? Back</Text>
             </TouchableOpacity>
 
             <View style={styles.header}>

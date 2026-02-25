@@ -759,7 +759,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
           
           if (shiftsToDelete.length > 0) {
             const shiftIdsToDelete = shiftsToDelete.map(s => s.id);
-            await shiftService.deleteBulkShifts(shiftIdsToDelete);
+            await shiftService.deleteBulkShifts(shiftIdsToDelete, user!.id);
           }
         } catch (cleanupError) {
           console.error('❌ Pattern cleanup failed:', cleanupError);
@@ -875,14 +875,14 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
         // Notification is already sent by shiftService.createShift() — no need to send here
 
-        // Schedule a local shift reminder 30 minutes before shift start
+        // Schedule a local shift reminder based on user's notification preferences
         try {
           await notificationService.scheduleShiftReminder({
             id: newShift.id,
             title: title.trim() || 'Shift',
             shiftType: shiftType,
             startTime: shiftType === 'split' ? split1StartTime : startTime,
-          });
+          }, user.id);
         } catch (reminderError) {
           console.warn('Failed to schedule shift reminder:', reminderError);
         }

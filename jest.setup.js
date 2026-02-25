@@ -98,6 +98,28 @@ jest.mock('expo-notifications', () => ({
   scheduleNotificationAsync: jest.fn(),
 }));
 
+// Patch Modal on react-native (Modal is undefined in node test environment)
+const React = require('react');
+const RN = require('react-native');
+if (!RN.Modal || typeof RN.Modal !== 'function') {
+  RN.Modal = ({ visible, children, ...props }) => {
+    if (!visible) return null;
+    return React.createElement('View', { ...props, testID: 'modal' }, children);
+  };
+  RN.Modal.displayName = 'MockModal';
+}
+
+// Mock react-native-safe-area-context
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  return {
+    SafeAreaView: ({ children, ...props }) => React.createElement('View', props, children),
+    SafeAreaProvider: ({ children }) => children,
+    useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 375, height: 812 }),
+  };
+});
+
 // Mock RevenueCat (react-native-purchases) to avoid ESM transform issues in Jest
 jest.mock('react-native-purchases', () => {
   const api = {

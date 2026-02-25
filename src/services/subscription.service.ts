@@ -12,7 +12,7 @@ import { track } from '@/utils/telemetry';
  * Tier Structure:
  * - FREE: 1 household, 2 members, all features, banner ads
  * - STANDARD (£2.99/mo): 1 household, 4 members, ads removed for admin
- * - PREMIUM (£7.99/mo): Unlimited households, 12 members/household, ad-free, priority support
+ * - PREMIUM (£4.99/mo): Unlimited households, 12 members/household, ad-free, priority support
  */
 
 export type SubscriptionTier = 'free' | 'standard' | 'premium';
@@ -107,14 +107,14 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enhanced household management',
           'Real-time sync',
-          'Ad-free (when ads launch)',
+          'Ad-free',
         ],
       },
       {
         tier: 'premium',
         name: 'Premium',
-        priceMonthly: 7.99,
-        priceYearly: 79.99, // ~16% discount
+        priceMonthly: 4.99,
+        priceYearly: 49.99, // ~17% discount
         currency: 'GBP',
         features: [
           'Unlimited households',
@@ -124,7 +124,7 @@ class SubscriptionService {
           'Two-week calendar view',
           'Enterprise household management',
           'Real-time sync',
-          'Ad-free (when ads launch)',
+          'Ad-free',
           'Calendar export',
           'Early access to new features',
         ],
@@ -481,7 +481,7 @@ class SubscriptionService {
   }
 
   /**
-   * Upgrade to Premium tier (£7.99/mo)
+   * Upgrade to Premium tier (£4.99/mo)
    */
   async upgradeToPremium(userId: string, paymentMethod?: string): Promise<Subscription> {
     return this.changeSubscriptionTier(userId, 'premium', paymentMethod);
@@ -658,7 +658,7 @@ class SubscriptionService {
         benefits = [
           'Unlimited households',
           'Up to 12 members per household',
-          'Ad-free (when ads launch)',
+          'Ad-free',
           'Priority support',
           'Calendar export',
         ];
@@ -670,7 +670,7 @@ class SubscriptionService {
         benefits = [
           '1 household',
           'Up to 4 members',
-          'Ad-free (when ads launch)',
+          'Ad-free',
           'All features',
         ];
         break;

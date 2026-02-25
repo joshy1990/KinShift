@@ -94,17 +94,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
         request.resource.data.ownerId == request.auth.uid;
       
-      // Update: owner can always edit; household members can edit if allowed
-      allow update: if isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid ||
-        (resource.data.householdId != null && isHouseholdMember(resource.data.householdId))
-      );
+      // Update: only the shift owner can edit
+      allow update: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
       
-      // Delete: owner or household admin
-      allow delete: if isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid ||
-        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
-      );
+      // Delete: only the shift owner can delete
+      allow delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
     }
     
     // ========================================
@@ -121,10 +117,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.authorId == request.auth.uid;
       
-      // Update: author or household member
+      // Update: author or household admin only
       allow update: if isAuthenticated() && (
         resource.data.authorId == request.auth.uid ||
-        (resource.data.householdId != null && isHouseholdMember(resource.data.householdId))
+        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
       );
       
       // Delete: author or household admin
@@ -145,6 +141,8 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() && 
         request.resource.data.authorId == request.auth.uid;
+      // Messages are immutable — no updates allowed
+      allow update: if false;
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
     

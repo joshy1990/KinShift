@@ -88,7 +88,7 @@ module.exports = {
       "eas": {
         "projectId": process.env.EAS_PROJECT_ID || "519ab785-c013-4ecb-b983-2354ae498ec4"
       },
-      "supportEmail": process.env.SUPPORT_EMAIL || "joshlee_990@hotmail.co.uk",
+      "supportEmail": process.env.SUPPORT_EMAIL || "support@offeryn.co.uk",
       "revenuecatApiKey": process.env.REVENUECAT_API_KEY,
       "sentryDsn": process.env.SENTRY_DSN,
       "sentryDebug": process.env.SENTRY_DEBUG === 'true',

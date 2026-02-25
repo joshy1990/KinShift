@@ -1,26 +1,27 @@
 /**
  * Ad Banner Component
- * Displays ads based on subscription tier and household settings
- * 
+ * Displays Google AdMob banner ads based on subscription tier and household settings.
+ *
  * Position: Bottom of screen, above tab navigation
- * Size: Full width, responsive height (50-70px)
- * 
- * Ad Display Logic (Option 3):
+ * Size: Full width, standard banner height (50dp)
+ *
+ * Ad Display Logic (Option 3 — household-aware):
  * - Free tier users: Always see ads
- * - Standard admin: Doesn't see ads, but members do
- * - Premium user OR admin: Nobody sees ads (household perk)
+ * - Standard admin: Doesn't see ads, but household members do
+ * - Premium user OR admin: Nobody in the household sees ads
+ *
+ * Graceful degradation:
+ * - If the native AdMob SDK isn't linked (e.g., web, dev client without
+ *   react-native-google-mobile-ads), a subtle placeholder is shown instead.
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { BannerAdSize, TestIds } from '@/services/admob.service';
+import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import { BannerAdSize, getBannerAdUnitId, isAdMobAvailable } from '@/services/admob.service';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { subscriptionService } from '@/services/subscription.service';
-import { admobService, getBannerAdUnitId } from '@/services/admob.service';
 
 interface AdBannerProps {
-  /** Whether to show placeholder */
-  showPlaceholder?: boolean;
   /** Current user ID (if not using context) */
   userId?: string;
   /** Current household admin ID */
@@ -30,51 +31,28 @@ interface AdBannerProps {
 }
 
 /**
- * AdBanner Component
- * Displays ad banner based on subscription tier with household-aware logic
- * 
- * Usage:
- * ```tsx
- * import {AdBanner} from '@/components/AdBanner';
- * 
- * const MyScreen = () => {
- *   const { household } = useHousehold();
- *   const user = useAuth().user;
- *   
- *   return (
- *     <View style={{flex: 1}}>
- *       <ScrollView>...</ScrollView>
- *       <AdBanner 
- *         userId={user.id}
- *         adminId={household.adminId}
- *         isAdmin={user.id === household.adminId}
- *       />
- *     </View>
- *   );
- * };
- * ```
+ * Renders a Google AdMob banner when the native SDK is linked,
+ * otherwise renders a minimal placeholder.
  */
-export const AdBanner: React.FC<AdBannerProps> = ({ 
-  showPlaceholder = false,
+export const AdBanner: React.FC<AdBannerProps> = ({
   userId,
   adminId,
   isAdmin = false,
 }) => {
   const subscription = useSubscription();
-  const [adminSubscription, setAdminSubscription] = useState(null);
+  const [adminSubscription, setAdminSubscription] = useState<any>(null);
   const [shouldShowAds, setShouldShowAds] = useState(false);
-  
+  const [adError, setAdError] = useState(false);
+
   const { width } = Dimensions.get('window');
   const isMobile = width < 768;
-  
-  // Responsive ad height
   const adHeight = isMobile ? 50 : 60;
-  
-  // Fetch admin subscription on mount/adminId change
+
+  // Fetch admin subscription when adminId changes
   useEffect(() => {
+    if (!adminId) return;
+
     const fetchAdminSub = async () => {
-      if (!adminId) return;
-      
       try {
         const adminSub = await subscriptionService.getUserSubscription(adminId);
         setAdminSubscription(adminSub);
@@ -82,54 +60,77 @@ export const AdBanner: React.FC<AdBannerProps> = ({
         console.error('[AdBanner] Failed to get admin subscription:', error);
       }
     };
-    
+
     fetchAdminSub();
   }, [adminId]);
-  
+
   // Determine if ads should be shown (household-aware logic)
   useEffect(() => {
-    if (!subscription.currentTier || !adminSubscription) {
+    if (!subscription.currentTier) {
       setShouldShowAds(false);
       return;
     }
-    
-    // Convert currentTier to Subscription object for compatibility
+
     const userSubscription: any = {
       tier: subscription.currentTier,
       status: 'active',
     };
-    
-    // Use new household-aware logic
-    const show = subscriptionService.shouldShowAdsInHousehold(
-      userSubscription,
-      adminSubscription,
-      isAdmin
-    );
-    
-    setShouldShowAds(show);
+
+    if (adminSubscription) {
+      const show = subscriptionService.shouldShowAdsInHousehold(
+        userSubscription,
+        adminSubscription,
+        isAdmin,
+      );
+      setShouldShowAds(show);
+    } else {
+      // No admin info yet — fall back to user-only check
+      const show = subscriptionService.shouldShowAds(userSubscription, isAdmin);
+      setShouldShowAds(show);
+    }
   }, [subscription.currentTier, adminSubscription, isAdmin]);
-  
-  // Don't render if ads shouldn't be shown
-  if (!shouldShowAds && !showPlaceholder) {
-    // Return empty space for ads when not showing
-    return <View style={{ height: 0 }} />;
-  }
-  
-  // Return nothing if not showing ads
+
+  // Don't render anything if ads shouldn't be shown
   if (!shouldShowAds) {
     return null;
   }
 
-  // Render placeholder - ads coming soon
+  // ── Native AdMob banner ────────────────────────────────────────────────
+  if (isAdMobAvailable() && !adError) {
+    try {
+      const { BannerAd, BannerAdSize: NativeBannerSize, } =
+        require('react-native-google-mobile-ads');
+
+      const adUnitId = getBannerAdUnitId(false);
+
+      return (
+        <View style={[styles.container, { height: adHeight }]} testID="ad-banner">
+          <BannerAd
+            unitId={adUnitId}
+            size={NativeBannerSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            onAdFailedToLoad={(error: any) => {
+              console.warn('[AdBanner] Ad failed to load:', error);
+              setAdError(true);
+            }}
+          />
+        </View>
+      );
+    } catch {
+      // Native module not available — fall through to placeholder
+    }
+  }
+
+  // ── Fallback placeholder (dev builds / web / ad load failure) ──────────
   return (
-    <View style={[
-      styles.container,
-      { 
-        height: adHeight,
-      }
-    ]}>
+    <View
+      style={[styles.container, { height: adHeight }]}
+      testID="ad-banner-placeholder"
+    >
       <View style={styles.adPlaceholder}>
-        <Text style={styles.adPlaceholderText}>Ads Coming Soon</Text>
+        <Text style={styles.adPlaceholderText}>
+          {adError ? 'Ad unavailable' : 'Advertisement'}
+        </Text>
       </View>
     </View>
   );
@@ -143,8 +144,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 0,
-    paddingHorizontal: 0,
     overflow: 'hidden',
   },
   adPlaceholder: {
@@ -154,8 +153,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   adPlaceholderText: {
-    color: '#8B8B8B',
-    fontSize: 12,
+    color: '#555',
+    fontSize: 11,
   },
 });
 

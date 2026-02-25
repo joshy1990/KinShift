@@ -32,7 +32,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
         </Text>
 
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Contact:</Text> joshlee_990@hotmail.co.uk
+          <Text style={styles.bold}>Contact:</Text> support@offeryn.co.uk
         </Text>
 
         <Text style={styles.heading}>Information We Collect</Text>
@@ -129,7 +129,7 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
           Questions about this Privacy Policy? Contact us:
         </Text>
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Email:</Text> joshlee_990@hotmail.co.uk
+          <Text style={styles.bold}>Email:</Text> support@offeryn.co.uk
         </Text>
 
         <Text style={styles.summary}>
@@ -139,12 +139,15 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({navigation}) => {
           🔒 Stored securely on Firebase (Google){'\n'}
           ❌ We don't sell your data{'\n'}
           🗑️ You can delete your account anytime{'\n'}
-          📧 Questions? joshlee_990@hotmail.co.uk
+          📧 Questions? support@offeryn.co.uk
         </Text>
 
         <Text style={styles.footer}>
-          This Privacy Policy is provided for transparency and legal compliance. For production use serving
-          many users, consult a legal professional to ensure compliance with all applicable laws (GDPR, CCPA, etc.).
+          KinShift is a product of Offeryn Software Ltd. This Privacy Policy is provided for transparency
+          and legal compliance. For production use serving many users, consult a legal professional to
+          ensure compliance with all applicable laws (GDPR, CCPA, etc.).
+          {'\n\n'}
+          © 2026 Offeryn Software Ltd. All rights reserved.
         </Text>
       </ScrollView>
     </SafeAreaView>

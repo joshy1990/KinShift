@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useIsFocused} from '@react-navigation/native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, Shift} from '@/types';
 import {format, startOfWeek, addDays, isSameDay, isToday, startOfMonth, eachDayOfInterval, endOfDay} from 'date-fns';
@@ -25,6 +26,7 @@ type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarView'>;
 export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
   const {user} = useAuth();
   const currentHouseholdId = useCurrentHouseholdId();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const {width: windowWidth} = useWindowDimensions();
   const dayColumnWidth = (windowWidth - 40) / 7;
@@ -194,16 +196,30 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
               // This prevents momentary color flicker when index errors occur
             }
           );
-          
-          return () => {
-            if (unsubscribeShifts) unsubscribeShifts();
-          };
         } catch (error) {
           console.error('Failed to subscribe to personal shifts:', error);
           setShifts([]);
         }
       }
-      return;
+
+      // Load note counts for personal mode (must run regardless of shift subscription)
+      const loadPersonalNoteCounts = async () => {
+        try {
+          if (!user) return;
+          const dates = viewMode === 'month' ? debouncedMonthDates : debouncedWeekDates;
+          console.log('[Calendar] Loading personal note counts for', dates.length, 'dates');
+          const counts = await dayNoteService.getNoteCounts(user.id, dates, true);
+          console.log('[Calendar] Personal note counts:', JSON.stringify(counts));
+          setNoteCounts(counts);
+        } catch (error) {
+          console.error('Failed to load personal note counts:', error);
+        }
+      };
+      loadPersonalNoteCounts();
+
+      return () => {
+        if (unsubscribeShifts) unsubscribeShifts();
+      };
     }
     // Household mode
     
@@ -264,10 +280,14 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
     const loadNoteCounts = async () => {
       try {
         const dates = viewMode === 'month' ? debouncedMonthDates : debouncedWeekDates;
+        console.log('[Calendar] Loading household note counts for', dates.length, 'dates, householdId:', currentHouseholdId);
         const counts = await dayNoteService.getNoteCounts(
           currentHouseholdId,
-          dates
+          dates,
+          false,
+          user?.id
         );
+        console.log('[Calendar] Household note counts:', JSON.stringify(counts));
         setNoteCounts(counts);
       } catch (error) {
         console.error('Failed to load note counts:', error);
@@ -281,7 +301,7 @@ export const CalendarViewScreen: React.FC<Props> = ({navigation}) => {
         unsubscribeShifts();
       }
     };
-  }, [debouncedDate, currentHouseholdId, viewMode, user, debouncedWeekDates, debouncedMonthDates]); // Debounced deps prevent listener churn
+  }, [debouncedDate, currentHouseholdId, viewMode, user, debouncedWeekDates, debouncedMonthDates, isFocused]); // Debounced deps prevent listener churn; isFocused triggers refresh on return
 
   // Handle date press with double-tap detection
   const handleDatePress = (date: Date, dateString: string) => {
@@ -968,7 +988,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   noteBadge: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -977,7 +997,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   noteBadgeText: {
-    color: '#FFFFFF',
+    color: '#0F0F23',
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -1111,10 +1131,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   monthNoteDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#6366F1',
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
   },
   monthShiftIndicators: {
     flex: 1,

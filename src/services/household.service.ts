@@ -187,7 +187,7 @@ class HouseholdService {
         createdAt: now,
         updatedAt: now,
         settings: {
-          allowMemberEditOthers: settings?.allowMemberEditOthers ?? false,
+          allowMemberEditOthers: false, // Deprecated: owner-only editing is enforced
           requireApprovalForShifts: settings?.requireApprovalForShifts ?? false,
           notifyOnConflicts: settings?.notifyOnConflicts ?? true,
         },

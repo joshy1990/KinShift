@@ -283,8 +283,8 @@ export const SubscriptionManagementScreen: React.FC<
             Alert.alert(
               'Support',
               subscription.tier === 'premium'
-                ? 'Priority support: joshlee_990@hotmail.co.uk'
-                : 'Email us at: joshlee_990@hotmail.co.uk'
+                ? 'Priority support: support@offeryn.co.uk'
+                : 'Email us at: support@offeryn.co.uk'
             )
           }>
           <Text style={styles.helpButtonText}>

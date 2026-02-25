@@ -361,7 +361,7 @@ const getTierFeatures = (tierId: string): Array<{ name: string; included: boolea
       { name: 'Two-week calendar view', included: true },
       { name: 'Unlimited households', included: true },
       { name: 'Up to 12 members', included: true },
-      { name: 'Ad-free (when ads launch)', included: true },
+      { name: 'Ad-free', included: true },
       { name: 'Calendar export', included: true },
       { name: 'Priority support', included: true },
     ];
@@ -374,7 +374,7 @@ const getTierFeatures = (tierId: string): Array<{ name: string; included: boolea
       { name: 'Two-week calendar view', included: true },
       { name: '1 household', included: true },
       { name: 'Up to 4 members', included: true },
-      { name: 'Ad-free (when ads launch)', included: true },
+      { name: 'Ad-free', included: true },
     ];
   }
 
@@ -402,7 +402,7 @@ const getStandardFeatures = () => [
   'Two-week calendar view',
   '1 household',
   'Up to 4 members',
-  'Ad-free (when ads launch)',
+  'Ad-free',
 ];
 
 const getPremiumFeatures = () => [
@@ -411,7 +411,7 @@ const getPremiumFeatures = () => [
   'Two-week calendar view',
   'Unlimited households',
   'Up to 12 members',
-  'Ad-free (when ads launch)',
+  'Ad-free',
   'Calendar export',
   'Priority support',
 ];
@@ -422,7 +422,7 @@ const getComparisonFeatures = () => [
   'Two-week calendar view',
   'Households',
   'Members per household',
-  'Ad-free (when ads launch)',
+  'Ad-free',
   'Calendar export',
   'Priority support',
 ];

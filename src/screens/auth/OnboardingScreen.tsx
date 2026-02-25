@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, ScrollView} from 'react-native';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '@/types';
@@ -59,25 +59,25 @@ export const OnboardingScreen: React.FC<Props> = ({navigation}) => {
 
         <View style={styles.featuresGrid}>
           <FeatureCard 
-            icon="📅" 
+            icon="??" 
             title="Smart Calendar" 
             description="Visual schedule management"
             color="#6366F1" 
           />
           <FeatureCard 
-            icon="⚡" 
+            icon="?" 
             title="Auto-Sync" 
             description="Real-time updates everywhere"
             color="#F59E0B" 
           />
           <FeatureCard 
-            icon="🔔" 
+            icon="??" 
             title="Smart Alerts" 
             description="Never miss important shifts"
             color="#EF4444" 
           />
           <FeatureCard 
-            icon="👥" 
+            icon="??" 
             title="Family Hub" 
             description="Connect your whole household"
             color="#10B981" 
@@ -90,7 +90,7 @@ export const OnboardingScreen: React.FC<Props> = ({navigation}) => {
             onPress={() => navigation.navigate('Signup')}
             activeOpacity={0.8}>
             <Text style={styles.primaryButtonText}>Get Started Free</Text>
-            <Text style={styles.buttonArrow}>→</Text>
+            <Text style={styles.buttonArrow}>?</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

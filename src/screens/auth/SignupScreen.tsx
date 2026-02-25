@@ -1,4 +1,4 @@
-﻿import React, {useState} from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -109,7 +109,7 @@ export const SignupScreen: React.FC<Props> = ({navigation}) => {
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← Back</Text>
+            <Text style={styles.backButtonText}>? Back</Text>
           </TouchableOpacity>
 
           <View style={styles.header}>

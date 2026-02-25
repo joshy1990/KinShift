@@ -106,7 +106,7 @@ export const AboutScreen: React.FC = () => {
           
           <TouchableOpacity
             style={styles.linkButton}
-            onPress={() => handleOpenLink('mailto:joshlee_990@hotmail.co.uk')}>
+            onPress={() => handleOpenLink('mailto:support@offeryn.co.uk')}>
             <Text style={styles.linkText}>Contact Support</Text>
             <Text style={styles.linkArrow}>→</Text>
           </TouchableOpacity>
@@ -128,7 +128,7 @@ export const AboutScreen: React.FC = () => {
 
         {/* Copyright */}
         <View style={styles.footer}>
-          <Text style={styles.copyright}>© 2025 KinShift</Text>
+          <Text style={styles.copyright}>© 2026 Offeryn Software Ltd</Text>
           <Text style={styles.footerText}>Made with ❤️ for families and shift workers</Text>
         </View>
       </ScrollView>

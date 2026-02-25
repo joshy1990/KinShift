@@ -290,19 +290,17 @@ export const MainTabNavigator: React.FC = () => {
     </Tab.Navigator>
       </View>
 
-    {/* Ad Banner - Disabled for launch, will be added in future */}
-    {/* {shouldShowAdBanner && (
+    {/* Ad Banner — non-invasive, anchored to bottom above tabs */}
+    {shouldShowAdBanner && (
       <View style={{
         width: '100%',
         height: navDimensions.adBannerHeight,
         zIndex: 5,
         marginTop: 0,
       }}>
-        <AdBanner 
-          showPlaceholder={true}
-        />
+        <AdBanner />
       </View>
-    )} */}
+    )}
     </View>
   );
 };

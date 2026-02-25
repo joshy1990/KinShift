@@ -20,7 +20,6 @@ type Props = NativeStackScreenProps<HouseholdStackParamList, 'CreateHousehold'>;
 
 interface FormData {
   name: string;
-  allowMemberEditOthers: boolean;
   requireApprovalForShifts: boolean;
   notifyOnConflicts: boolean;
 }
@@ -32,7 +31,6 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<FormData>({
     name: '',
-    allowMemberEditOthers: false,
     requireApprovalForShifts: false,
     notifyOnConflicts: true,
   });
@@ -67,7 +65,7 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
       const household = await createHousehold(
         formData.name.trim(),
         {
-          allowMemberEditOthers: formData.allowMemberEditOthers,
+          allowMemberEditOthers: false, // Owner-only editing enforced
           requireApprovalForShifts: formData.requireApprovalForShifts,
           notifyOnConflicts: formData.notifyOnConflicts,
         }
@@ -134,23 +132,6 @@ export const CreateHouseholdScreen: React.FC<Props> = ({navigation}) => {
         {/* Settings */}
         <View style={styles.settingsContainer}>
           <Text style={styles.sectionTitle}>Settings</Text>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Allow members to edit others' shifts</Text>
-              <Text style={styles.settingDescription}>
-                Members can modify shifts created by other family members
-              </Text>
-            </View>
-            <Switch
-              value={formData.allowMemberEditOthers}
-              onValueChange={(value) =>
-                setFormData({...formData, allowMemberEditOthers: value})
-              }
-              trackColor={{false: '#3F3F46', true: '#06B6D4'}}
-              thumbColor={formData.allowMemberEditOthers ? '#FFFFFF' : '#A1A1AA'}
-            />
-          </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>

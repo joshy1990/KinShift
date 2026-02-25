@@ -51,6 +51,30 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/**
+ * Get the user's configured reminder minutes from Firestore
+ * Falls back to 30 minutes if not configured
+ */
+const getUserReminderMinutes = async (userId: string): Promise<{ enabled: boolean; minutes: number }> => {
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    if (userDoc.exists()) {
+      const prefs = userDoc.data()?.notificationPreferences;
+      if (prefs) {
+        return {
+          enabled: prefs.shiftReminders !== false,
+          minutes: prefs.reminderMinutes || 30,
+        };
+      }
+    }
+    return { enabled: true, minutes: 30 };
+  } catch (error) {
+    console.warn('Failed to read reminder preferences, using defaults:', error);
+    return { enabled: true, minutes: 30 };
+  }
+};
+
 // ========================================
 // NOTIFICATION INITIALIZATION
 // ========================================
@@ -369,6 +393,7 @@ const sendPushNotificationToUser = async (
         data: payload.data || {},
         badge: 1,
         priority: 'high',
+        channelId: 'default',
       }));
 
     if (messages.length === 0) {
@@ -700,17 +725,29 @@ const sendNotification = async (notification: any): Promise<boolean> => {
 
 /**
  * Schedule a local notification reminder before a shift starts.
- * Uses Expo Notifications to fire a notification 30 minutes before the shift.
+ * Reads the user's preferred reminder timing from Firestore.
+ * If userId is provided, reads their reminderMinutes preference.
+ * If shiftReminders is disabled in preferences, skips scheduling.
  *
  * @param shift - The shift to schedule a reminder for
- * @param minutesBefore - How many minutes before the shift to send the reminder (default: 30)
+ * @param userId - The user's ID to read reminder preferences from Firestore
  * @returns The scheduled notification identifier, or null on failure
  */
 const scheduleShiftReminder = async (
   shift: { id: string; title: string; shiftType: string; startTime: Date | any },
-  minutesBefore: number = 30
+  userId?: string
 ): Promise<string | null> => {
   try {
+    // Read user's reminder preference from Firestore
+    let minutesBefore = 30;
+    if (userId) {
+      const prefs = await getUserReminderMinutes(userId);
+      if (!prefs.enabled) {
+        console.log('Shift reminders disabled by user preference');
+        return null;
+      }
+      minutesBefore = prefs.minutes;
+    }
     // Parse shift start time
     let startDate: Date;
     if (shift.startTime && typeof shift.startTime === 'object' && 'seconds' in shift.startTime) {
@@ -741,8 +778,7 @@ const scheduleShiftReminder = async (
           type: 'shift_reminder',
           shiftId: shift.id,
         },
-        sound: 'default',
-      },
+        sound: 'default',        ...(require('react-native').Platform.OS === 'android' ? { channelId: 'reminders' } : {}),      },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: triggerTime,

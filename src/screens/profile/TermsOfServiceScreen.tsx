@@ -33,7 +33,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         </Text>
 
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Contact:</Text> joshlee_990@hotmail.co.uk
+          <Text style={styles.bold}>Contact:</Text> support@offeryn.co.uk
         </Text>
 
         <Text style={styles.heading}>About KinShift</Text>
@@ -119,7 +119,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.subheading}>By You</Text>
         <Text style={styles.paragraph}>You can stop using KinShift at any time by:</Text>
         <Text style={styles.listItem}>• Deleting your account in app settings</Text>
-        <Text style={styles.listItem}>• Emailing us at: joshlee_990@hotmail.co.uk</Text>
+        <Text style={styles.listItem}>• Emailing us at: support@offeryn.co.uk</Text>
 
         <Text style={styles.subheading}>By Us</Text>
         <Text style={styles.paragraph}>We may suspend or terminate your account if:</Text>
@@ -136,7 +136,7 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.heading}>Contact Us</Text>
         <Text style={styles.paragraph}>For questions about these Terms:</Text>
         <Text style={styles.contact}>
-          <Text style={styles.bold}>Email:</Text> joshlee_990@hotmail.co.uk
+          <Text style={styles.bold}>Email:</Text> support@offeryn.co.uk
         </Text>
         <Text style={styles.paragraph}>We will respond within 30 days.</Text>
 
@@ -147,15 +147,18 @@ export const TermsOfServiceScreen: React.FC<Props> = ({navigation}) => {
           ❌ You can't: Hack, spam, harass, or use illegally{'\n'}
           🔒 Your data: You own it, we store it securely{'\n'}
           ⚠️ Disclaimer: App provided "as-is", use at your own risk{'\n'}
-          📧 Problems? joshlee_990@hotmail.co.uk{'\n'}
+          📧 Problems? support@offeryn.co.uk{'\n'}
           🗑️ Leave: Delete account anytime
         </Text>
 
         <Text style={styles.footer}>
           By using KinShift, you agree to these Terms.
           {'\n\n'}
-          These Terms of Service are provided for Kinshift. For production apps serving many users, consult
-          a legal professional to ensure compliance with all applicable laws.
+          KinShift is a product of Offeryn Software Ltd. These Terms of Service are provided for KinShift.
+          For production apps serving many users, consult a legal professional to ensure compliance with
+          all applicable laws.
+          {'\n\n'}
+          © 2026 Offeryn Software Ltd. All rights reserved.
         </Text>
       </ScrollView>
     </SafeAreaView>

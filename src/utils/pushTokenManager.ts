@@ -4,9 +4,11 @@
  */
 
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
+import Constants from 'expo-constants';
 
 const STORAGE_KEY = 'expo_push_token';
 const MAX_TOKENS_PER_USER = 5; // Prevent unlimited token accumulation
@@ -30,8 +32,12 @@ export const getPushToken = async (): Promise<string | null> => {
       return null;
     }
 
-    // Get push token
-    const projectId = '___'; // Will be set by Expo
+    // Get push token using EAS project ID from app config
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      console.warn('EAS projectId not found in app config — push tokens will not work');
+      return null;
+    }
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     return token;
   } catch (error) {
@@ -266,6 +272,25 @@ export const initializePushNotifications = async (
   userId: string
 ): Promise<{ token: string | null; success: boolean }> => {
   try {
+    // Set up Android notification channel (required for Android 8+)
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'KinShift Notifications',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#6366F1',
+        sound: 'default',
+      });
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Shift Reminders',
+        description: 'Reminders before your shifts start',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#F59E0B',
+        sound: 'default',
+      });
+    }
+
     // Request permissions
     const hasPermission = await requestNotificationPermissions();
 

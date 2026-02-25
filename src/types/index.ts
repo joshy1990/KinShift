@@ -30,7 +30,8 @@ export interface Household {
 }
 
 export interface HouseholdSettings {
-  allowMemberEditOthers: boolean; // Can members edit other people's shifts?
+  /** @deprecated Owner-only editing is now enforced. Always treated as false. */
+  allowMemberEditOthers: boolean;
   requireApprovalForShifts: boolean; // Do shifts need admin approval?
   notifyOnConflicts: boolean; // Send notifications when conflicts detected?
 }

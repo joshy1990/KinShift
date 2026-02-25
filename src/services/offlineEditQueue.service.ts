@@ -46,6 +46,11 @@ class OfflineEditQueueService {
     userId?: string
   ): Promise<void> {
     try {
+      // SECURITY: userId is required for update and delete operations
+      if ((operation === 'update' || operation === 'delete') && !userId) {
+        throw new Error('userId is required for update and delete operations');
+      }
+
       const offlineEdit: OfflineEdit = {
         id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         operation,

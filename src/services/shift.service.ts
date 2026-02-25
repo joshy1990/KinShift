@@ -91,12 +91,9 @@ export class ShiftService extends BaseService {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
-        // Check shift editing permissions based on household settings
+        // OWNER-ONLY: Only the shift owner can edit their own shifts
         if (shift.ownerId !== userId) {
-          // User is not the shift owner - check if they can edit others' shifts
-          if (!household.settings?.allowMemberEditOthers) {
-            throw new Error('Unauthorized: Members cannot edit shifts created by others');
-          }
+          throw new Error('Unauthorized: You can only edit your own shifts');
         }
 
         // Additional checks based on required role
@@ -144,13 +141,14 @@ export class ShiftService extends BaseService {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
+        // OWNER-ONLY: Only the shift owner can modify their own shifts
+        if (shift.ownerId !== userId) {
+          throw new Error('Unauthorized: You can only modify your own shifts');
+        }
+
         // Additional checks based on required role
         if (requiredRole === 'admin' && !household.admins.includes(userId)) {
           throw new Error('Unauthorized: Only household admins can perform this action');
-        }
-
-        if (requiredRole === 'owner' && shift.ownerId !== userId) {
-          throw new Error('Unauthorized: Only the shift owner can perform this action');
         }
       } else {
         // Personal shift - only owner can modify
@@ -288,6 +286,9 @@ export class ShiftService extends BaseService {
       return createdShift;
     } catch (error) {
       console.error('[ShiftService] Failed to create shift:', error);
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
@@ -339,6 +340,9 @@ export class ShiftService extends BaseService {
       const shiftRef = doc(db, this.collection, shiftId);
       await updateDoc(shiftRef, cleanUpdates);
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
@@ -358,6 +362,9 @@ export class ShiftService extends BaseService {
         lastEditedBy: userId,
       });
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
@@ -366,9 +373,22 @@ export class ShiftService extends BaseService {
    * Deletes multiple shifts in bulk (soft delete) - for pattern cleanup
    * Properly chunked to respect Firestore's 500-operation batch limit.
    */
-  async deleteBulkShifts(shiftIds: string[]): Promise<void> {
+  async deleteBulkShifts(shiftIds: string[], userId: string): Promise<void> {
     try {
       if (shiftIds.length === 0) return;
+      if (!userId) throw new Error('Unauthorized: userId is required for bulk delete');
+
+      // SECURITY: Verify ownership of every shift before deleting
+      const allShiftDocs = await Promise.all(
+        shiftIds.map(id => getDoc(doc(db, this.collection, id)))
+      );
+      for (const shiftDoc of allShiftDocs) {
+        if (!shiftDoc.exists()) continue; // skip already-deleted
+        const data = shiftDoc.data() as Shift;
+        if (data.ownerId !== userId) {
+          throw new Error(`Unauthorized: You can only delete your own shifts (shift ${shiftDoc.id} belongs to another user)`);
+        }
+      }
 
       const BATCH_LIMIT = 499;
       const now = new Date();
@@ -382,12 +402,16 @@ export class ShiftService extends BaseService {
           batch.update(shiftRef, {
             isDeleted: true,
             updatedAt: now,
+            lastEditedBy: userId,
           });
         });
 
         await batch.commit();
       }
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
@@ -904,9 +928,14 @@ listenToHouseholdShifts(
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - retentionDays);
 
+    // SECURITY: Only purge the current user's soft-deleted shifts
+    const currentUser = await authService.getCurrentUser();
+    if (!currentUser) return 0;
+
     const q = query(
       collection(db, 'shifts'),
       where('isDeleted', '==', true),
+      where('ownerId', '==', currentUser.id),
       where('updatedAt', '<=', cutoff),
       limit(500)
     );

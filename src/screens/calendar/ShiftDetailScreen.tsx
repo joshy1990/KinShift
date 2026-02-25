@@ -79,21 +79,21 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
 
   const canEdit = () => {
     if (!user || !shift) return false;
-    // User can edit if they own the shift OR if they're an admin
-    return shift.ownerId === user.id || isAdmin;
+    // Only the shift owner can edit their own shift
+    return shift.ownerId === user.id;
   };
 
   const canDelete = () => {
     if (!user || !shift) return false;
-    // User can delete if they own the shift OR if they're an admin
-    return shift.ownerId === user.id || isAdmin;
+    // Only the shift owner can delete their own shift
+    return shift.ownerId === user.id;
   };
 
   const handleEdit = () => {
     if (!canEdit()) {
       showAlert(
         'Permission Denied',
-        'Only the shift owner or household admins can edit this shift'
+        'You can only edit your own shifts'
       );
       return;
     }
@@ -104,7 +104,7 @@ export const ShiftDetailScreen: React.FC<Props> = ({route, navigation}) => {
     if (!canDelete()) {
       showAlert(
         'Permission Denied',
-        'Only the shift owner or household admins can delete this shift'
+        'You can only delete your own shifts'
       );
       return;
     }

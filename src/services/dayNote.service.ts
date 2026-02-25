@@ -529,32 +529,76 @@ class DayNoteService {
 
   /**
    * Get note count for multiple dates (for calendar indicators)
+   * 
+   * Uses per-date equality queries (same proven pattern as getNotesByDate)
+   * instead of range queries that require separate composite indexes.
+   * Queries run in parallel for performance.
+   * 
+   * Visibility rules:
+   * - Personal mode: show all notes created by the user
+   * - Household mode: show notes where notifyWorkingMembers=true (visible to all),
+   *   PLUS notes created by the current user (always visible to creator)
    */
   async getNoteCounts(
-    householdId: string,
-    dates: Date[]
+    householdIdOrAuthorId: string,
+    dates: Date[],
+    isPersonalMode: boolean = false,
+    currentUserId?: string
   ): Promise<Record<string, number>> {
     try {
       if (dates.length === 0) return {};
 
-      const dateStrings = dates.map((date) => format(date, 'yyyy-MM-dd'));
-      const startDateString = dateStrings[0];
-      const endDateString = dateStrings[dateStrings.length - 1];
+      // Deduplicate date strings to avoid redundant queries
+      const uniqueDateStrings = [...new Set(dates.map((date) => format(date, 'yyyy-MM-dd')))];
 
-      const q = query(
-        collection(db, COLLECTIONS.DAY_NOTES),
-        where('householdId', '==', householdId),
-        where('date', '>=', startDateString),
-        where('date', '<=', endDateString),
-        where('isDeleted', '==', false)
+      // Query each date individually using equality filters (proven to work via getNotesByDate)
+      // Run all in parallel for performance
+      const results = await Promise.all(
+        uniqueDateStrings.map(async (dateString) => {
+          try {
+            const constraints: any[] = [
+              where('date', '==', dateString),
+              where('isDeleted', '==', false),
+            ];
+
+            if (isPersonalMode) {
+              constraints.push(where('authorId', '==', householdIdOrAuthorId));
+            } else {
+              constraints.push(where('householdId', '==', householdIdOrAuthorId));
+            }
+
+            const q = query(collection(db, COLLECTIONS.DAY_NOTES), ...constraints);
+            const snapshot = await getDocs(q);
+
+            let count = 0;
+            snapshot.docs.forEach((docSnap: any) => {
+              const note = docSnap.data() as DayNote;
+
+              // In household mode, apply visibility filter
+              if (!isPersonalMode && currentUserId) {
+                const isShared = note.notifyWorkingMembers === true;
+                const isAuthor = note.authorId === currentUserId;
+                if (!isShared && !isAuthor) {
+                  return; // Skip — private note not by current user
+                }
+              }
+
+              count++;
+            });
+
+            return { date: dateString, count };
+          } catch (err) {
+            console.warn(`[DayNoteService] Failed to get note count for ${dateString}:`, err);
+            return { date: dateString, count: 0 };
+          }
+        })
       );
 
-      const snapshot = await getDocs(q);
-
       const counts: Record<string, number> = {};
-      snapshot.docs.forEach((docSnap: any) => {
-        const note = docSnap.data() as DayNote;
-        counts[note.date] = (counts[note.date] || 0) + 1;
+      results.forEach(({ date, count }) => {
+        if (count > 0) {
+          counts[date] = count;
+        }
       });
 
       return counts;
@@ -571,15 +615,23 @@ class DayNoteService {
   /**
    * Hard-delete day notes that were soft-deleted more than `retentionDays` ago.
    */
-  async purgeSoftDeletedNotes(retentionDays: number = 30): Promise<number> {
+  async purgeSoftDeletedNotes(retentionDays: number = 30, userId?: string): Promise<number> {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - retentionDays);
 
-    const q = query(
-      collection(db, COLLECTIONS.DAY_NOTES),
+    // SECURITY: Only purge the current user's soft-deleted notes
+    const constraints: any[] = [
       where('isDeleted', '==', true),
       where('updatedAt', '<=', cutoff),
-      limit(500)
+      limit(500),
+    ];
+    if (userId) {
+      constraints.unshift(where('authorId', '==', userId));
+    }
+
+    const q = query(
+      collection(db, COLLECTIONS.DAY_NOTES),
+      ...constraints
     );
 
     const snapshot = await getDocs(q);

@@ -82,6 +82,14 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
           navigation.goBack();
           return;
         }
+
+        // SECURITY: Only the shift owner can edit their own shift
+        if (fetched.ownerId !== user?.id) {
+          showError('You can only edit your own shifts');
+          navigation.goBack();
+          return;
+        }
+
         setShift(fetched);
 
         // Hydrate form

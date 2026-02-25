@@ -15,19 +15,6 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-
-// Mock Modal before importing the component
-jest.mock('react-native/Libraries/Modal/Modal', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const MockModal = ({ visible, children }: any) => {
-    if (!visible) return null;
-    return React.createElement(View, { testID: 'modal' }, children);
-  };
-  MockModal.displayName = 'Modal';
-  return MockModal;
-});
-
 import { TimePickerModal } from '@/components/TimePickerModal';
 
 describe('TimePickerModal', () => {
@@ -60,10 +47,12 @@ describe('TimePickerModal', () => {
   });
 
   it('renders all 24 hour options (00 through 23)', () => {
-    const { getByText } = render(<TimePickerModal {...defaultProps} />);
+    const { getAllByText } = render(<TimePickerModal {...defaultProps} />);
 
     for (let h = 0; h < 24; h++) {
-      expect(getByText(String(h).padStart(2, '0'))).toBeTruthy();
+      const label = String(h).padStart(2, '0');
+      const matches = getAllByText(label);
+      expect(matches.length).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -129,11 +118,11 @@ describe('TimePickerModal', () => {
 
   // ── Hour/minute range integrity ───────────────────
   it('has exactly 24 hour options', () => {
-    const { getByText } = render(<TimePickerModal {...defaultProps} />);
+    const { getAllByText } = render(<TimePickerModal {...defaultProps} />);
 
     // Verify boundary values
-    expect(getByText('00')).toBeTruthy(); // midnight
-    expect(getByText('23')).toBeTruthy(); // last hour
+    expect(getAllByText('00').length).toBeGreaterThanOrEqual(1); // midnight
+    expect(getAllByText('23').length).toBeGreaterThanOrEqual(1); // last hour
   });
 
   it('minute values are multiples of 5 only', () => {

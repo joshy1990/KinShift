@@ -214,9 +214,16 @@ export class CustomPatternService {
    */
   async updatePattern(
     patternId: string,
+    userId: string,
     updates: Partial<Pick<CustomPattern, 'name' | 'description' | 'cells' | 'isShared'>>
   ): Promise<void> {
     try {
+      // SECURITY: Verify ownership before allowing update
+      const pattern = await this.getPattern(patternId);
+      if (!pattern || pattern.userId !== userId) {
+        throw new Error('Unauthorized: You can only edit your own patterns');
+      }
+
       const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
       await updateDoc(docRef, {
         ...updates,
@@ -231,8 +238,14 @@ export class CustomPatternService {
   /**
    * Delete a pattern
    */
-  async deletePattern(patternId: string): Promise<void> {
+  async deletePattern(patternId: string, userId: string): Promise<void> {
     try {
+      // SECURITY: Verify ownership before allowing delete
+      const pattern = await this.getPattern(patternId);
+      if (!pattern || pattern.userId !== userId) {
+        throw new Error('Unauthorized: You can only delete your own patterns');
+      }
+
       const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
       await deleteDoc(docRef);
     } catch (error) {

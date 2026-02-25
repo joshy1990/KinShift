@@ -608,9 +608,11 @@ export const DayDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                     'HH:mm'
                   )}
                 </Text>
-                <TouchableOpacity onPress={() => handleDeleteNote(note.id)}>
-                  <Text style={styles.deleteButton}>Delete</Text>
-                </TouchableOpacity>
+                {user && note.authorId === user.id && (
+                  <TouchableOpacity onPress={() => handleDeleteNote(note.id)}>
+                    <Text style={styles.deleteButton}>Delete</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ))

@@ -63,9 +63,9 @@ export const SubscriptionScreen: React.FC = () => {
         
         let benefits: string[] = [];
         if (sub.tier === 'premium') {
-          benefits = ['Unlimited households', 'Up to 12 members per household', 'Ad-free (when ads launch)', 'Priority support', 'Calendar export'];
+          benefits = ['Unlimited households', 'Up to 12 members per household', 'Ad-free', 'Priority support', 'Calendar export'];
         } else if (sub.tier === 'standard') {
-          benefits = ['1 household', 'Up to 4 members', 'Ad-free (when ads launch)', 'All features'];
+          benefits = ['1 household', 'Up to 4 members', 'Ad-free', 'All features'];
         } else {
           benefits = ['1 household', 'Up to 2 members', 'Unlimited shifts & notes', 'All core features'];
         }
@@ -358,7 +358,7 @@ export const SubscriptionScreen: React.FC = () => {
                 <Text style={styles.quickUpgradePrice}>£2.99/month</Text>
                 <Text style={styles.quickUpgradeFeatures}>
                   • 4 members per household{'\n'}
-                  • Ad-free (when ads launch){'\n'}
+                  • Ad-free{'\n'}
                   • All features unlocked
                 </Text>
               </View>
@@ -367,11 +367,11 @@ export const SubscriptionScreen: React.FC = () => {
             {displayInfo.canUpgradeToPremium && (
               <View style={styles.quickUpgradeCard}>
                 <Text style={styles.quickUpgradeTitle}>Premium Plan</Text>
-                <Text style={styles.quickUpgradePrice}>£7.99/month</Text>
+                <Text style={styles.quickUpgradePrice}>£4.99/month</Text>
                 <Text style={styles.quickUpgradeFeatures}>
                   • Unlimited households{'\n'}
                   • 12 members per household{'\n'}
-                  • Ad-free (when ads launch){'\n'}
+                  • Ad-free{'\n'}
                   • Priority support
                 </Text>
               </View>
@@ -434,7 +434,7 @@ export const SubscriptionScreen: React.FC = () => {
         {/* Support Link */}
         <TouchableOpacity style={styles.supportLink}>
           <Text style={styles.supportLinkText}>
-            Need help? Contact support at joshlee_990@hotmail.co.uk
+            Need help? Contact support at support@offeryn.co.uk
           </Text>
         </TouchableOpacity>
       </ScrollView>
