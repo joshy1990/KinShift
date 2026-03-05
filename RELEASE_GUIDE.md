@@ -1,713 +1,986 @@
-# KinShift — Release & Store Submission Guide
+# KinShift — Step-by-Step Go-Live Guide
 
 **Company:** Offeryn Software Ltd  
 **Support:** support@offeryn.co.uk  
 **Firebase Project:** linkshift-c2725  
-**Bundle ID:** com.kinshift.app (Android & iOS)
+**Bundle ID (both platforms):** com.kinshift.app  
+**Expo Slug:** linkshift
+
+Do these sections **in order**. Each one tells you exactly where to click.
 
 ---
 
 ## Table of Contents
 
-1. [Environment Variables — What You Need](#1-environment-variables)
-2. [EAS Project Setup](#2-eas-project-setup)
-3. [RevenueCat Setup (Subscriptions)](#3-revenuecat-setup)
-4. [Google AdMob Setup (Ads)](#4-google-admob-setup)
-5. [Release Signing (Android Keystore)](#5-release-signing-android)
-6. [Google Play Store Submission](#6-google-play-store)
-7. [Apple App Store Submission](#7-apple-app-store)
-8. [Firebase Cloud Functions Deployment](#8-cloud-functions)
-9. [iOS vs Android — Differences](#9-ios-vs-android-differences)
-10. [Pre-Release Checklist](#10-pre-release-checklist)
+1. [STEP 1 — Expo & EAS Setup (get your EAS_PROJECT_ID)](#step-1--expo--eas-setup)
+2. [STEP 2 — Firebase Setup (Blaze plan + deploy rules)](#step-2--firebase-setup)
+3. [STEP 3 — RevenueCat Setup (subscriptions)](#step-3--revenuecat-setup)
+4. [STEP 4 — Google Play Developer Account](#step-4--google-play-developer-account)
+5. [STEP 5 — Create Products in Google Play Console](#step-5--create-products-in-google-play)
+6. [STEP 6 — Wire RevenueCat to Google Play](#step-6--wire-revenuecat-to-google-play)
+7. [STEP 7 — Android Release Signing](#step-7--android-release-signing)
+8. [STEP 8 — Build & Upload to Google Play](#step-8--build--upload-to-google-play)
+9. [STEP 9 — Google Play Store Listing](#step-9--google-play-store-listing)
+10. [STEP 10 — Apple Developer Account (iOS)](#step-10--apple-developer-account-ios)
+11. [STEP 11 — App Store Connect & TestFlight (iOS)](#step-11--app-store-connect--testflight)
+12. [STEP 12 — Google AdMob (ads — do later)](#step-12--google-admob-ads)
+13. [STEP 13 — Sentry (crash monitoring — optional)](#step-13--sentry-crash-monitoring)
+14. [iOS vs Android — Differences](#ios-vs-android--differences)
+15. [Pre-Release Checklist](#pre-release-checklist)
+16. [Your .env.local Template](#your-envlocal-template)
 
 ---
 
-## 1. Environment Variables
+## STEP 1 — Expo & EAS Setup
 
-You need a `.env.local` file in the project root (never committed to git):
+**What you get:** `EAS_PROJECT_ID` (needed for push notifications to work)
 
-```bash
-cp .env.example .env.local
-```
+### 1.1 Create an Expo account (if you don't have one)
 
-Fill in these values:
+1. Open https://expo.dev/signup
+2. Sign up with email or GitHub
+3. Pick a username (e.g. `kinshift` or your personal name)
+4. Confirm your email
 
-| Variable | Where to get it | Required for |
-|----------|----------------|-------------|
-| `EAS_PROJECT_ID` | `eas project:info` or expo.dev dashboard | Push notifications, EAS builds |
-| `EXPO_OWNER` | Your Expo account username | EAS builds |
-| `REVENUECAT_API_KEY` | RevenueCat dashboard → API Keys → Public | Subscriptions |
-| `SENTRY_DSN` | sentry.io → Project Settings → Client Keys | Error monitoring (optional for v1) |
-| `SENTRY_AUTH_TOKEN` | sentry.io → Settings → Auth Tokens | Sentry source maps (optional for v1) |
-| `ADMOB_APP_ID_ANDROID` | AdMob dashboard → Apps → App ID | Ads (disabled for v1 launch) |
-| `ADMOB_APP_ID_IOS` | AdMob dashboard → Apps → App ID | Ads (disabled for v1 launch) |
-| `ADMOB_BANNER_PORTRAIT_ID` | AdMob → Ad units → Banner | Ads |
-| `ADMOB_BANNER_LANDSCAPE_ID` | AdMob → Ad units → Banner | Ads |
-| `SUPPORT_EMAIL` | Already set | Contact email |
+### 1.2 Install EAS CLI
 
-For EAS cloud builds, set these as EAS secrets (they won't be in .env.local on the build server):
+Open a terminal in your project folder:
 
 ```bash
-eas secret:create --name EAS_PROJECT_ID --value "your-project-id"
-eas secret:create --name REVENUECAT_API_KEY --value "your-public-key"
-eas secret:create --name SUPPORT_EMAIL --value "support@offeryn.co.uk"
-# Add others as needed
-```
-
----
-
-## 2. EAS Project Setup
-
-### First-time setup
-
-```bash
-# 1. Install EAS CLI globally
 npm install -g eas-cli
+```
 
-# 2. Log in to your Expo account
+### 1.3 Log in
+
+```bash
 eas login
+```
+Enter the email/password from step 1.1.
 
-# 3. Link this project (if not already)
+### 1.4 Link this project
+
+```bash
+cd c:\git\KinShift
 eas init
-# This will create or link the project on expo.dev and give you the EAS_PROJECT_ID
+```
 
-# 4. Verify
+- It will ask: **"Would you like to create a new EAS project?"** → type **Y**
+- It detects `slug: "linkshift"` and creates the project
+- It prints something like:
+  ```
+  ✔ Created project: @kinshift/linkshift
+  Project ID: 519ab785-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  ```
+- **Copy that Project ID** — that's your `EAS_PROJECT_ID`
+
+### 1.5 Verify
+
+```bash
 eas project:info
-# Note the "Project ID" — that's your EAS_PROJECT_ID
 ```
 
-### Set your EAS_PROJECT_ID
-
-Put the project ID into `.env.local`:
-
+You'll see:
 ```
-EAS_PROJECT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+Slug:       linkshift
+Project ID: 519ab785-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+Owner:      kinshift
 ```
 
-And register it as an EAS secret for cloud builds:
+### 1.6 Save it
+
+Create your `.env.local` file in the project root:
 
 ```bash
-eas secret:create --name EAS_PROJECT_ID --value "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+copy .env.example .env.local
 ```
 
-### Verify push tokens work
+Open `.env.local` and fill in:
 
-After setting the EAS_PROJECT_ID, rebuild the app:
+```
+EXPO_OWNER=kinshift
+EAS_PROJECT_ID=519ab785-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+(Use YOUR actual values from above)
+
+### 1.7 Set EAS Secrets (for cloud builds)
 
 ```bash
-# Development build
-eas build --profile preview --platform android
+eas secret:create --name EAS_PROJECT_ID --value "519ab785-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+eas secret:create --name EXPO_OWNER --value "kinshift"
+eas secret:create --name SUPPORT_EMAIL --value "support@offeryn.co.uk"
+```
 
-# Install on your phone and open the app
-# Check logs — you should see:
-#   ✅ Push token registered: ExponentPushToken[xxxxx]
+To check they're saved:
+```bash
+eas secret:list
 ```
 
 ---
 
-## 3. RevenueCat Setup (Subscriptions)
+## STEP 2 — Firebase Setup
 
-RevenueCat handles all payment processing. KinShift has 3 tiers: Free, Standard (£2.99/mo), Premium (£4.99/mo).
+**What you get:** Firestore rules deployed, Cloud Functions live, Blaze plan active
 
-### Step 1: Create a RevenueCat Account
+Your Firebase project already exists: **linkshift-c2725**
 
-1. Go to https://www.revenuecat.com and sign up
-2. Create a new project called **"KinShift"**
+### 2.1 Install Firebase CLI
 
-### Step 2: Connect Google Play
+```bash
+npm install -g firebase-tools
+```
 
-1. In RevenueCat dashboard → **Project Settings** → **Apps** → **Add New App**
-2. Select **Google Play**
-3. Enter package name: `com.kinshift.app`
-4. You need a **Google Play Service Account JSON key**:
-   - Go to Google Play Console → **Setup** → **API access**
-   - Click **Create new service account**
-   - Go to Google Cloud Console (link provided)
-   - Create a service account with **Editor** role
-   - Create a JSON key and download it
-   - Back in Play Console, grant the service account **Admin** access
-   - Upload the JSON key to RevenueCat
-5. Click **Save**
+### 2.2 Log in
 
-### Step 3: Connect App Store (iOS)
+```bash
+firebase login
+```
 
-1. In RevenueCat → **Apps** → **Add New App** → **App Store**
-2. Enter bundle ID: `com.kinshift.app`
-3. You need an **App Store Connect Shared Secret**:
-   - Go to App Store Connect → your app → **In-App Purchases** → **Manage** (top right)
-   - **App-Specific Shared Secret** → Generate
-   - Copy and paste into RevenueCat
-4. Click **Save**
+This opens a browser — sign in with the Google account that owns the Firebase project.
 
-### Step 4: Create Products in the Stores
+### 2.3 Upgrade to Blaze plan (required for Cloud Functions)
 
-#### Google Play Console
+1. Open https://console.firebase.google.com/project/linkshift-c2725/overview
+2. Look at the bottom-left of the sidebar — it shows your current plan
+3. If it says **"Spark"**, click it → click **"Upgrade"**
+4. Select **"Blaze (pay as you go)"**
+5. Add a payment method (credit/debit card)
+6. Confirm
 
-1. Go to Google Play Console → **KinShift** → **Monetize** → **Subscriptions**
-2. Create these subscription products:
+> **Cost:** The free tier is very generous — you won't pay anything until you hit ~50K reads/day or ~20K function invocations/day. For a new app that's months away.
 
-| Product ID | Name | Price | Period |
-|-----------|------|-------|--------|
-| `kinshift_standard_monthly` | KinShift Standard | £2.99 | Monthly |
-| `kinshift_standard_annual` | KinShift Standard Annual | £29.99 | Annual |
-| `kinshift_premium_monthly` | KinShift Premium | £4.99 | Monthly |
-| `kinshift_premium_annual` | KinShift Premium Annual | £49.99 | Annual |
+### 2.4 Check you're pointing at the right project
 
-3. Each product needs a **base plan** → set the price and billing period
-4. **Activate** each subscription
+```bash
+firebase use linkshift-c2725
+```
 
-#### App Store Connect
+If it says "no project directory detected", run:
+```bash
+firebase init
+```
+And select **"Use an existing project"** → pick **linkshift-c2725**. When asked which features, select **Firestore** and **Functions**.
 
-1. Go to App Store Connect → your app → **In-App Purchases** → **Manage**
-2. Click **+** → **Auto-Renewable Subscription**
-3. Create a **Subscription Group** called "KinShift Plans"
-4. Add the same 4 products with matching Product IDs
-5. Set prices in **Pricing and Availability** (use currency converter for GBP equivalents)
-6. Submit for review (Apple reviews in-app purchases separately)
+### 2.5 Deploy Firestore rules & indexes
 
-### Step 5: Configure Products in RevenueCat
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
 
-1. In RevenueCat → **Products** → import from both stores
-2. Create **Entitlements**:
-   - `standard` → attach Standard monthly + annual products
-   - `premium` → attach Premium monthly + annual products
-3. Create **Offerings**:
-   - Default offering with 4 packages (Standard Monthly, Standard Annual, Premium Monthly, Premium Annual)
+You should see:
+```
+✔ firestore: Released rules
+✔ firestore: Deployed indexes
+```
 
-### Step 6: Get Your API Key
+### 2.6 Deploy Cloud Functions
 
-1. RevenueCat → **Project Settings** → **API Keys**
-2. Copy the **Public app-specific API key** (starts with `goog_` for Google or `appl_` for Apple)
-3. **Important:** For cross-platform, you need TWO keys — one per platform. But for initial launch you can use the Google one.
-4. Put it in `.env.local`:
+```bash
+cd functions
+npm install
+cd ..
+firebase deploy --only functions
+```
+
+You should see:
+```
+✔ functions: Deployed 5 functions
+  joinHouseholdByCode
+  lookupInvitationByCode
+  revenueCatWebhook
+  sendPushNotification
+  scheduledCleanup
+```
+
+**Note the webhook URL** — it will be printed like:
+```
+Function URL (revenueCatWebhook): https://us-central1-linkshift-c2725.cloudfunctions.net/revenueCatWebhook
+```
+Save this URL — you'll need it for RevenueCat in Step 3.
+
+### 2.7 Verify Firebase Auth is enabled
+
+1. Open https://console.firebase.google.com/project/linkshift-c2725/authentication/providers
+2. Make sure **"Email/Password"** shows as **Enabled**
+3. If not: click it → toggle **Enable** → click **Save**
+
+---
+
+## STEP 3 — RevenueCat Setup
+
+**What you get:** `REVENUECAT_API_KEY` (needed for subscriptions to work)
+
+### 3.1 Create a RevenueCat account
+
+1. Open https://app.revenuecat.com/signup
+2. Sign up with email or Google
+3. Confirm your email
+
+### 3.2 Create a project
+
+1. After logging in, you'll be on the dashboard
+2. Click **"Create new project"** (top-left dropdown or center of screen)
+3. Name: **KinShift**
+4. Click **"Create project"**
+
+### 3.3 Add your Android app
+
+1. You're now in the project. In the left sidebar: **Project Settings** → **Apps**
+2. Click **"+ New"** button (top right)
+3. Select **"Google Play Store"**
+4. **App name:** KinShift Android
+5. **Google Play package:** `com.kinshift.app`
+6. **Service account credentials JSON** — leave blank for now (you'll add this after Step 6)
+7. Click **"Save"**
+
+### 3.4 Get your API key
+
+1. In left sidebar: **Project Settings** → **API keys**
+2. You'll see a key listed under your app
+3. **Copy the "Public app-specific API key"** — it starts with `goog_` (for Google Play)
+4. Add it to your `.env.local`:
 
 ```
 REVENUECAT_API_KEY=goog_xxxxxxxxxxxxxxxxxxxx
 ```
 
-And as an EAS secret:
-
+5. Also save as an EAS secret:
 ```bash
 eas secret:create --name REVENUECAT_API_KEY --value "goog_xxxxxxxxxxxxxxxxxxxx"
 ```
 
-### Step 7: Set Up the RevenueCat Webhook (Tier Sync)
+### 3.5 Create Entitlements
 
-This keeps Firestore in sync when RevenueCat processes a purchase/renewal/cancellation:
+Entitlements are what features the user unlocks. You need two.
 
-1. Deploy Cloud Functions first (see [Section 8](#8-cloud-functions))
-2. In RevenueCat → **Project Settings** → **Integrations** → **Webhooks**
-3. **Webhook URL:** `https://us-central1-linkshift-c2725.cloudfunctions.net/revenueCatWebhook`
-4. **Authorization header:** Set a secret token, then add it to your Cloud Functions environment:
-   ```bash
-   firebase functions:config:set revenuecat.webhook_secret="your-random-secret-here"
+1. Left sidebar: **Entitlements**
+2. Click **"+ New"**
+   - **Identifier:** `standard`
+   - **Description:** Standard tier features
+   - Click **"Add"**
+3. Click **"+ New"** again
+   - **Identifier:** `premium`
+   - **Description:** Premium tier features
+   - Click **"Add"**
+
+### 3.6 Create an Offering
+
+Offerings are the "shelf" of products shown to users.
+
+1. Left sidebar: **Offerings**
+2. Click **"+ New"**
+   - **Identifier:** `default`
+   - **Description:** Default offering
+   - Click **"Add"**
+3. You'll add packages to this after creating products in Google Play (Step 5)
+
+### 3.7 Set up the webhook
+
+1. Left sidebar: **Integrations** → **Webhooks**
+2. Click **"+ New"**
+3. **Webhook URL:** paste the URL from Step 2.6:
    ```
-5. Enable events: `INITIAL_PURCHASE`, `RENEWAL`, `CANCELLATION`, `EXPIRATION`, `BILLING_ISSUE_DETECTED`
-6. Click **Save**
+   https://us-central1-linkshift-c2725.cloudfunctions.net/revenueCatWebhook
+   ```
+4. **Authorization header:** Type a random secure string (e.g. `rc_webhook_kinshift_2026_secret`)
+   - Save this string — you'll need to add it to Firebase too
+5. Toggle ON these events:
+   - ✅ INITIAL_PURCHASE
+   - ✅ RENEWAL
+   - ✅ CANCELLATION
+   - ✅ EXPIRATION
+   - ✅ BILLING_ISSUE_DETECTED
+6. Click **"Save"**
+
+Now save the webhook secret in Firebase:
+```bash
+firebase functions:config:set revenuecat.webhook_secret="rc_webhook_kinshift_2026_secret"
+firebase deploy --only functions
+```
 
 ---
 
-## 4. Google AdMob Setup (Ads)
+## STEP 4 — Google Play Developer Account
 
-> **Note:** Ads are currently disabled in app.config.js for v1 launch. Enable when you have a user base.
+**What you get:** Ability to publish on Google Play Store
 
-### Step 1: Create AdMob Account
+### 4.1 Create the account
 
-1. Go to https://admob.google.com and sign in with your Google account
-2. Accept the terms of service
+1. Open https://play.google.com/console/signup
+2. Sign in with your Google account
+3. **Accept** the developer distribution agreement
+4. **Pay the one-time $25 registration fee** (card payment)
+5. Fill in your developer profile:
+   - **Developer name:** Offeryn Software Ltd
+   - **Contact email:** support@offeryn.co.uk
+   - **Website:** (your website if you have one, or leave blank)
+6. **Identity verification:** Google will ask you to verify your identity
+   - They'll send documents to review — typically takes **1-3 business days**
+   - You cannot publish until verification is complete
 
-### Step 2: Register Your Apps
+### 4.2 Create the app
 
-1. Click **Apps** → **Add App**
-2. Select **Android** → search for your app (if published) or enter manually
-   - App name: KinShift
-   - Package: `com.kinshift.app`
-3. Repeat for **iOS**:
-   - Bundle ID: `com.kinshift.app`
-4. Note the **App IDs** for each platform (format: `ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY`)
+Once verified:
 
-### Step 3: Create Ad Units
-
-For each platform (Android and iOS), create:
-
-| Ad Type | Where it shows in app |
-|---------|----------------------|
-| Banner (320×50) | Bottom of calendar screen (free/standard users) |
-
-1. Click **Ad units** → **Add ad unit** → **Banner**
-2. Name it: "KinShift Banner Portrait"
-3. Copy the ad unit ID (format: `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY`)
-4. Repeat for landscape if needed
-
-### Step 4: Set Environment Variables
-
-```env
-ADMOB_APP_ID_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
-ADMOB_APP_ID_IOS=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
-ADMOB_BANNER_PORTRAIT_ID=ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY
-ADMOB_BANNER_LANDSCAPE_ID=ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY
-```
-
-### Step 5: Enable the AdMob Plugin
-
-In `app.config.js`, uncomment the AdMob plugin block:
-
-```javascript
-[
-  "react-native-google-mobile-ads",
-  {
-    "androidAppId": process.env.ADMOB_APP_ID_ANDROID,
-    "iosAppId": process.env.ADMOB_APP_ID_IOS
-  }
-]
-```
-
-Then rebuild: `eas build --profile production --platform all`
-
-### AdMob Policy Notes
-
-- Never click your own ads (Google will ban your account)
-- In development, the app automatically uses Google's test ad IDs
-- AdMob review can take 24-48 hours after your app goes live
-- Ads won't serve real ads until the app has real traffic
+1. Open https://play.google.com/console
+2. Click **"Create app"** (top right)
+3. Fill in:
+   - **App name:** KinShift
+   - **Default language:** English (United Kingdom)
+   - **App or Game:** App
+   - **Free or Paid:** Free
+4. Check all the declaration boxes at the bottom
+5. Click **"Create app"**
 
 ---
 
-## 5. Release Signing (Android)
+## STEP 5 — Create Products in Google Play
 
-### Currently: Debug keystore is used for release builds — this must change.
+**What you get:** Subscription products that RevenueCat and your app can sell
 
-### Generate a Release Keystore
+### 5.1 Navigate to Subscriptions
+
+1. Open https://play.google.com/console
+2. Click **KinShift** in your app list
+3. Left sidebar: **Monetize** → **Products** → **Subscriptions**
+
+### 5.2 Create the Standard Monthly subscription
+
+1. Click **"Create subscription"**
+2. **Product ID:** `kinshift_standard_monthly` ← must match exactly
+3. **Name:** KinShift Standard
+4. Click **"Create"**
+5. You'll be taken to the subscription details page
+6. Click **"Add base plan"**:
+   - **Base plan ID:** `standard-monthly`
+   - **Auto-renewing:** Yes
+   - **Billing period:** 1 Month
+   - Click **"Set prices"** → **"Set price"**
+     - Select **United Kingdom** → enter **£2.99**
+     - Click **"Update"** → it'll auto-calculate other currencies
+   - Click **"Save"** then **"Activate"**
+
+### 5.3 Create the Standard Annual subscription
+
+1. Back to **Monetize** → **Products** → **Subscriptions** → **"Create subscription"**
+2. **Product ID:** `kinshift_standard_annual`
+3. **Name:** KinShift Standard Annual
+4. Add base plan with:
+   - **Billing period:** 1 Year
+   - **Price:** £29.99
+5. **Save** and **Activate**
+
+### 5.4 Create the Premium Monthly subscription
+
+1. **Create subscription**
+2. **Product ID:** `kinshift_premium_monthly`
+3. **Name:** KinShift Premium
+4. Add base plan:
+   - **Billing period:** 1 Month
+   - **Price:** £4.99
+5. **Save** and **Activate**
+
+### 5.5 Create the Premium Annual subscription
+
+1. **Create subscription**
+2. **Product ID:** `kinshift_premium_annual`
+3. **Name:** KinShift Premium Annual
+4. Add base plan:
+   - **Billing period:** 1 Year
+   - **Price:** £49.99
+5. **Save** and **Activate**
+
+> **Important:** Subscriptions won't be testable until you've uploaded at least one APK/AAB to the app. Do Step 8 first if Google won't let you activate them.
+
+---
+
+## STEP 6 — Wire RevenueCat to Google Play
+
+**What you get:** RevenueCat can verify purchases and sync subscription status
+
+### 6.1 Create a Google Cloud Service Account
+
+1. Open https://play.google.com/console
+2. Click **Setup** (bottom of left sidebar) → **API access**
+3. If Google asks you to link a Google Cloud project, click **"Link"** (it creates one automatically)
+4. Scroll down to **"Service accounts"** section
+5. Click **"Create new service account"**
+6. A popup appears telling you to go to Google Cloud Console — click the **"Google Cloud Console"** link
+7. In Google Cloud Console:
+   - Click **"+ CREATE SERVICE ACCOUNT"** (top of page)
+   - **Service account name:** `revenuecat-service`
+   - **Service account ID:** auto-fills to `revenuecat-service`
+   - Click **"Create and Continue"**
+   - **Grant role:** select **"Editor"**
+   - Click **"Continue"** → **"Done"**
+8. You'll see your new service account in the list
+9. Click the **three dots (⋮)** → **"Manage keys"**
+10. Click **"Add key"** → **"Create new key"** → select **"JSON"** → **"Create"**
+11. A `.json` file downloads — **keep this safe, you'll upload it to RevenueCat**
+
+### 6.2 Grant Play Console access
+
+1. Go back to Google Play Console → **Setup** → **API access**
+2. Find `revenuecat-service` in the service accounts list
+3. Click **"Grant access"**
+4. Under **Account permissions**, check:
+   - ✅ View financial data, orders, and cancellation survey responses
+   - ✅ Manage orders and subscriptions
+   - ✅ View app information and download bulk reports
+5. Under **App permissions** → click **"Add app"** → select **KinShift**
+6. Click **"Apply"** → **"Invite user"** → **"Send invite"**
+
+### 6.3 Upload to RevenueCat
+
+1. Open https://app.revenuecat.com
+2. Left sidebar: **Project Settings** → **Apps** → click your **KinShift Android** app
+3. Find **"Service Account credentials JSON"**
+4. Click **"Upload"** and select the `.json` file you downloaded
+5. Click **"Save"**
+
+### 6.4 Import products into RevenueCat
+
+1. Left sidebar: **Products**
+2. Click **"+ New"**
+3. Select your **Google Play Store** app
+4. It should auto-detect your products, or enter them manually:
+   - `kinshift_standard_monthly`
+   - `kinshift_standard_annual`
+   - `kinshift_premium_monthly`
+   - `kinshift_premium_annual`
+5. Click **"Add"** for each
+
+### 6.5 Attach products to entitlements
+
+1. Left sidebar: **Entitlements** → click **"standard"**
+2. Click **"Attach"** → select `kinshift_standard_monthly` and `kinshift_standard_annual`
+3. Click **"Add"**
+4. Go back to **Entitlements** → click **"premium"**
+5. Click **"Attach"** → select `kinshift_premium_monthly` and `kinshift_premium_annual`
+6. Click **"Add"**
+
+### 6.6 Add products to your Offering
+
+1. Left sidebar: **Offerings** → click **"default"**
+2. Click **"+ New Package"** four times, creating:
+
+| Package identifier | Product |
+|---|---|
+| `$rc_monthly` | kinshift_standard_monthly |
+| `$rc_annual` | kinshift_standard_annual |
+| `kinshift_premium_monthly` | kinshift_premium_monthly |
+| `kinshift_premium_annual` | kinshift_premium_annual |
+
+3. Click **"Add"** for each
+
+---
+
+## STEP 7 — Android Release Signing
+
+**What you get:** A production keystore so Google Play accepts your app
+
+### Option A: Let EAS manage it (recommended, easiest)
+
+When you run `eas build` in Step 8, EAS will ask:
+```
+Would you like to generate a new Android Keystore? (Y/n)
+```
+Type **Y**. EAS generates, stores, and manages it for you securely.
+
+To download it later if needed:
+```bash
+eas credentials
+```
+
+### Option B: Generate your own keystore
 
 ```bash
-# Run in your project root
 keytool -genkeypair -v -storetype PKCS12 -keystore android/app/release.keystore -alias kinshift -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-It will ask you:
-- **Keystore password:** Choose a strong password (save it somewhere safe!)
-- **Key password:** Can be the same
-- **First and last name:** Your name or company name
+It asks:
+- **Keystore password:** pick something strong, **write it down somewhere safe**
+- **Key password:** same as keystore password is fine
+- **First and last name:** Your Name
 - **Organization:** Offeryn Software Ltd
-- **City/Locality:** Your city
+- **City:** Your city
 - **Country code:** GB
 
-### Configure build.gradle
-
-Edit `android/app/build.gradle`, replace the release signing config:
-
-```gradle
-signingConfigs {
-    debug {
-        storeFile file('debug.keystore')
-        storePassword 'android'
-        keyAlias 'androiddebugkey'
-        keyPassword 'android'
-    }
-    release {
-        storeFile file('release.keystore')
-        storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ''
-        keyAlias 'kinshift'
-        keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: ''
-    }
-}
-
-buildTypes {
-    debug {
-        signingConfig signingConfigs.debug
-    }
-    release {
-        signingConfig signingConfigs.release
-        // ... rest stays the same
-    }
-}
-```
-
-### Set EAS Secrets for Cloud Builds
-
+Then set EAS secrets:
 ```bash
-# Upload the keystore to EAS
-eas credentials
-
-# Or set environment secrets
-eas secret:create --name ANDROID_KEYSTORE_PASSWORD --value "your-keystore-password"
-eas secret:create --name ANDROID_KEY_PASSWORD --value "your-key-password"
+eas secret:create --name ANDROID_KEYSTORE_PASSWORD --value "your-password"
+eas secret:create --name ANDROID_KEY_PASSWORD --value "your-password"
 ```
 
-**CRITICAL:** If you lose the keystore or passwords, you can NEVER update your app again on Google Play. Back up `release.keystore` somewhere safe (USB drive, password manager, cloud storage with encryption).
-
-### Alternative: Let EAS Manage Signing
-
-EAS can generate and manage your keystore automatically:
-
-```bash
-eas build --profile production --platform android
-# When prompted: "Generate a new Android Keystore? (Y/n)" → Y
-```
-
-EAS stores it securely. You can download it later with `eas credentials`.
+> **WARNING:** If you lose the keystore file or passwords, you can NEVER update your app on Google Play again. Back it up to a USB drive or password manager.
 
 ---
 
-## 6. Google Play Store Submission
+## STEP 8 — Build & Upload to Google Play
 
-### Step 1: Create a Google Play Developer Account
-
-1. Go to https://play.google.com/console
-2. Pay the one-time **$25 registration fee**
-3. Complete identity verification (can take 48 hours)
-4. Set up a payments profile if selling subscriptions
-
-### Step 2: Create the App Listing
-
-1. Click **Create app**
-2. Fill in:
-   - **App name:** KinShift
-   - **Default language:** English (United Kingdom)
-   - **App type:** App
-   - **Free or paid:** Free (with in-app purchases)
-3. Accept the declarations
-
-### Step 3: Store Listing
-
-Fill in these sections:
-
-#### App Details
-- **Short description** (max 80 chars): "Share shift schedules with your household. Know who's working when."
-- **Full description** (max 4000 chars): Write a detailed description of features
-- **App icon:** 512×512 PNG (use your `assets/icon.png` scaled up)
-- **Feature graphic:** 1024×500 PNG (banner image shown at top of listing)
-- **Screenshots:** At least 2 phone screenshots, ideally 4-8
-  - Take screenshots from your device or emulator
-  - Must be between 320px and 3840px, 16:9 or 9:16 ratio
-
-#### Content Rating
-- Go to **Policy** → **App content** → **Content rating**
-- Fill in the IARC questionnaire (the app has no violence, no mature content)
-- You'll likely get an **Everyone / PEGI 3** rating
-
-#### Data Safety
-- Go to **Policy** → **App content** → **Data safety**
-- Declare what data you collect:
-  - **Email address** — Account creation (required)
-  - **Name** — Display name in households (optional, user-provided)
-  - **Push notification tokens** — Notification delivery (required)
-  - Data is **encrypted in transit** (Firebase uses HTTPS)
-  - Data is **not shared with third parties** (unless you enable AdMob)
-  - Users **can request deletion** (via support email)
-
-#### Target Audience
-- **Target age:** All ages (if general purpose) OR 18+ (if you want to avoid COPPA requirements)
-  - **Recommended:** Target 18+ to avoid the extra compliance burden
-
-### Step 4: Build the Production AAB
+### 8.1 Run the production build
 
 ```bash
-# Build production Android App Bundle
+cd c:\git\KinShift
 eas build --profile production --platform android
-
-# Wait for build to complete (5-15 minutes)
-# Download the .aab file from the EAS dashboard
 ```
 
-### Step 5: Upload to Google Play
+- Takes about 10-15 minutes
+- When finished, EAS gives you a download URL for the `.aab` file
+- Download the `.aab` file to your computer
 
-1. Go to **Production** → **Create new release**
-2. Upload the `.aab` file
-3. Add release notes:
+### 8.2 Upload to Google Play Console
+
+1. Open https://play.google.com/console → click **KinShift**
+2. Left sidebar: **Production** (under "Release")
+3. Click **"Create new release"**
+4. **App signing:** If this is your first upload, Google asks about Play App Signing
+   - Click **"Continue"** (let Google manage your signing key)
+5. Click **"Upload"** → select the `.aab` file you downloaded
+6. Wait for it to upload and process
+7. **Release name:** `1.0.0`
+8. **Release notes:**
    ```
-   KinShift v1.0.0 — Launch Release
+   KinShift v1.0.0
    • Share shift schedules with your household
    • See who's working and when at a glance
    • Get notified about shift changes and day notes
    • Local shift reminders before your shifts start
    • Works offline with automatic sync
    ```
-4. Click **Review release** → **Start rollout to production**
+9. Click **"Review release"**
+10. Fix any warnings (it'll tell you if anything is missing)
+11. Click **"Start rollout to Production"**
 
-### Step 6: Review
+### 8.3 Alternative: Use EAS Submit
 
-- Google typically reviews within **1-3 days** for the first submission
-- You may get feedback/rejection for policy issues — fix and resubmit
-
-### Pricing & Distribution
-
-In **Monetize** → **Subscriptions**, ensure your subscription products are active (from the RevenueCat section above).
+Instead of manually uploading, EAS can submit directly:
+```bash
+eas submit --platform android
+```
+It will ask for your Google Play service account key JSON (the one from Step 6.1).
 
 ---
 
-## 7. Apple App Store Submission
+## STEP 9 — Google Play Store Listing
 
-### Step 1: Apple Developer Account
+Fill these in **before** or **after** uploading the build — Google won't publish until everything is complete.
 
-1. Go to https://developer.apple.com/programs/
-2. Enroll in the Apple Developer Program — **$99/year** (USD)
-3. If enrolling as a company (Offeryn Software Ltd), you need a **D-U-N-S number**
-   - Apply at https://developer.apple.com/enroll/duns-lookup/
-   - Takes 5-14 business days
-4. Complete enrollment
+### 9.1 Main store listing
 
-### Step 2: Create App ID & Certificates
-
-```bash
-# EAS handles this automatically when you build:
-eas build --profile production --platform ios
-
-# When prompted:
-# - "Generate a new Apple Distribution certificate?" → Y
-# - "Generate a new Apple Provisioning Profile?" → Y
-# EAS will ask you to log in to your Apple Developer account
-```
-
-### Step 3: Create the App in App Store Connect
-
-1. Go to https://appstoreconnect.apple.com
-2. Click **My Apps** → **+** → **New App**
+1. Open https://play.google.com/console → **KinShift**
+2. Left sidebar: **Grow** → **Store presence** → **Main store listing**
 3. Fill in:
-   - **Platform:** iOS
+   - **App name:** KinShift
+   - **Short description:** (max 80 chars)
+     > Share shift schedules with your household. Know who's working when.
+   - **Full description:** (max 4000 chars)
+     > KinShift makes it easy to share work shift schedules with your household... (write your description)
+
+### 9.2 Graphics
+
+Still on the Main store listing page:
+
+- **App icon:** 512×512 PNG — scale up your `assets/icon.png`
+- **Feature graphic:** 1024×500 PNG — create a banner image (use Canva, Figma, etc.)
+- **Phone screenshots:** at least 2 screenshots
+  - Take screenshots from your Android phone
+  - Size: must be between 320px and 3840px on each side
+  - Recommended: 1080×1920 (portrait)
+  - Take 4-8 screenshots showing: login, calendar view, shift detail, household, notifications
+
+### 9.3 Content rating
+
+1. Left sidebar: **Policy** → **App content** → **Content rating**
+2. Click **"Start questionnaire"**
+3. **Category:** "Utility, Productivity, Communication, or other"
+4. Answer the questions — for KinShift:
+   - Violence: No
+   - Sexual content: No
+   - Language: No
+   - Controlled substances: No
+   - Miscellaneous: Nothing applies
+5. Click **"Submit"**
+6. You'll get a rating like **"Everyone"** / **PEGI 3**
+
+### 9.4 Data safety
+
+1. Left sidebar: **Policy** → **App content** → **Data safety**
+2. Click **"Start"**
+3. **Does your app collect or share data?** → Yes
+4. **Data types collected:**
+   - ✅ Email address — Purpose: Account management — Required: Yes
+   - ✅ Name — Purpose: App functionality (display in household) — Required: No
+   - ✅ Other user IDs (Firebase UID) — Purpose: App functionality — Required: Yes
+5. **Is data encrypted in transit?** → Yes (Firebase uses HTTPS)
+6. **Can users request data deletion?** → Yes (via support@offeryn.co.uk)
+7. **Data shared with third parties?** → No (unless you enable AdMob later)
+8. Click **"Submit"**
+
+### 9.5 Target audience
+
+1. Left sidebar: **Policy** → **App content** → **Target audience and content**
+2. **Target age group:** Select **"18 and over"**
+   - This avoids COPPA children's privacy requirements
+3. Click **"Save"**
+
+### 9.6 Privacy policy
+
+1. Left sidebar: **Policy** → **App content** → **Privacy policy**
+2. Enter a URL to your privacy policy
+   - If you don't have a website yet, create a free Google Doc, make it public, and use the share link
+   - It must mention: what data you collect (email, name, shifts), Firebase/RevenueCat as third parties, how to request deletion, contact email
+3. Click **"Save"**
+
+---
+
+## STEP 10 — Apple Developer Account (iOS)
+
+**What you get:** Ability to publish on Apple App Store
+
+> **Note:** You need this only when you're ready for iOS. You can launch Android first.
+
+### 10.1 Enroll as a company
+
+1. Open https://developer.apple.com/programs/enroll/
+2. Click **"Start Your Enrollment"**
+3. Sign in with your Apple ID (or create one)
+4. Select **"Organization"** (for Offeryn Software Ltd)
+5. You need a **D-U-N-S Number**:
+   - Click the link to **"look up your D-U-N-S Number"**
+   - Or go directly to: https://developer.apple.com/enroll/duns-lookup/
+   - Search for "Offeryn Software Ltd"
+   - If not found, **request one** — takes **5-14 business days** (free)
+6. Once you have your D-U-N-S number, continue enrollment:
+   - **Organization:** Offeryn Software Ltd
+   - **D-U-N-S:** your number
+   - **Website:** your company website
+7. **Pay $99/year** (USD)
+8. Apple reviews your enrollment — typically **1-3 business days**
+
+### 10.2 Alternative: Enroll as individual
+
+If you want to skip the D-U-N-S process:
+1. Select **"Individual"** instead of Organization
+2. The app will show your personal name instead of "Offeryn Software Ltd"
+3. You can switch to Organization later
+
+---
+
+## STEP 11 — App Store Connect & TestFlight
+
+### 11.1 Create the app
+
+1. Open https://appstoreconnect.apple.com
+2. Click **"My Apps"** → **"+"** (top left) → **"New App"**
+3. Fill in:
+   - **Platforms:** iOS
    - **Name:** KinShift
-   - **Primary language:** English (UK)
-   - **Bundle ID:** com.kinshift.app (must match app.config.js)
-   - **SKU:** kinshift-ios-001 (any unique string)
-4. Click **Create**
+   - **Primary Language:** English (UK)
+   - **Bundle ID:** select `com.kinshift.app` (it appears after your first EAS iOS build)
+   - **SKU:** `kinshift-001`
+4. Click **"Create"**
 
-### Step 4: App Store Listing
-
-#### App Information
-- **Subtitle** (max 30 chars): "Household Shift Sharing"
-- **Category:** Productivity
-- **Secondary category:** Lifestyle
-
-#### Version Information
-- **Description:** Same as Google Play but written for Apple's tone
-- **Keywords** (max 100 chars): "shifts,schedule,household,family,calendar,roster,work"
-- **Support URL:** https://offeryn.co.uk (or a simple landing page)
-- **Marketing URL:** (optional) Your website
-- **Privacy Policy URL:** **REQUIRED** — you must host a privacy policy page
-
-#### Screenshots
-- **6.7" iPhone** (iPhone 15 Pro Max): At least 3 screenshots, 1290×2796 px
-- **6.5" iPhone** (iPhone 11 Pro Max): At least 3 screenshots, 1242×2688 px
-- **Optional:** 5.5" iPhone, iPad screenshots
-- You can generate these using a simulator even without a physical device
-
-#### App Review Information
-- **Contact info:** Your name, phone, email
-- **Demo account:** Create a test account the reviewer can log in with
-  - Email: `review@kinshift.app` (or similar)
-  - Password: A simple password
-  - Pre-populate with some sample data (shifts, a household)
-- **Notes:** "This app requires two users in a household to fully test notification features. A second test account is available: review2@kinshift.app"
-
-### Step 5: Build & Submit
+### 11.2 Build for iOS
 
 ```bash
-# Build iOS production binary
 eas build --profile production --platform ios
+```
 
-# Submit directly to App Store Connect
+- EAS will ask you to log in to your Apple Developer account
+- It asks **"Generate a new Apple Distribution certificate?"** → **Y**
+- It asks **"Generate a new Provisioning Profile?"** → **Y**
+- EAS handles all the certificates for you
+- Takes ~15 minutes
+
+### 11.3 Submit to App Store Connect
+
+```bash
 eas submit --platform ios
-# This uploads the build and makes it available in App Store Connect
 ```
 
-Then in App Store Connect:
-1. Go to your app → **iOS App** → select the build
-2. Fill in all the required metadata
-3. Click **Submit for Review**
+This uploads the build directly to App Store Connect.
 
-### Step 6: Apple Review
+### 11.4 Set up for TestFlight (beta testing)
 
-- First review typically takes **24-48 hours** (can be up to 7 days)
-- Common rejection reasons:
-  - Missing privacy policy
-  - Crashes during review
-  - Login issues (test account doesn't work)
-  - Subscription issues (IAP not properly configured)
-  - Incomplete features
-- If rejected, you can reply to the reviewer and resubmit
+1. Open https://appstoreconnect.apple.com → **KinShift** → **"TestFlight"** tab
+2. Your build should appear (status: "Processing" then "Ready to Submit")
+3. Click on the build → fill in:
+   - **What to Test:** "Test shift creation, household joining, notifications"
+   - **Test Information:** add your review account email/password
+4. Click **"Internal Testing"** → **"+"** to create a group
+5. Add testers by email — they'll get an invite to install via TestFlight app
 
-### Privacy Policy
+### 11.5 App Store listing (when ready to publish)
 
-You MUST have a privacy policy URL. Create a simple page that covers:
-- What data you collect (email, name, shift schedules)
-- Why you collect it (account creation, household features)
-- How it's stored (Firebase, encrypted in transit)
-- Third-party services (Firebase, RevenueCat, optionally AdMob, Sentry)
-- User rights (deletion, export)
-- Contact info (support@offeryn.co.uk)
+1. App Store Connect → **KinShift** → **"App Store"** tab
+2. Fill in:
+   - **Subtitle:** (max 30 chars) "Household Shift Sharing"
+   - **Description:** same as Google Play adapted
+   - **Keywords:** (max 100 chars) `shifts,schedule,household,family,calendar,roster,work`
+   - **Support URL:** your website or support page
+   - **Privacy Policy URL:** same as Google Play — **REQUIRED by Apple**
+3. **Screenshots:**
+   - **6.7" iPhone:** 1290×2796 px — at least 3 screenshots
+   - **6.5" iPhone:** 1242×2688 px — at least 3 screenshots
+   - You can take these from the iOS Simulator on a Mac, or use screenshot generator tools like https://screenshots.pro or https://mockuphone.com
+4. **App Review Information:**
+   - **Contact name:** Your name
+   - **Phone:** Your phone number
+   - **Email:** support@offeryn.co.uk
+   - **Demo account email:** `review@kinshift.app` (create this in your app first)
+   - **Demo account password:** a simple password
+   - **Review notes:** "This app requires two users in a household to test notification features. Login with the demo account which has sample data pre-populated."
+5. Click **"Submit for Review"**
 
-Host it on your website, a GitHub Pages site, or even a Google Doc (public link).
+### 11.6 In-App Purchases for iOS (if doing subscriptions on iOS)
+
+1. App Store Connect → **KinShift** → **"In-App Purchases"** (left sidebar under Features)
+2. Click **"+"** → **"Auto-Renewable Subscription"**
+3. **Subscription Group:** Create a group called **"KinShift Plans"**
+4. Create 4 products matching the Google Play ones:
+
+| Reference Name | Product ID | Price | Duration |
+|---|---|---|---|
+| Standard Monthly | `kinshift_standard_monthly` | £2.99 | 1 Month |
+| Standard Annual | `kinshift_standard_annual` | £29.99 | 1 Year |
+| Premium Monthly | `kinshift_premium_monthly` | £4.99 | 1 Month |
+| Premium Annual | `kinshift_premium_annual` | £49.99 | 1 Year |
+
+5. For each product, add:
+   - **Display Name** and **Description** (shown to user during purchase)
+   - **Review Screenshot** (a screenshot of the subscription screen in your app)
+6. Click **"Submit for Review"** on each product
+
+Then in RevenueCat:
+1. Go to https://app.revenuecat.com → **Project Settings** → **Apps** → **"+ New"**
+2. Select **"App Store"**
+3. **Bundle ID:** `com.kinshift.app`
+4. **App-Specific Shared Secret:**
+   - In App Store Connect → your app → **In-App Purchases** → **"Manage"** (top right) → click **"App-Specific Shared Secret"** → **"Generate"**
+   - Copy and paste into RevenueCat
+5. Import the iOS products and attach them to the same entitlements and offerings
 
 ---
 
-## 8. Firebase Cloud Functions Deployment
+## STEP 12 — Google AdMob (Ads)
 
-The Cloud Functions handle secure server-side operations (join codes, webhooks, push, cleanup).
+> **Do this LATER** after you have users. Ads are currently disabled in the code.
 
-```bash
-# 1. Install Firebase CLI
-npm install -g firebase-tools
+### 12.1 Create an AdMob account
 
-# 2. Log in
-firebase login
+1. Open https://admob.google.com
+2. Sign in with your Google account
+3. Accept the terms of service
+4. **Payment info:** Set up a payment profile to receive ad revenue
 
-# 3. Ensure you're targeting the right project
-firebase use linkshift-c2725
+### 12.2 Register your app
 
-# 4. Install function dependencies
-cd functions
-npm install
-cd ..
+1. Click **"Apps"** in the left sidebar → **"ADD APP"**
+2. **"Is the app listed on a supported app store?"**
+   - If already published: Yes → search for KinShift
+   - If not yet published: No → enter manually
+3. **Platform:** Android
+4. **App name:** KinShift
+5. Click **"Add"**
+6. **Copy the App ID** shown (format: `ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY`)
+7. Repeat for iOS if applicable
 
-# 5. Deploy functions
-firebase deploy --only functions
+### 12.3 Create ad units
 
-# 6. Deploy Firestore rules & indexes
-firebase deploy --only firestore:rules,firestore:indexes
+1. Click your app → **"Ad units"** → **"ADD AD UNIT"**
+2. Select **"Banner"**
+3. **Ad unit name:** KinShift Banner Portrait
+4. Click **"Create ad unit"**
+5. **Copy the Ad unit ID** (format: `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY`)
+
+### 12.4 Set environment variables
+
+Add to `.env.local`:
+```
+ADMOB_APP_ID_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
+ADMOB_APP_ID_IOS=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
+ADMOB_BANNER_PORTRAIT_ID=ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY
 ```
 
-### Verify deployment
-
+And as EAS secrets:
 ```bash
-firebase functions:list
-# Should show:
-# joinHouseholdByCode
-# lookupInvitationByCode
-# revenueCatWebhook
-# sendPushNotification
-# scheduledCleanup
+eas secret:create --name ADMOB_APP_ID_ANDROID --value "ca-app-pub-xxx~yyy"
+eas secret:create --name ADMOB_APP_ID_IOS --value "ca-app-pub-xxx~yyy"
+eas secret:create --name ADMOB_BANNER_PORTRAIT_ID --value "ca-app-pub-xxx/yyy"
 ```
+
+### 12.5 Enable the AdMob plugin
+
+In `app.config.js`, uncomment the AdMob plugin block (lines ~74-80) and rebuild.
 
 ---
 
-## 9. iOS vs Android — Differences
+## STEP 13 — Sentry (Crash Monitoring)
 
-### Will the app look/work different on iOS?
+> **Optional for v1 launch.** Nice to have for catching crashes in production.
 
-**Short answer:** 95% identical. React Native renders native components on each platform, so it automatically adapts.
+### 13.1 Create a Sentry account
 
-### What's the same (no changes needed):
-- All business logic, services, Firestore queries
-- Navigation structure and screens
-- Push notifications (Expo handles both platforms)
-- Firebase authentication, Firestore, storage
+1. Open https://sentry.io/signup/
+2. Sign up (free tier available — 5K events/month)
+3. Create an organization: **Offeryn**
+
+### 13.2 Create a project
+
+1. Click **"Create Project"**
+2. Platform: **React Native**
+3. Project name: **kinshift**
+4. Click **"Create Project"**
+
+### 13.3 Get your DSN
+
+1. Left sidebar: **Settings** → **Projects** → **kinshift** → **Client Keys (DSN)**
+2. Copy the DSN URL (format: `https://xxxxx@oXXXXXX.ingest.sentry.io/XXXXXXX`)
+
+### 13.4 Get an auth token (for source maps)
+
+1. Left sidebar: **Settings** → **Auth Tokens**
+2. Click **"Create New Token"**
+3. Scopes: `project:releases`, `org:read`
+4. Click **"Create Token"** and copy it
+
+### 13.5 Set environment variables
+
+Add to `.env.local`:
+```
+SENTRY_DSN=https://xxxxx@oXXXXXX.ingest.sentry.io/XXXXXXX
+```
+
+EAS secrets:
+```bash
+eas secret:create --name SENTRY_DSN --value "https://xxxxx@o..."
+eas secret:create --name SENTRY_AUTH_TOKEN --value "your-auth-token"
+```
+
+### 13.6 Enable the Sentry plugin
+
+In `app.config.js`, uncomment the Sentry plugin block (lines ~82-87) and rebuild.
+
+---
+
+## iOS vs Android — Differences
+
+**Will the app look/work different on iOS?**
+
+No code changes needed. React Native automatically uses native components per platform.
+
+### What's the same (everything):
+- All screens, navigation, logic
+- Firebase, Firestore, push notifications
 - RevenueCat subscriptions
-- Calendar, shift management, household features
 - Offline support
+- Calendar, shifts, households, day notes
 
-### What's automatically different (React Native handles it):
+### What automatically adapts:
+
 | Feature | Android | iOS |
 |---------|---------|-----|
-| **Navigation animations** | Slide from right + fade | iOS-native push animation |
-| **Back button** | Hardware back button | Swipe-from-left gesture |
-| **Keyboard** | Adjusts differently | `KeyboardAvoidingView` already configured per-platform |
-| **Status bar** | Material style | iOS style |
-| **Date/time pickers** | Android spinner/calendar | iOS wheel picker |
-| **Alerts** | Material Design dialog | iOS-native alert |
-| **Font rendering** | Roboto default | San Francisco default |
-| **Safe area insets** | Handled by `react-native-safe-area-context` | Notch/Dynamic Island handled |
-| **Notification channels** | Required (Android 8+) — already configured | Not applicable |
-| **Haptic feedback** | Available | Available |
+| Back navigation | Hardware back button | Swipe-from-left gesture |
+| Keyboard | `height` mode | `padding` mode (already configured) |
+| Alerts | Material dialog | iOS-native alert |
+| Fonts | Roboto | San Francisco |
+| Date pickers | Android spinner | iOS wheel |
+| Notifications | Notification shade + channels | Notification Centre + banners |
+| Status bar | Material style | iOS style |
+| Safe areas | Handled | Notch/Dynamic Island handled |
 
-### What might need attention:
-| Area | Detail | Risk |
-|------|--------|------|
-| **Keyboard avoidance** | Already uses `KeyboardAvoidingView` with `Platform.OS === 'ios' ? 'padding' : 'height'` | ✅ Already handled |
-| **Bottom spacing** | `bottomSpacing.ts` utility exists in the project | ✅ Already handled |
-| **Push notifications** | iOS requires explicit permission prompt (already coded) | ✅ Already handled |
-| **Background modes** | `UIBackgroundModes: ["remote-notification"]` already in infoPlist | ✅ Already handled |
-| **Notification channels** | Android-only, code already platform-gated | ✅ Already handled |
-| **Google Services file** | `GoogleService-Info.plist` already in project root | ✅ Already present |
-| **DateTimePicker** | Uses `@react-native-community/datetimepicker` — renders natively per platform | ✅ Cross-platform |
-| **Styling edge cases** | Some Android-specific shadow rendering vs iOS `shadow*` props | Low risk |
-
-### Testing without physical iOS device
-
-You can test in the iOS Simulator:
-```bash
-# Requires a Mac with Xcode installed
-eas build --profile preview --platform ios --local
-# Or run locally:
-npx expo run:ios
-```
-
-If you don't have a Mac, you can:
-1. Build via EAS cloud (no Mac needed): `eas build --profile preview --platform ios`
-2. Install on a physical iOS device via TestFlight
-3. Ask a friend/tester with an iPhone to test via TestFlight
-
-### TestFlight (iOS Beta Testing)
-
-```bash
-# Build and submit to TestFlight
-eas build --profile production --platform ios
-eas submit --platform ios
-
-# In App Store Connect:
-# Go to TestFlight tab → Add internal/external testers → Send invite
-```
+### Risk areas (low):
+- Some shadow styles render slightly differently (Android uses `elevation`, iOS uses `shadow*` props)
+- KeyboardAvoidingView — already platform-configured in your code
+- The app has not been tested on physical iOS — use TestFlight to get a friend to test before App Store submission
 
 ---
 
-## 10. Pre-Release Checklist
+## Pre-Release Checklist
 
-### Environment & Config
-- [ ] `.env.local` created with all required values
-- [ ] EAS secrets set for all env vars (`eas secret:list` to verify)
-- [ ] `EAS_PROJECT_ID` set (push notifications depend on this)
-- [ ] Firebase project (`linkshift-c2725`) has Blaze plan active (required for Cloud Functions)
+### Environment (do first)
+- [ ] `.env.local` created with all values filled in (see template below)
+- [ ] EAS secrets set: `eas secret:list` shows all required vars
+- [ ] `EAS_PROJECT_ID` set — push notifications depend on this
 
 ### Firebase
+- [ ] Blaze plan active on linkshift-c2725
 - [ ] Firestore rules deployed: `firebase deploy --only firestore:rules`
 - [ ] Firestore indexes deployed: `firebase deploy --only firestore:indexes`
 - [ ] Cloud Functions deployed: `firebase deploy --only functions`
-- [ ] Firebase Authentication → Sign-in providers → Email/Password enabled
+- [ ] Email/Password auth enabled
 
 ### RevenueCat
-- [ ] Account created, project configured
-- [ ] Google Play service account connected
-- [ ] App Store app connected (if doing iOS)
-- [ ] Subscription products created in Google Play Console
-- [ ] Subscription products created in App Store Connect (if doing iOS)
-- [ ] Products imported into RevenueCat
-- [ ] Entitlements configured (`standard`, `premium`)
-- [ ] Offering created with 4 packages
-- [ ] Webhook configured pointing to Cloud Function
-- [ ] `REVENUECAT_API_KEY` set in .env.local and EAS secrets
+- [ ] Account created, project "KinShift" configured
+- [ ] Android app added with package `com.kinshift.app`
+- [ ] Service account JSON uploaded (from Google Cloud)
+- [ ] 4 subscription products imported and attached to entitlements
+- [ ] Offering "default" has all 4 packages
+- [ ] Webhook pointing to Cloud Function URL
+- [ ] `REVENUECAT_API_KEY` in .env.local and EAS secrets
 
-### Android
-- [ ] Release keystore generated (or let EAS manage it)
-- [ ] Release signing configured in build.gradle
-- [ ] Google Play Developer account ($25 paid, identity verified)
-- [ ] App listing complete (screenshots, description, icons)
-- [ ] Content rating questionnaire completed
-- [ ] Data safety form completed
+### Google Play
+- [ ] Developer account ($25 paid, identity verified)
+- [ ] App created in Play Console
+- [ ] 4 subscription products created and activated
+- [ ] Store listing complete (screenshots, descriptions, icon, feature graphic)
+- [ ] Content rating completed
+- [ ] Data safety completed
+- [ ] Privacy policy URL set
+- [ ] Target audience set to 18+
 - [ ] Production AAB uploaded
-- [ ] Subscription products active in Play Console
+- [ ] Release submitted for review
 
 ### iOS (when ready)
-- [ ] Apple Developer account ($99/year paid)
-- [ ] D-U-N-S number obtained (if enrolling as company)
+- [ ] Apple Developer account ($99/year paid, D-U-N-S obtained)
 - [ ] App created in App Store Connect
-- [ ] Screenshots prepared (6.7", 6.5" at minimum)
-- [ ] Privacy policy URL live
-- [ ] Test/review account created and populated with sample data
-- [ ] In-app purchase products submitted for review
-- [ ] IPA uploaded via `eas submit`
-- [ ] Submitted for App Review
+- [ ] iOS build completed via `eas build`
+- [ ] Build submitted via `eas submit`
+- [ ] TestFlight tested by at least one person
+- [ ] Screenshots prepared for 6.7" and 6.5" iPhones
+- [ ] In-app purchases created and under review
+- [ ] App submitted for App Review
 
 ### Testing
-- [ ] Push notifications tested between two devices
-- [ ] Shift reminders fire at correct time
-- [ ] Deep links work from notifications
-- [ ] Offline mode works (create shift while offline, comes back when online)
-- [ ] Subscription purchase flow tested (use sandbox/test accounts)
-- [ ] All 483 unit tests passing: `npm test`
-- [ ] Lint clean: `npm run lint`
+- [ ] Push notifications tested: member creates shift → other member's phone pings
+- [ ] Shift reminders fire before shift start time
+- [ ] Offline: create shift with WiFi off → shift syncs when WiFi returns
+- [ ] Subscription: test purchase flow using Google Play test track
+- [ ] All 483 tests pass: `npm test`
 
-### Post-Launch
-- [ ] Monitor Firebase Console for errors
-- [ ] Monitor RevenueCat dashboard for purchases
-- [ ] Set up Sentry (optional) for crash reporting
-- [ ] Enable AdMob after user base grows (uncomment plugin in app.config.js)
-- [ ] Monitor Google Play Console / App Store Connect for reviews
+---
+
+## Your .env.local Template
+
+Copy this, fill in your actual values:
+
+```env
+# === Expo / EAS ===
+EXPO_OWNER=kinshift
+EAS_PROJECT_ID=                        # ← from Step 1.4 (eas init)
+
+# === RevenueCat ===
+REVENUECAT_API_KEY=                    # ← from Step 3.4 (starts with goog_)
+
+# === Sentry (optional for v1) ===
+# SENTRY_DSN=                          # ← from Step 13.3
+# SENTRY_DEBUG=false
+
+# === AdMob (disabled for v1) ===
+# ADMOB_APP_ID_ANDROID=               # ← from Step 12.2
+# ADMOB_APP_ID_IOS=                   # ← from Step 12.2
+# ADMOB_BANNER_PORTRAIT_ID=           # ← from Step 12.3
+# ADMOB_BANNER_LANDSCAPE_ID=          # ← from Step 12.3
+
+# === Contact ===
+SUPPORT_EMAIL=support@offeryn.co.uk
+```
+
+Once filled in, also register them as EAS secrets:
+
+```bash
+eas secret:create --name EAS_PROJECT_ID --value "your-value"
+eas secret:create --name REVENUECAT_API_KEY --value "your-value"
+eas secret:create --name SUPPORT_EMAIL --value "support@offeryn.co.uk"
+```
