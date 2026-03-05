@@ -24,6 +24,7 @@ import { db } from '@/config/firebase.config';
 import { Notification, Shift } from '@/types';
 import {
   shiftCreatedTemplate,
+  shiftUpdatedTemplate,
   shiftDeletedTemplate,
   invitationTemplate,
   subscriptionDowngradeTemplate,
@@ -478,6 +479,46 @@ const notifyShiftCreated = async (shift: any, household: any, creatorName?: stri
 };
 
 /**
+ * Notify household members about shift update
+ */
+const notifyShiftUpdated = async (
+  shift: any,
+  household: any,
+  updaterName?: string
+): Promise<void> => {
+  try {
+    const payload = shiftUpdatedTemplate(
+      updaterName || 'Team Member',
+      shift.shiftType || 'shift',
+      new Date(shift.startTime).toLocaleDateString(),
+      household.name,
+      shift.id
+    );
+
+    // Notify each household member (except updater)
+    for (const memberId of household.members || []) {
+      if (memberId !== shift.ownerId) {
+        // Create Firestore notification
+        const notification = templateToNotification(
+          memberId,
+          household.id,
+          payload,
+          'shift_updated'
+        );
+        const notificationId = await createNotification(notification);
+
+        // Send push notification
+        if (notificationId) {
+          await sendPushNotificationToUser(memberId, payload);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error notifying shift updated:', error);
+  }
+};
+
+/**
  * Notify household members about multiple shifts creation
  */
 const notifyMultipleShiftsCreated = async (
@@ -869,9 +910,11 @@ export const notificationService = {
   onNotificationReceived,
   sendNotification,
   notifyShiftCreated,
+  notifyShiftUpdated,
   notifyMultipleShiftsCreated,
   notifyShiftDeleted,
   notifyDayNoteAdded,
   scheduleShiftReminder,
   cancelShiftReminder,
+  sendPushToUser: sendPushNotificationToUser,
 };

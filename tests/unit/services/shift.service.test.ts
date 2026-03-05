@@ -55,12 +55,15 @@ jest.mock('@/services/notification.service', () => ({
     notifyShiftCreated: jest.fn(),
     notifyShiftUpdated: jest.fn(),
     notifyShiftDeleted: jest.fn(),
+    scheduleShiftReminder: jest.fn(),
+    sendPushToUser: jest.fn(),
   },
 }));
 
 jest.mock('@/services/auth.service', () => ({
   authService: {
     getCurrentUser: jest.fn(),
+    getUserData: jest.fn().mockResolvedValue({ name: 'Test User' }),
   },
 }));
 

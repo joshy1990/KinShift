@@ -339,6 +339,23 @@ export class ShiftService extends BaseService {
 
       const shiftRef = doc(db, this.collection, shiftId);
       await updateDoc(shiftRef, cleanUpdates);
+
+      // Send notification to household members about the update
+      try {
+        const updatedShift = await this.getShiftById(shiftId);
+        if (updatedShift?.householdId) {
+          const household = await householdService.getHousehold(updatedShift.householdId);
+          const updater = await authService.getUserData(userId);
+          await notificationService.notifyShiftUpdated(
+            updatedShift,
+            household,
+            updater?.name || 'Team Member'
+          );
+        }
+      } catch (notificationError) {
+        // Don't fail the update if notification fails
+        console.warn('[ShiftService] Update notification failed but shift updated successfully:', notificationError);
+      }
     } catch (error) {
       if (error instanceof Error && error.message.includes('Unauthorized')) {
         throw error;

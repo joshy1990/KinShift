@@ -411,11 +411,22 @@ class DayNoteService {
         });
       }
 
-      // Create notifications for each recipient
+      // Create notifications for each recipient + send push
       if (recipientUserIds.size > 0) {
         const batch = writeBatch(db);
         const formattedDate = format(noteDate, 'MMMM d');
         const recipientList = Array.from(recipientUserIds);
+
+        const pushPayload = {
+          title: 'New Day Note',
+          body: `${note.authorName} has left a note on ${formattedDate}`,
+          data: {
+            type: 'day_note_added',
+            noteId: note.id,
+            date: note.date,
+            householdId: note.householdId,
+          },
+        };
 
         recipientList.forEach((userId) => {
           const notificationRef = collection(db, COLLECTIONS.NOTIFICATIONS).doc();
@@ -424,8 +435,8 @@ class DayNoteService {
             userId,
             householdId: note.householdId,
             type: 'day_note_added',
-            title: 'New Day Note',
-            body: `${note.authorName} has left a note on ${formattedDate}`,
+            title: pushPayload.title,
+            body: pushPayload.body,
             data: {
               type: 'day_note_added',
               noteId: note.id,
@@ -445,6 +456,15 @@ class DayNoteService {
         });
 
         await batch.commit();
+
+        // Send push notifications so devices actually ping
+        for (const userId of recipientList) {
+          try {
+            await notificationService.sendPushToUser(userId, pushPayload);
+          } catch (pushError) {
+            console.warn('Failed to send push for smart notification:', pushError);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to send smart notifications:', error);

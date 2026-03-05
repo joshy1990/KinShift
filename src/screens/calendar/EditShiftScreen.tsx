@@ -21,6 +21,7 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CalendarStackParamList, Shift, ShiftType} from '@/types';
 import {format} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
+import {notificationService} from '@/services/notification.service';
 import {useAuth} from '@/contexts/AuthContext';
 import {showSuccess, showError} from '@/utils/alert';
 import {ShiftTypePicker} from '@/components/ShiftTypePicker';
@@ -216,6 +217,21 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
       }
 
       await shiftService.updateShift(shiftId, updates, user.id);
+
+      // Re-schedule shift reminder if start time changed
+      if (updates.startTime) {
+        try {
+          await notificationService.scheduleShiftReminder({
+            id: shiftId,
+            title: updates.title || title.trim() || 'Shift',
+            shiftType: updates.shiftType || shiftType,
+            startTime: shiftType === 'split' ? split1StartTime : updates.startTime,
+          }, user.id);
+        } catch (reminderError) {
+          console.warn('Failed to re-schedule shift reminder:', reminderError);
+        }
+      }
+
       showSuccess('Shift updated successfully!');
       setSaving(false);
       setSaved(true);
