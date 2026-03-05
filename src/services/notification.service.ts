@@ -447,10 +447,11 @@ const sendPushNotificationToUser = async (
  */
 const notifyShiftCreated = async (shift: any, household: any, creatorName?: string): Promise<void> => {
   try {
+    const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
     const payload = shiftCreatedTemplate(
       creatorName || 'Team Member',
       shift.shiftType || 'shift',
-      new Date(shift.startTime).toLocaleDateString(),
+      st.toLocaleDateString(),
       household.name,
       shift.id
     );
@@ -463,7 +464,8 @@ const notifyShiftCreated = async (shift: any, household: any, creatorName?: stri
           memberId,
           household.id,
           payload,
-          'shift_created'
+          'shift_created',
+          shift.ownerId
         );
         const notificationId = await createNotification(notification);
 
@@ -487,10 +489,11 @@ const notifyShiftUpdated = async (
   updaterName?: string
 ): Promise<void> => {
   try {
+    const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
     const payload = shiftUpdatedTemplate(
       updaterName || 'Team Member',
       shift.shiftType || 'shift',
-      new Date(shift.startTime).toLocaleDateString(),
+      st.toLocaleDateString(),
       household.name,
       shift.id
     );
@@ -503,7 +506,8 @@ const notifyShiftUpdated = async (
           memberId,
           household.id,
           payload,
-          'shift_updated'
+          'shift_updated',
+          shift.ownerId
         );
         const notificationId = await createNotification(notification);
 
@@ -582,7 +586,8 @@ const notifyShiftDeleted = async (
 
     const shiftType = shift.shiftType || 'custom';
     const shiftTypeLabel = `${shiftType.charAt(0).toUpperCase()}${shiftType.slice(1)}`;
-    const dateString = new Date(shift.startTime).toLocaleDateString();
+    const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
+    const dateString = st.toLocaleDateString();
     const payload = shiftDeletedTemplate(
       deleterName,
       shiftTypeLabel,

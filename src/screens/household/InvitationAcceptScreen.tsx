@@ -76,41 +76,44 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
       
       // Refresh household list and set newly joined household as current
       await refreshHouseholds();
-      const joinedHousehold = households.find(h => h.id === invitation.householdId);
-      if (joinedHousehold) {
-        setCurrentHousehold(joinedHousehold);
-      }
-
-      // Optionally notify invitee (or inviter) - using available helper signature
-      try {
-        await notificationService.notifyInvitationAccepted(
-          user.id,
-          invitation.householdId,
-          invitation.householdName,
-          0
-        );
-      } catch (notificationError) {
-        console.warn('Failed to send acceptance notification:', notificationError);
-      }
-      
-      Alert.alert(
-        'Welcome!',
-        `You've successfully joined "${invitation.householdName}". You can now coordinate shifts with your family.`,
-        [
-          {
-            text: 'View Household',
-            onPress: () => {
-              navigation.replace('HouseholdDetail', {householdId: invitation.householdId});
-            }
-          }
-        ]
-      );
-      
+      // Re-read households after refresh to avoid stale closure
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to accept invitation');
+      return;
     } finally {
       setAccepting(false);
     }
+
+    // After successful acceptance, navigate (households is now refreshed)
+    const joinedHousehold = households.find(h => h.id === invitation.householdId);
+    if (joinedHousehold) {
+      setCurrentHousehold(joinedHousehold);
+    }
+
+    // Optionally notify
+    try {
+      await notificationService.notifyInvitationAccepted(
+        user.id,
+        invitation.householdId,
+        invitation.householdName,
+        0
+      );
+    } catch (notificationError) {
+      console.warn('Failed to send acceptance notification:', notificationError);
+    }
+    
+    Alert.alert(
+      'Welcome!',
+      `You've successfully joined "${invitation.householdName}". You can now coordinate shifts with your family.`,
+      [
+        {
+          text: 'View Household',
+          onPress: () => {
+            navigation.replace('HouseholdDetail', {householdId: invitation.householdId});
+          }
+        }
+      ]
+    );
   };
 
   const declineInvitation = async () => {

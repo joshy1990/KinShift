@@ -236,9 +236,11 @@ export const templateToNotification = (
   userId: string,
   householdId: string,
   payload: NotificationPayload,
-  notificationType: Notification['type']
+  notificationType: Notification['type'],
+  senderId?: string
 ): Omit<Notification, 'id'> => ({
   userId,
+  senderId: senderId || undefined,
   householdId,
   type: notificationType,
   title: payload.title,

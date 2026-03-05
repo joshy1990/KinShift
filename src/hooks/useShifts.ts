@@ -215,7 +215,8 @@ export const useShifts = (options: UseShiftsOptions): UseShiftsResult => {
   const getShiftsForDate = useCallback((date: Date): Shift[] => {
     const dateStr = date.toISOString().split('T')[0];
     return shifts.filter(shift => {
-      const shiftDate = shift.startTime.toISOString().split('T')[0];
+      const st = (shift.startTime as any)?.toDate ? (shift.startTime as any).toDate() : new Date(shift.startTime);
+      const shiftDate = st.toISOString().split('T')[0];
       return shiftDate === dateStr;
     });
   }, [shifts]);

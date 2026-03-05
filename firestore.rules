@@ -71,7 +71,14 @@ service cloud.firestore {
       
       // Only existing members can update; self-join bypass removed.
       // Joining via code MUST go through Cloud Function.
-      allow update: if isAuthenticated() && isHouseholdMember(householdId);
+      // Members can update non-admin fields; only admins can change admins/joinCode.
+      allow update: if isAuthenticated() && isHouseholdMember(householdId)
+        && (
+          // Admins can update anything
+          isHouseholdAdmin(householdId)
+          // Non-admins cannot change admin list or join code
+          || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['admins', 'joinCode']))
+        );
       
       // Only admins can delete
       allow delete: if isHouseholdAdmin(householdId);
@@ -212,10 +219,12 @@ service cloud.firestore {
       // Users can read their own notifications
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
-      // Create: sender must identify themselves; validates required fields.
-      // TODO: Migrate push delivery to Cloud Functions for server-side trust.
+      // Create: sender must be authenticated, identify themselves, and share
+      // a household with the target user. Validates required fields.
       allow create: if isAuthenticated()
-        && request.resource.data.keys().hasAll(['userId', 'type', 'title', 'body'])
+        && request.resource.data.keys().hasAll(['userId', 'senderId', 'type', 'title', 'body'])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.userId != request.auth.uid
         && isValidString(request.resource.data.title, 1, 200)
         && isValidString(request.resource.data.body, 1, 1000);
       

@@ -23,7 +23,7 @@ Do these sections **in order**. Each one tells you exactly where to click.
 9. [STEP 9 — Google Play Store Listing](#step-9--google-play-store-listing)
 10. [STEP 10 — Apple Developer Account (iOS)](#step-10--apple-developer-account-ios)
 11. [STEP 11 — App Store Connect & TestFlight (iOS)](#step-11--app-store-connect--testflight)
-12. [STEP 12 — Google AdMob (ads — do later)](#step-12--google-admob-ads)
+12. [STEP 12 — Google AdMob (ads)](#step-12--google-admob-ads)
 13. [STEP 13 — Sentry (crash monitoring — optional)](#step-13--sentry-crash-monitoring)
 14. [iOS vs Android — Differences](#ios-vs-android--differences)
 15. [Pre-Release Checklist](#pre-release-checklist)
@@ -614,7 +614,7 @@ Still on the Main store listing page:
    - ✅ Other user IDs (Firebase UID) — Purpose: App functionality — Required: Yes
 5. **Is data encrypted in transit?** → Yes (Firebase uses HTTPS)
 6. **Can users request data deletion?** → Yes (via support@offeryn.co.uk)
-7. **Data shared with third parties?** → No (unless you enable AdMob later)
+7. **Data shared with third parties?** → Yes (AdMob serves ads to free-tier users)
 8. Click **"Submit"**
 
 ### 9.5 Target audience
@@ -765,7 +765,7 @@ Then in RevenueCat:
 
 ## STEP 12 — Google AdMob (Ads)
 
-> **Do this LATER** after you have users. Ads are currently disabled in the code.
+> **Ads are enabled.** The AdMob plugin is active in `app.config.js`. You need real Ad Unit IDs before your production build.
 
 ### 12.1 Create an AdMob account
 
@@ -810,9 +810,13 @@ eas secret:create --name ADMOB_APP_ID_IOS --value "ca-app-pub-xxx~yyy"
 eas secret:create --name ADMOB_BANNER_PORTRAIT_ID --value "ca-app-pub-xxx/yyy"
 ```
 
-### 12.5 Enable the AdMob plugin
+### 12.5 Rebuild
 
-In `app.config.js`, uncomment the AdMob plugin block (lines ~74-80) and rebuild.
+The AdMob plugin is already enabled in `app.config.js`. After setting the env vars, rebuild:
+
+```bash
+eas build --profile production --platform android
+```
 
 ---
 
@@ -967,11 +971,11 @@ REVENUECAT_API_KEY=                    # ← from Step 3.4 (starts with goog_)
 # SENTRY_DSN=                          # ← from Step 13.3
 # SENTRY_DEBUG=false
 
-# === AdMob (disabled for v1) ===
-# ADMOB_APP_ID_ANDROID=               # ← from Step 12.2
-# ADMOB_APP_ID_IOS=                   # ← from Step 12.2
-# ADMOB_BANNER_PORTRAIT_ID=           # ← from Step 12.3
-# ADMOB_BANNER_LANDSCAPE_ID=          # ← from Step 12.3
+# === AdMob ===
+ADMOB_APP_ID_ANDROID=                  # ← from Step 12.2
+ADMOB_APP_ID_IOS=                      # ← from Step 12.2
+ADMOB_BANNER_PORTRAIT_ID=              # ← from Step 12.3
+ADMOB_BANNER_LANDSCAPE_ID=             # ← from Step 12.3
 
 # === Contact ===
 SUPPORT_EMAIL=support@offeryn.co.uk

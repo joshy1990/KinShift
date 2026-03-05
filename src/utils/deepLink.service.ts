@@ -35,12 +35,21 @@ class DeepLinkService {
   /**
    * Handle deep link URLs
    */
+  private deepLinkRetryCount = 0;
+  private static MAX_DEEP_LINK_RETRIES = 50; // 5 seconds max
+
   private handleDeepLink(url: string) {
     if (!this.navigationRef?.isReady()) {
-      // Wait for navigation to be ready
+      if (this.deepLinkRetryCount >= DeepLinkService.MAX_DEEP_LINK_RETRIES) {
+        console.error('Deep link handling aborted: navigation never became ready');
+        this.deepLinkRetryCount = 0;
+        return;
+      }
+      this.deepLinkRetryCount++;
       setTimeout(() => this.handleDeepLink(url), 100);
       return;
     }
+    this.deepLinkRetryCount = 0;
 
     try {
       const parsedUrl = new URL(url);

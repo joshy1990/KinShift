@@ -3,6 +3,12 @@ import {Shift, ShiftType} from '@/types';
 
 // Helper functions extracted from TwoWeekViewScreen for testing
 
+/** Safely convert a Firestore Timestamp or Date-like value to a JS Date */
+const toSafeDate = (value: any): Date => {
+  if (value?.toDate) return value.toDate();
+  return new Date(value);
+};
+
 export const getShiftsForUserAndDate = (
   shifts: Shift[],
   userId: string,
@@ -10,7 +16,7 @@ export const getShiftsForUserAndDate = (
 ): Shift[] => {
   return shifts.filter(shift => 
     shift.ownerId === userId &&
-    isSameDay(new Date(shift.startTime), date)
+    isSameDay(toSafeDate(shift.startTime), date)
   );
 };
 
@@ -23,7 +29,7 @@ export const analyzeCoverage = (
   overlap: boolean;
 } => {
   const shiftsOnDate = shifts.filter(shift =>
-    isSameDay(new Date(shift.startTime), date)
+    isSameDay(toSafeDate(shift.startTime), date)
   );
   
   const uniqueUsers = new Set(shiftsOnDate.map(s => s.ownerId));

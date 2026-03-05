@@ -216,17 +216,32 @@ describe('BaseService', () => {
 
     it('strips script tags', () => {
       const input = 'Hello<script>alert("xss")</script>World';
-      expect(service.testSanitizeString(input)).toBe('HelloWorld');
+      expect(service.testSanitizeString(input)).toBe('Helloalert("xss")World');
     });
 
     it('strips nested script tags', () => {
       const input = '<script type="text/javascript">bad()</script>';
-      expect(service.testSanitizeString(input)).toBe('');
+      expect(service.testSanitizeString(input)).toBe('bad()');
     });
 
-    it('preserves safe HTML', () => {
+    it('strips all HTML tags including safe ones', () => {
       const input = '<b>bold</b> text';
-      expect(service.testSanitizeString(input)).toBe('<b>bold</b> text');
+      expect(service.testSanitizeString(input)).toBe('bold text');
+    });
+
+    it('strips dangerous HTML like img onerror', () => {
+      const input = '<img onerror="alert(1)" src="x">safe text';
+      expect(service.testSanitizeString(input)).toBe('safe text');
+    });
+
+    it('strips iframe tags', () => {
+      const input = '<iframe src="evil.com"></iframe>content';
+      expect(service.testSanitizeString(input)).toBe('content');
+    });
+
+    it('returns empty string for null/undefined input', () => {
+      expect(service.testSanitizeString(null as any)).toBe('');
+      expect(service.testSanitizeString(undefined as any)).toBe('');
     });
   });
 });

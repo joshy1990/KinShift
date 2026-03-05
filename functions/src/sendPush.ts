@@ -65,6 +65,22 @@ export const sendPushNotification = functions.https.onCall(
     }
     rateLimitMap.set(callerId, [...recentSends, now]);
 
+    // Verify caller and target share at least one household
+    const callerHouseholds = await db
+      .collection("households")
+      .where("members", "array-contains", callerId)
+      .get();
+    const callerHouseholdMembers = new Set<string>();
+    callerHouseholds.docs.forEach((d) => {
+      (d.data().members ?? []).forEach((m: string) => callerHouseholdMembers.add(m));
+    });
+    if (!callerHouseholdMembers.has(targetUserId)) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "You can only send notifications to household members."
+      );
+    }
+
     // Look up target user's push tokens (Admin SDK — never sent to client)
     const userDoc = await db.collection("users").doc(targetUserId).get();
     if (!userDoc.exists) {

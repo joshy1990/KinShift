@@ -67,8 +67,14 @@ describe('Firestore Rules — Security Patterns', () => {
     });
 
     it('does NOT have the old self-join bypass', () => {
-      // The old rule allowed anyone to add themselves via diff().affectedKeys()
-      expect(rules).not.toContain('affectedKeys');
+      // The old rule allowed anyone to add themselves via ONLY diff().affectedKeys()
+      // Now affectedKeys is used to RESTRICT non-admins from changing 'admins'/'joinCode'
+      // Verify the self-join pattern is gone: diff().affectedKeys().hasOnly(['members'])
+      expect(rules).not.toMatch(/affectedKeys\(\)\.hasOnly\(\['members'\]\)/);
+    });
+
+    it('restricts non-admin updates to exclude admin fields', () => {
+      expect(rules).toMatch(/affectedKeys\(\)\.hasAny\(\['admins', 'joinCode'\]\)/);
     });
 
     it('requires creator to be in members and admins on create', () => {
@@ -128,9 +134,15 @@ describe('Firestore Rules — Security Patterns', () => {
 
   // ── notifications ─────────────────────────────────────────────────
   describe('notifications collection', () => {
-    it('validates required fields on create', () => {
+    it('validates required fields on create including senderId', () => {
       expect(rules).toMatch(
-        /match \/notifications\/\{notificationId\}[\s\S]*?allow create:[\s\S]*?hasAll\(\['userId', 'type', 'title', 'body'\]\)/
+        /match \/notifications\/\{notificationId\}[\s\S]*?allow create:[\s\S]*?hasAll\(\['userId', 'senderId', 'type', 'title', 'body'\]\)/
+      );
+    });
+
+    it('requires senderId matches the caller', () => {
+      expect(rules).toMatch(
+        /request\.resource\.data\.senderId == request\.auth\.uid/
       );
     });
   });

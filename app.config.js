@@ -25,8 +25,9 @@ module.exports = {
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "KinShift uses notifications to inform you about shift updates, changes, and schedule conflicts in your households.",
-        "NSLocationWhenInUseUsageDescription": "Your location is not used by KinShift but is required by some system features.",
+
         "UIBackgroundModes": ["remote-notification"],
         "CFBundleAllowMixedLocalizations": true
       }
@@ -65,7 +66,7 @@ module.exports = {
           "sounds": []
         }
       ]
-      // AdMob plugin temporarily disabled - launching ad-free, will enable after user base grows
+      // AdMob plugin temporarily disabled for iOS build (native module not installed)
       // [
       //   "react-native-google-mobile-ads",
       //   {

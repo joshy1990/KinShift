@@ -135,9 +135,10 @@ export class BaseService {
   }
 
   /**
-   * Sanitizes user input to prevent XSS
+   * Sanitizes user input — strips all HTML tags to prevent XSS
    */
   protected sanitizeString(input: string): string {
-    return input.trim().replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    if (!input || typeof input !== 'string') return '';
+    return input.trim().replace(/<[^>]*>/g, '');
   }
 }

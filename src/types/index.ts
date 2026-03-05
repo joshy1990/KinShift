@@ -206,6 +206,7 @@ export interface DayMessage {
 export interface Notification {
   id: string;
   userId: string;
+  senderId?: string;
   householdId: string;
   type: 
     | 'shift_created' 

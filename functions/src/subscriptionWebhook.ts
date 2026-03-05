@@ -43,10 +43,11 @@ export const revenueCatWebhook = functions.https.onRequest(
     }
 
     // Validate webhook secret
+    // Fail-closed: reject if secret is not configured or doesn't match
     const expectedSecret = functions.config().revenuecat?.webhook_secret;
     const authHeader = req.headers.authorization;
-    if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-      console.warn("RevenueCat webhook: invalid authorization header");
+    if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+      console.warn("RevenueCat webhook: invalid or missing authorization");
       res.status(401).send("Unauthorized");
       return;
     }

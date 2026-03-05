@@ -151,7 +151,7 @@ export const ChangePasswordScreen: React.FC = () => {
                 editable={!loading}
               />
               <Text style={styles.helpText}>
-                Password must be at least 6 characters
+                Password must be at least 8 characters
               </Text>
             </View>
 
