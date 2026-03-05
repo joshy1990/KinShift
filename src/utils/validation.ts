@@ -12,12 +12,14 @@ export class ValidationError extends Error {
 
 export const validators = {
   /**
-   * Validate email address
+   * Validate email address (RFC 5322 simplified)
    */
   email: (email: string): boolean => {
     if (!email || typeof email !== 'string') return false;
     if (email.length > 254) return false;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Stricter regex: local part allows letters, digits, and ._%+-
+    // Domain requires at least one dot and 2+ char TLD
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email);
   },
 

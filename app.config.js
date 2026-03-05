@@ -86,7 +86,9 @@ module.exports = {
     "owner": process.env.EXPO_OWNER || "kinshift",
     "extra": {
       "eas": {
-        "projectId": process.env.EAS_PROJECT_ID || "519ab785-c013-4ecb-b983-2354ae498ec4"
+        // SECURITY: EAS project ID MUST come from environment variable.
+        // No hardcoded fallback — build will fail if EAS_PROJECT_ID is missing.
+        "projectId": process.env.EAS_PROJECT_ID
       },
       "supportEmail": process.env.SUPPORT_EMAIL || "support@offeryn.co.uk",
       "revenuecatApiKey": process.env.REVENUECAT_API_KEY,

@@ -488,7 +488,7 @@ class AuthService {
       case 'auth/invalid-email':
         return new Error('Invalid email address');
       case 'auth/weak-password':
-        return new Error('Password must be at least 6 characters');
+        return new Error('Password must be at least 8 characters');
       case 'auth/user-not-found':
         return new Error('No account found with this email');
       case 'auth/wrong-password':

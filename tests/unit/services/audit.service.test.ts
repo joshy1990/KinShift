@@ -106,29 +106,31 @@ describe('AuditService', () => {
 
   // ── getResourceAuditLogs ──────────────────────────────────────────
   describe('getResourceAuditLogs', () => {
-    it('queries by resourceType and resourceId', async () => {
+    it('queries by userId, resourceType and resourceId', async () => {
       mockGetDocs.mockResolvedValueOnce({ docs: [] });
 
-      await auditService.getResourceAuditLogs('shift', 'shift-42');
+      await auditService.getResourceAuditLogs('user-1', 'shift', 'shift-42');
 
+      expect(mockWhere).toHaveBeenCalledWith('userId', '==', 'user-1');
       expect(mockWhere).toHaveBeenCalledWith('resourceType', '==', 'shift');
       expect(mockWhere).toHaveBeenCalledWith('resourceId', '==', 'shift-42');
     });
 
     it('returns empty array on error', async () => {
       mockGetDocs.mockRejectedValueOnce(new Error('fail'));
-      const logs = await auditService.getResourceAuditLogs('shift', 's1');
+      const logs = await auditService.getResourceAuditLogs('user-1', 'shift', 's1');
       expect(logs).toEqual([]);
     });
   });
 
   // ── getHouseholdAuditLogs ─────────────────────────────────────────
   describe('getHouseholdAuditLogs', () => {
-    it('queries by household resourceId', async () => {
+    it('queries by userId and household resourceId', async () => {
       mockGetDocs.mockResolvedValueOnce({ docs: [] });
 
-      await auditService.getHouseholdAuditLogs('hh-1', 50);
+      await auditService.getHouseholdAuditLogs('user-1', 'hh-1', 50);
 
+      expect(mockWhere).toHaveBeenCalledWith('userId', '==', 'user-1');
       expect(mockWhere).toHaveBeenCalledWith('resourceId', '==', 'hh-1');
       expect(mockLimit).toHaveBeenCalledWith(50);
     });
@@ -172,8 +174,9 @@ describe('AuditService', () => {
     it('returns 0 when no expired logs', async () => {
       mockGetDocs.mockResolvedValueOnce({ empty: true, docs: [] });
 
-      const count = await auditService.cleanupExpiredAuditLogs();
+      const count = await auditService.cleanupExpiredAuditLogs('user-1');
       expect(count).toBe(0);
+      expect(mockWhere).toHaveBeenCalledWith('userId', '==', 'user-1');
     });
 
     it('deletes expired logs in batches', async () => {
@@ -189,7 +192,7 @@ describe('AuditService', () => {
       }));
       mockGetDocs.mockResolvedValueOnce({ empty: false, docs: fakeDocs });
 
-      const count = await auditService.cleanupExpiredAuditLogs();
+      const count = await auditService.cleanupExpiredAuditLogs('user-1');
       expect(count).toBe(3);
       expect(mockBatchDelete).toHaveBeenCalledTimes(3);
       expect(mockBatchCommit).toHaveBeenCalledTimes(1);
@@ -198,7 +201,7 @@ describe('AuditService', () => {
     it('returns 0 on error', async () => {
       mockGetDocs.mockRejectedValueOnce(new Error('fail'));
 
-      const count = await auditService.cleanupExpiredAuditLogs();
+      const count = await auditService.cleanupExpiredAuditLogs('user-1');
       expect(count).toBe(0);
     });
   });

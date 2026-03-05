@@ -335,8 +335,12 @@ class SubscriptionService {
     } catch (error) {
       console.error('Failed to check household limit:', error);
       track('tier_check_fail_closed', { scope: 'households', error: String(error) }, 'warn');
-      // Fail-open: allow the operation rather than blocking on transient errors
-      return {allowed: true};
+      // SECURITY: Fail-closed — deny the operation on transient errors.
+      // This prevents subscription bypass when Firestore is unreachable.
+      return {
+        allowed: false,
+        reason: 'Unable to verify subscription. Please try again.',
+      };
     }
   }
 
@@ -384,9 +388,12 @@ class SubscriptionService {
     } catch (error) {
       console.error('Failed to check member limit:', error);
       track('tier_check_fail_closed', { scope: 'members', householdId, error: String(error) }, 'warn');
-      // Fail-open for free tier: allow the join rather than blocking on transient errors
-      // The member count check in Firestore rules provides a safety net
-      return {allowed: true};
+      // SECURITY: Fail-closed — deny the operation on transient errors.
+      // The Cloud Function joinHousehold also enforces this server-side.
+      return {
+        allowed: false,
+        reason: 'Unable to verify subscription. Please try again.',
+      };
     }
   }
 
@@ -417,8 +424,18 @@ class SubscriptionService {
   }
 
   /**
-   * Upgrade/change user subscription tier
-   * Note: User can only change their own subscription, or household admin can trigger for their household
+   * Upgrade/change user subscription tier.
+   *
+   * SECURITY: Client-side tier changes are BLOCKED by Firestore rules
+   * (request.resource.data.tier must equal resource.data.tier).
+   * Tier changes now come from the RevenueCat webhook Cloud Function.
+   *
+   * This method initiates the purchase flow via RevenueCat and returns
+   * the current subscription. The actual tier change arrives asynchronously
+   * via the webhook.
+   *
+   * @deprecated Use RevenueCat purchase flow instead. The webhook
+   * (functions/src/subscriptionWebhook.ts) handles tier updates server-side.
    */
   async changeSubscriptionTier(
     userId: string,
@@ -426,51 +443,11 @@ class SubscriptionService {
     paymentMethod?: string,
     householdId?: string
   ): Promise<Subscription> {
-    try {
-      const currentSubscription = await this.getUserSubscription(userId);
-      if (!currentSubscription) {
-        throw new Error('No subscription found');
-      }
-
-      // If householdId provided, verify the requester is admin before allowing change
-      if (householdId) {
-        const adminCheck = await rbacService.enforceAdminOnly(householdId, userId, AuditAction.SUBSCRIPTION_UPGRADE);
-        if (!adminCheck.allowed) {
-          throw new Error(adminCheck.reason || 'Unauthorized to change subscription tier');
-        }
-      }
-
-      const now = new Date();
-      const monthFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      const updatedSubscription: Partial<Subscription> = {
-        tier: newTier,
-        status: 'active',
-        trialEndsAt: undefined, // Clear trial when upgrading
-        currentPeriodStart: now,
-        currentPeriodEnd: monthFromNow,
-        updatedAt: now,
-      };
-
-      await updateDoc(
-        doc(db, COLLECTIONS.SUBSCRIPTIONS, currentSubscription.id),
-        updatedSubscription
-      );
-
-      // Log subscription change to audit trail
-      if (householdId) {
-        const actionType = newTier === 'free' ? AuditAction.SUBSCRIPTION_CANCEL : AuditAction.SUBSCRIPTION_UPGRADE;
-        await auditService.logHouseholdAction(householdId, userId, actionType, { tier: newTier });
-      }
-
-      return {
-        ...currentSubscription,
-        ...updatedSubscription,
-      } as Subscription;
-    } catch (error) {
-      console.error('Failed to change subscription tier:', error);
-      throw new Error('Failed to change subscription tier');
-    }
+    // Prevent client-side tier escalation
+    throw new Error(
+      'Direct tier changes are disabled. Use the in-app purchase flow — ' +
+      'the subscription will update automatically after payment is confirmed.'
+    );
   }
 
   /**

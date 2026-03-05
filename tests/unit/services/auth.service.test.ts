@@ -153,7 +153,7 @@ describe('AuthService', () => {
     it('maps auth/weak-password', async () => {
       setupAuthError('auth/weak-password');
       await expect(authService.signInWithEmail('a@b.c', '1'))
-        .rejects.toThrow('Password must be at least 6 characters');
+        .rejects.toThrow('Password must be at least 8 characters');
     });
 
     it('maps auth/too-many-requests', async () => {

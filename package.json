@@ -68,6 +68,7 @@
     "@typescript-eslint/eslint-plugin": "^8.8.1",
     "@typescript-eslint/parser": "^8.8.1",
     "babel-plugin-inline-dotenv": "^1.7.0",
+    "babel-plugin-transform-remove-console": "^6.9.4",
     "babel-preset-expo": "^54.0.4",
     "baseline-browser-mapping": "^2.9.19",
     "dotenv": "^17.2.3",

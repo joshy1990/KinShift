@@ -42,8 +42,8 @@ export const ChangePasswordScreen: React.FC = () => {
       return;
     }
 
-    if (newPassword.length < 6) {
-      showError('New password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      showError('New password must be at least 8 characters');
       return;
     }
 

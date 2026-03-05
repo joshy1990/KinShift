@@ -23,8 +23,12 @@ const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // once per day
 /**
  * Run all retention cleanup jobs if enough time has elapsed since the last run.
  * Safe to call on every app launch — it no-ops if < 24 h since last cleanup.
+ *
+ * @param userId – The authenticated user's ID. Audit / security-event cleanup
+ *   is scoped to this user (Firestore rules enforce userId ownership).
+ *   If omitted, audit cleanup is skipped (runs only when user is known).
  */
-export async function runRetentionCleanupIfDue(): Promise<void> {
+export async function runRetentionCleanupIfDue(userId?: string): Promise<void> {
   try {
     // Lazy-import AsyncStorage to avoid circular deps at module load
     const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
@@ -36,16 +40,20 @@ export async function runRetentionCleanupIfDue(): Promise<void> {
 
     console.log('[DataRetention] Starting daily cleanup…');
 
-    const results = await Promise.allSettled([
+    const jobs: Promise<any>[] = [
       shiftService.purgeSoftDeletedShifts(30),
       dayNoteService.purgeSoftDeletedNotes(30),
       invitationService.purgeExpiredInvitations(7),
-      auditService.runRetentionCleanup(),
-    ]);
+    ];
+    if (userId) {
+      jobs.push(auditService.runRetentionCleanup(userId));
+    }
 
+    const results = await Promise.allSettled(jobs);
+
+    const labels = ['shifts', 'dayNotes', 'invitations', ...(userId ? ['audit'] : [])];
     results.forEach((r, i) => {
       if (r.status === 'rejected') {
-        const labels = ['shifts', 'dayNotes', 'invitations', 'audit'];
         console.warn(`[DataRetention] ${labels[i]} cleanup failed:`, r.reason);
       }
     });

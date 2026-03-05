@@ -21,6 +21,12 @@ import { shiftService } from './shift.service';
 import { householdService } from './household.service';
 import { rbacService, AuditAction } from './rbac.service';
 import { notificationService } from './notification.service';
+import { sanitize, validators } from '@/utils/validation';
+
+/** Maximum allowed length for day note content */
+const MAX_NOTE_CONTENT_LENGTH = 2000;
+/** Maximum allowed length for note category */
+const MAX_CATEGORY_LENGTH = 50;
 
 /**
  * Service for managing day notes - household plans and events
@@ -34,12 +40,26 @@ class DayNoteService {
     noteData: Omit<DayNote, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<DayNote> {
     try {
+      // SECURITY: Sanitize and validate user input
+      const sanitizedContent = sanitize.text(noteData.content, MAX_NOTE_CONTENT_LENGTH);
+      if (!sanitizedContent || sanitizedContent.trim().length === 0) {
+        throw new Error('Note content cannot be empty');
+      }
+      if (!validators.noXSS(sanitizedContent)) {
+        throw new Error('Note content contains disallowed characters');
+      }
+
+      const sanitizedAuthorName = sanitize.text(noteData.authorName, 100);
+      const sanitizedCategory = noteData.category
+        ? sanitize.text(noteData.category, MAX_CATEGORY_LENGTH)
+        : undefined;
+
       // Build note object, omitting undefined fields (Firestore rejects undefined values)
       const baseNote: Record<string, any> = {
         date: noteData.date,
         authorId: noteData.authorId,
-        authorName: noteData.authorName,
-        content: noteData.content,
+        authorName: sanitizedAuthorName,
+        content: sanitizedContent,
         notifyWorkingMembers: noteData.notifyWorkingMembers,
         isDeleted: false, // CRITICAL: Must be set so queries with where('isDeleted', '==', false) can find this note
         createdAt: new Date(),
@@ -50,8 +70,8 @@ class DayNoteService {
       if (noteData.time) {
         baseNote.time = noteData.time;
       }
-      if (noteData.category) {
-        baseNote.category = noteData.category;
+      if (sanitizedCategory) {
+        baseNote.category = sanitizedCategory;
       }
       if (noteData.householdId) {
         baseNote.householdId = noteData.householdId;
@@ -204,9 +224,27 @@ class DayNoteService {
         }
       }
 
+      // SECURITY: Sanitize content if it's being updated
+      const sanitizedUpdates = { ...updates };
+      if (sanitizedUpdates.content !== undefined) {
+        sanitizedUpdates.content = sanitize.text(sanitizedUpdates.content, MAX_NOTE_CONTENT_LENGTH);
+        if (!sanitizedUpdates.content || sanitizedUpdates.content.trim().length === 0) {
+          throw new Error('Note content cannot be empty');
+        }
+        if (!validators.noXSS(sanitizedUpdates.content)) {
+          throw new Error('Note content contains disallowed characters');
+        }
+      }
+      if ((sanitizedUpdates as any).category !== undefined) {
+        (sanitizedUpdates as any).category = sanitize.text((sanitizedUpdates as any).category, MAX_CATEGORY_LENGTH);
+      }
+      if ((sanitizedUpdates as any).authorName !== undefined) {
+        (sanitizedUpdates as any).authorName = sanitize.text((sanitizedUpdates as any).authorName, 100);
+      }
+
       // Update the note
       await updateDoc(noteRef, {
-        ...updates,
+        ...sanitizedUpdates,
         updatedAt: new Date(),
       });
     } catch (error) {

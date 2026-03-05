@@ -1,6 +1,7 @@
 import {Linking} from 'react-native';
 import {NavigationContainerRef} from '@react-navigation/native';
 import {RootStackParamList} from '@/types';
+import auth from '@react-native-firebase/auth';
 
 class DeepLinkService {
   private navigationRef: NavigationContainerRef<RootStackParamList> | null = null;
@@ -65,12 +66,28 @@ class DeepLinkService {
 
   /**
    * Handle invitation links: kinshift://invite/[inviteCode]
+   *
+   * SECURITY: Verifies the user is authenticated before navigating.
+   * Unauthenticated users are redirected to the login screen.
    */
   private handleInvitationLink(pathname: string) {
     const inviteCode = pathname.replace('/invite/', '');
     
-    if (!inviteCode || inviteCode.length < 6 || inviteCode.length > 8) {
-      console.error('Invalid invitation code:', inviteCode);
+    if (!inviteCode || !/^[A-Za-z0-9]{6,8}$/.test(inviteCode)) {
+      console.error('Invalid invitation code format:', inviteCode);
+      return;
+    }
+
+    // SECURITY: Require authentication before navigating to invitation acceptance
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      console.warn('Deep link blocked: user not authenticated');
+      // Navigate to login screen instead — the deep link will be lost,
+      // but the user can enter the code manually after signing in.
+      if (this.navigationRef) {
+        // @ts-ignore - Complex nested navigation typing
+        this.navigationRef.navigate('Auth', { screen: 'Login' });
+      }
       return;
     }
 

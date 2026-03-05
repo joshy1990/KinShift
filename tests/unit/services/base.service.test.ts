@@ -60,7 +60,7 @@ describe('BaseService', () => {
 
     it('maps auth/weak-password', () => {
       const result = service.testHandleError({ code: 'auth/weak-password' });
-      expect(result.message).toContain('6 characters');
+      expect(result.message).toContain('8 characters');
     });
 
     it('maps auth/invalid-email', () => {

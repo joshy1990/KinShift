@@ -155,20 +155,22 @@
       ]
     },
     {
-      "__comment": "audit.service.ts L86 — getResourceAuditLogs: resourceType ==, resourceId ==, orderBy timestamp DESC",
+      "__comment": "audit.service.ts — getResourceAuditLogs: userId ==, resourceType ==, resourceId ==, orderBy timestamp DESC",
       "collectionGroup": "auditLogs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "resourceType", "order": "ASCENDING" },
         { "fieldPath": "resourceId", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
     },
     {
-      "__comment": "audit.service.ts L111 — getHouseholdAuditLogs: resourceId ==, orderBy timestamp DESC",
+      "__comment": "audit.service.ts — getHouseholdAuditLogs: userId ==, resourceId ==, orderBy timestamp DESC",
       "collectionGroup": "auditLogs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "resourceId", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
@@ -199,6 +201,24 @@
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "audit.service.ts — cleanupExpiredSecurityEvents: userId ==, timestamp < cutoff",
+      "collectionGroup": "securityEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "__comment": "audit.service.ts — cleanupExpiredAuditLogs: userId ==, timestamp < cutoff",
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
       ]
     }
   ],
