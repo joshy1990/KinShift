@@ -120,8 +120,6 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
         notificationPreferences: newPreferences,
         updatedAt: new Date(),
       }, { merge: true }); // merge: true ensures we don't overwrite other user data
-      
-      setPreferences(newPreferences);
     } catch (error) {
       console.error('Error saving preferences:', error);
       showError('Failed to save notification preferences');
@@ -129,9 +127,13 @@ export const NotificationPreferencesScreen: React.FC<Props> = ({navigation}) => 
   };
 
   const handleToggle = (key: keyof NotificationPreferences, value: boolean | number | string) => {
-    const newPreferences = {...preferences, [key]: value};
-    setPreferences(newPreferences);
-    savePreferences(newPreferences);
+    // Use functional updater to always build on latest state,
+    // preventing rapid toggles from overwriting each other.
+    setPreferences(prev => {
+      const newPreferences = {...prev, [key]: value};
+      savePreferences(newPreferences);
+      return newPreferences;
+    });
   };
 
   const handleEnableNotifications = async () => {

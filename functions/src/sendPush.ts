@@ -21,6 +21,13 @@ const db = admin.firestore();
 
 const PUSH_RATE_LIMIT = 10;
 const PUSH_RATE_WINDOW_MS = 60_000;
+/**
+ * NOTE: This in-memory map is per Cloud Function container instance
+ * and is reset on cold starts. It is a best-effort rate limit, not a
+ * hard guarantee. For strict rate limiting, migrate to Firestore-based
+ * counters or Redis. The household membership check below still prevents
+ * abuse from non-household members.
+ */
 const rateLimitMap = new Map<string, number[]>();
 
 interface PushPayload {
@@ -132,10 +139,28 @@ export const sendPushNotification = functions.https.onCall(
       req.end();
     });
 
+    // Parse Expo push response and check for errors
+    let parsedResult: { data?: Array<{ status: string; id?: string; message?: string }> };
+    try {
+      parsedResult = JSON.parse(result);
+    } catch {
+      console.error("Failed to parse Expo push response:", result);
+      return { sent: true, tokenCount: validTokens.length };
+    }
+
+    const tickets = parsedResult.data ?? [];
+    const errors = tickets.filter((t) => t.status === "error");
+    if (errors.length > 0) {
+      console.warn(
+        `Push to ${targetUserId}: ${errors.length}/${tickets.length} ticket(s) failed`,
+        errors.map((e) => e.message)
+      );
+    }
+
     console.log(
       `Push sent to ${targetUserId} (${validTokens.length} token(s)) by ${callerId}`
     );
 
-    return { sent: true, tokenCount: validTokens.length, result };
+    return { sent: true, tokenCount: validTokens.length, errorCount: errors.length };
   }
 );

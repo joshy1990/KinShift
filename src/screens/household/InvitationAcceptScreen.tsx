@@ -74,20 +74,22 @@ export const InvitationAcceptScreen: React.FC<Props> = ({navigation, route}) => 
       
       await invitationService.acceptInvitation(inviteCode, user);
       
-      // Refresh household list and set newly joined household as current
-      await refreshHouseholds();
-      // Re-read households after refresh to avoid stale closure
+      // Refresh household list — returns the updated array directly
+      // so we avoid the stale-closure problem with `households`.
+      const updatedHouseholds = await refreshHouseholds();
+
+      // Use the freshly-returned list to find the joined household
+      const joinedHousehold = (updatedHouseholds ?? []).find(
+        (h: any) => h.id === invitation.householdId
+      );
+      if (joinedHousehold) {
+        setCurrentHousehold(joinedHousehold);
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to accept invitation');
       return;
     } finally {
       setAccepting(false);
-    }
-
-    // After successful acceptance, navigate (households is now refreshed)
-    const joinedHousehold = households.find(h => h.id === invitation.householdId);
-    if (joinedHousehold) {
-      setCurrentHousehold(joinedHousehold);
     }
 
     // Optionally notify

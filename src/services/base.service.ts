@@ -128,7 +128,7 @@ export class BaseService {
    * Validates required fields
    */
   protected validateRequired(data: Record<string, any>, fields: string[]): void {
-    const missing = fields.filter(field => !data[field]);
+    const missing = fields.filter(field => data[field] === undefined || data[field] === null);
     if (missing.length > 0) {
       throw new Error(`Missing required fields: ${missing.join(', ')}`);
     }

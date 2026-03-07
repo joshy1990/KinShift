@@ -116,12 +116,23 @@ export const ShiftPatternModal: React.FC<Props> = ({
     if (existingPattern) {
       setPatternName(existingPattern.name);
       setPatternDescription(existingPattern.description);
-      setCustomCycle(existingPattern.cycle.shifts.map(s => s?.id || null));
-      setCycleDays(existingPattern.cycle.cycleDays);
+      const shifts = existingPattern.cycle.shifts.map((s: any) => s?.id || null);
+      const days = existingPattern.cycle.cycleDays;
+      // Ensure the cycle array always has exactly cycleDays elements
+      while (shifts.length < days) shifts.push(null);
+      setCustomCycle(shifts.slice(0, days));
+      setCycleDays(days);
       setStartDate(existingPattern.startDate);
       setRepeatForever(existingPattern.repeatForever);
       setRotationWeeks(existingPattern.rotationWeeks || 4);
       setCurrentStep('customize');
+    } else {
+      // Reset state when existingPattern is cleared (switching from edit to create)
+      setPatternName('');
+      setPatternDescription('');
+      setCustomCycle([]);
+      setCycleDays(7);
+      setCurrentStep('template');
     }
   }, [existingPattern]);
 
@@ -129,8 +140,12 @@ export const ShiftPatternModal: React.FC<Props> = ({
     setSelectedTemplate(template);
     setPatternName(template.name);
     setPatternDescription(`${template.name} shift pattern`);
-    setCustomCycle(template.cycle.shifts);
-    setCycleDays(template.cycle.cycleDays);
+    const shifts = [...template.cycle.shifts];
+    const days = template.cycle.cycleDays;
+    // Ensure the cycle array always has exactly cycleDays elements
+    while (shifts.length < days) shifts.push(null);
+    setCustomCycle(shifts.slice(0, days));
+    setCycleDays(days);
     setCurrentStep('customize');
   };
 

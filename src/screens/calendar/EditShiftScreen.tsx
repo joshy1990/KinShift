@@ -75,9 +75,13 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
   // ── Load existing shift ──
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       try {
         const fetched = await shiftService.getShiftById(shiftId);
+        if (cancelled) return;
+
         if (!fetched) {
           showError('Shift not found');
           navigation.goBack();
@@ -108,14 +112,17 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
           setSplit2EndTime(toDate(fetched.splitTimes[1].endTime));
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('[EditShift] Failed to load shift:', error);
         showError('Failed to load shift');
         navigation.goBack();
       } finally {
-        setLoadingShift(false);
+        if (!cancelled) setLoadingShift(false);
       }
     };
     load();
+
+    return () => { cancelled = true; };
   }, [shiftId, navigation, user?.id]);
 
   // ── Handlers ──
@@ -397,7 +404,7 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
 
                 <Text style={styles.splitTotalHours}>
                   Total:{' '}
-                  {(
+                  {Math.max(0,
                     (split1EndTime.getTime() - split1StartTime.getTime() +
                       split2EndTime.getTime() - split2StartTime.getTime()) /
                     (1000 * 60 * 60)

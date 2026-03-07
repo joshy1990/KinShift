@@ -55,22 +55,22 @@ export const PaywallScreen: React.FC<PaywallScreenProps> = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       {/* RevenueCat Paywall — renders the remote paywall template */}
       <RevenueCatUI.Paywall
-        onPurchaseCompleted={({ customerInfo }) => {
+        onPurchaseCompleted={({ customerInfo: _customerInfo }) => {
           Alert.alert(
             'Welcome to Pro! 🎉',
             'You now have access to all premium features.',
             [{ text: 'OK', onPress: () => navigation.goBack() }],
           );
         }}
-        onPurchaseError={(error) => {
+        onPurchaseError={({ error }) => {
           // User cancelled is not a real error
           if (error.userCancelled) return;
           Alert.alert('Purchase Failed', error.message || 'Please try again.');
         }}
-        onRestoreCompleted={({ customerInfo }) => {
+        onRestoreCompleted={({ customerInfo: _customerInfo }) => {
           Alert.alert('Restored!', 'Your purchases have been restored.');
         }}
-        onRestoreError={(error) => {
+        onRestoreError={({ error }) => {
           Alert.alert('Restore Failed', error.message || 'No previous purchases found.');
         }}
         onDismiss={() => navigation.goBack()}

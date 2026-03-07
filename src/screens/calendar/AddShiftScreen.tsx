@@ -550,6 +550,59 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
         setTimeout(() => navigation.goBack(), 900);
         return; // Don't create any shift, just delete and exit
       }
+
+      // HOLIDAY / CUSTOM date range: create one shift per day in the range
+      if (!usePattern && !requiresStartEndTime(shiftType) && shiftType !== 'off') {
+        const rangeStart = startOfDay(holidayStartDate);
+        const rangeEnd = startOfDay(holidayEndDate);
+        const totalDays = differenceInDays(rangeEnd, rangeStart) + 1;
+
+        if (totalDays < 1 || totalDays > 365) {
+          showError('Please select a valid date range (max 365 days)');
+          setLoading(false);
+          return;
+        }
+
+        const shiftsToCreate: any[] = [];
+        for (let i = 0; i < totalDays; i++) {
+          const day = addDays(rangeStart, i);
+          const dayStart = new Date(day);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(day);
+          dayEnd.setHours(23, 59, 59, 999);
+
+          shiftsToCreate.push({
+            title: title.trim() || getShiftTypeName(shiftType),
+            householdId: currentHouseholdId || undefined,
+            ownerId: user.id,
+            startTime: dayStart,
+            endTime: dayEnd,
+            shiftType,
+            notes: notes.trim(),
+          });
+        }
+
+        await shiftService.createBulkShifts(shiftsToCreate);
+
+        if (currentHouseholdId) {
+          try {
+            await notificationService.notifyMultipleShiftsCreated(
+              shiftsToCreate,
+              { id: currentHouseholdId }
+            );
+          } catch (notifyError) {
+            console.error('Failed to send holiday shift notification:', notifyError);
+          }
+        }
+
+        showSuccess(`Created ${shiftsToCreate.length} ${shiftType} day${totalDays > 1 ? 's' : ''} successfully!`);
+        setLoading(false);
+        setSaved(true);
+        trackShiftCreated().then(() => maybeRequestReview()).catch(() => {});
+        setTimeout(() => navigation.goBack(), 900);
+        return;
+      }
+
       if (usePattern) {
         // Create pattern of shifts
         const shiftsToCreate: any[] = [];
@@ -1093,7 +1146,7 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
             </View>
             
             <Text style={styles.splitTotalHours}>
-              Total: {((split1EndTime.getTime() - split1StartTime.getTime() + split2EndTime.getTime() - split2StartTime.getTime()) / (1000 * 60 * 60)).toFixed(1)} hours
+              Total: {Math.max(0, (split1EndTime.getTime() - split1StartTime.getTime() + split2EndTime.getTime() - split2StartTime.getTime()) / (1000 * 60 * 60)).toFixed(1)} hours
             </Text>
           </View>
         )}

@@ -15,7 +15,7 @@ interface HouseholdContextType {
   loading: boolean;
   error: string | null;
   setCurrentHousehold: (household: Household | null) => void;
-  refreshHouseholds: () => Promise<void>;
+  refreshHouseholds: () => Promise<Household[]>;
   createHousehold: (name: string, settings?: any) => Promise<Household>;
   joinHousehold: (joinCode: string) => Promise<Household>;
 }
@@ -33,8 +33,8 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHouseholds = useCallback(async () => {
-    if (!user) return;
+  const loadHouseholds = useCallback(async (): Promise<Household[]> => {
+    if (!user) return [];
 
     setLoading(true);
     setError(null);
@@ -56,9 +56,12 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
 
         return current;
       });
+
+      return userHouseholds;
     } catch (err) {
       console.error('Failed to load households:', err);
       setError('Failed to load households');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -105,8 +108,8 @@ export const HouseholdProvider: React.FC<HouseholdProviderProps> = ({children}) 
     return () => unsubscribe();
   }, [user]);
 
-  const refreshHouseholds = async () => {
-    await loadHouseholds();
+  const refreshHouseholds = async (): Promise<Household[]> => {
+    return await loadHouseholds();
   };
 
   const createHousehold = async (name: string, settings?: any): Promise<Household> => {

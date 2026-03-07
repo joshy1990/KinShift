@@ -10,6 +10,7 @@ import {
   arrayUnion, 
   arrayRemove, 
   writeBatch,
+  deleteField,
   DocumentSnapshot,
   QuerySnapshot 
 } from '@/config/firestore.compat';
@@ -219,8 +220,9 @@ class HouseholdService {
         id: docSnap.id,
         ...docSnap.data(),
       } as Household;
-    } catch (error) {
-      throw new Error('Failed to fetch household');
+    } catch (error: any) {
+      // Preserve the original error message for callers to differentiate
+      throw new Error(error.message || 'Failed to fetch household');
     }
   }
 
@@ -427,10 +429,11 @@ class HouseholdService {
         }
       }
 
-      // Now remove the member
+      // Now remove the member and clean up their join date
       const updateData: any = {
         members: arrayRemove(userId),
         admins: arrayRemove(userId),
+        [`memberJoinDates.${userId}`]: deleteField(),
         updatedAt: new Date(),
       };
 
@@ -666,24 +669,37 @@ class HouseholdService {
   async updateHouseholdSettings(
     householdId: string,
     settings: Partial<HouseholdSettings>,
+    requestingUserId: string,
   ): Promise<void> {
     try {
+      // Only admins can change household settings
+      const household = await this.getHousehold(householdId);
+      if (!household.admins.includes(requestingUserId)) {
+        throw new Error('Only admins can update household settings');
+      }
+
       // Use dot-notation to merge instead of overwriting the entire settings object
       const updateData: Record<string, any> = { updatedAt: new Date() };
       for (const [key, value] of Object.entries(settings)) {
         updateData[`settings.${key}`] = value;
       }
       await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
-    } catch (error) {
-      throw new Error('Failed to update household settings');
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to update household settings');
     }
   }
 
   /**
    * Regenerate join code
    */
-  async regenerateJoinCode(householdId: string): Promise<string> {
+  async regenerateJoinCode(householdId: string, requestingUserId: string): Promise<string> {
     try {
+      // Only admins can regenerate the join code
+      const household = await this.getHousehold(householdId);
+      if (!household.admins.includes(requestingUserId)) {
+        throw new Error('Only admins can regenerate the join code');
+      }
+
       const newCode = this.generateJoinCode();
       const now = new Date();
       await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
@@ -692,8 +708,8 @@ class HouseholdService {
         updatedAt: now,
       });
       return newCode;
-    } catch (error) {
-      throw new Error('Failed to regenerate join code');
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to regenerate join code');
     }
   }
 

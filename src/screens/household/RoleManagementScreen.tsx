@@ -265,7 +265,11 @@ export const RoleManagementScreen: React.FC<RoleManagementScreenProps> = ({
                 <View style={styles.memberMeta}>
                   {renderRoleBadge(member)}
                   <Text style={styles.memberJoined}>
-                    Joined {new Date(member.joinedAt).toLocaleDateString()}
+                    Joined {(
+                      member.joinedAt?.toDate
+                        ? member.joinedAt.toDate()
+                        : member.joinedAt ? new Date(member.joinedAt) : new Date()
+                    ).toLocaleDateString()}
                   </Text>
                 </View>
               </View>

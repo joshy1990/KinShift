@@ -19,6 +19,7 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import * as crypto from "crypto";
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -42,11 +43,20 @@ export const revenueCatWebhook = functions.https.onRequest(
       return;
     }
 
-    // Validate webhook secret
+    // Validate webhook secret (timing-safe comparison to prevent timing attacks)
     // Fail-closed: reject if secret is not configured or doesn't match
     const expectedSecret = functions.config().revenuecat?.webhook_secret;
     const authHeader = req.headers.authorization;
-    if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+    if (!expectedSecret || !authHeader) {
+      console.warn("RevenueCat webhook: invalid or missing authorization");
+      res.status(401).send("Unauthorized");
+      return;
+    }
+    const expectedValue = `Bearer ${expectedSecret}`;
+    const headerBuf = Buffer.from(authHeader);
+    const expectedBuf = Buffer.from(expectedValue);
+    if (headerBuf.length !== expectedBuf.length ||
+        !crypto.timingSafeEqual(headerBuf, expectedBuf)) {
       console.warn("RevenueCat webhook: invalid or missing authorization");
       res.status(401).send("Unauthorized");
       return;

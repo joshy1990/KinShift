@@ -1,7 +1,7 @@
 /**
  * Tests for subscription service security hardening:
- * - changeSubscriptionTier now throws (client-side tier changes blocked)
  * - canAddHousehold / canAddMember fail-closed on errors
+ * - shouldShowAds ad visibility logic
  */
 
 // Firestore compat mock
@@ -46,27 +46,33 @@ describe('SubscriptionService — Security Hardening', () => {
     jest.clearAllMocks();
   });
 
-  // ── changeSubscriptionTier throws ───────────────────────────────────
-  describe('changeSubscriptionTier', () => {
-    it('throws an error to prevent client-side tier escalation', async () => {
-      await expect(
-        subscriptionService.changeSubscriptionTier('user-1', 'premium')
-      ).rejects.toThrow('Direct tier changes are disabled');
+  // ── shouldShowAds ──────────────────────────────────────────────────
+  describe('shouldShowAds', () => {
+    it('shows ads for free tier users', () => {
+      expect(subscriptionService.shouldShowAds('free')).toBe(true);
     });
 
-    it('throws even for downgrades (must go through webhook)', async () => {
-      await expect(
-        subscriptionService.changeSubscriptionTier('user-1', 'free')
-      ).rejects.toThrow('Direct tier changes are disabled');
+    it('hides ads for pro tier users', () => {
+      expect(subscriptionService.shouldShowAds('pro')).toBe(false);
+    });
+  });
+
+  // ── getTierLimits ─────────────────────────────────────────────────
+  describe('getTierLimits', () => {
+    it('free tier limited to 1 household, 2 members', () => {
+      const limits = subscriptionService.getTierLimits('free');
+      expect(limits.maxHouseholds).toBe(1);
+      expect(limits.maxMembersPerHousehold).toBe(2);
+      expect(limits.showAds).toBe(true);
+      expect(limits.canExportCalendar).toBe(false);
     });
 
-    it('never calls updateDoc', async () => {
-      try {
-        await subscriptionService.changeSubscriptionTier('user-1', 'standard');
-      } catch {
-        // Expected
-      }
-      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    it('pro tier gets unlimited households, 12 members, no ads', () => {
+      const limits = subscriptionService.getTierLimits('pro');
+      expect(limits.maxHouseholds).toBe(-1);
+      expect(limits.maxMembersPerHousehold).toBe(12);
+      expect(limits.showAds).toBe(false);
+      expect(limits.canExportCalendar).toBe(true);
     });
   });
 });

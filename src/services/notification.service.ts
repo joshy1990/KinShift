@@ -26,7 +26,6 @@ import {
   shiftCreatedTemplate,
   shiftUpdatedTemplate,
   shiftDeletedTemplate,
-  invitationTemplate,
   subscriptionDowngradeTemplate,
   subscriptionCanceledTemplate,
   dayNoteAddedTemplate,
@@ -158,6 +157,9 @@ const checkPermission = async (): Promise<string> => {
     if (permission.granted) {
       return 'granted';
     }
+    if (permission.canAskAgain) {
+      return 'undetermined';
+    }
     return 'denied';
   } catch (error) {
     console.error('Error checking permission:', error);
@@ -244,18 +246,26 @@ const listenToUserNotifications = (
       limit(NOTIFICATION_LISTENER_LIMIT)
     );
 
-    const unsubscribe = onSnapshot(notificationQuery, (snapshot) => {
-      const notifications = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      } as Notification));
+    const unsubscribe = onSnapshot(
+      notificationQuery,
+      (snapshot) => {
+        const notifications = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        } as Notification));
 
-      callback(notifications);
-    });
+        callback(notifications);
+      },
+      (error) => {
+        console.error('Notification listener error:', error);
+        // Return empty array so the UI can show an appropriate state
+        callback([]);
+      }
+    );
 
     return unsubscribe;
   } catch (error) {
-    console.error('Error listening to notifications:', error);
+    console.error('Error setting up notification listener:', error);
     return () => {};
   }
 };
@@ -568,7 +578,7 @@ const notifyMultipleShiftsCreated = async (
 const notifyShiftDeleted = async (
   params: {
     householdId: string;
-    shift: Pick<Shift, 'id' | 'shiftType' | 'startTime'>;
+    shift: Pick<Shift, 'id' | 'shiftType'> & { startTime: Date | { toDate(): Date } | any };
     deleterId: string;
     deleterName: string;
   }
@@ -654,7 +664,15 @@ const notifyInvitationAccepted = async (
   memberCount: number
 ): Promise<void> => {
   try {
-    const payload = invitationTemplate(householdName, memberCount, '', householdId);
+    const payload = {
+      title: `Welcome to ${householdName}!`,
+      body: `Your invitation was accepted. You've joined ${memberCount} other member${memberCount !== 1 ? 's' : ''}.`,
+      data: {
+        type: 'invitation_accepted',
+        householdId,
+        actionUrl: `/household/${householdId}`,
+      },
+    };
 
     const notification = templateToNotification(invitedUserId, householdId, payload, 'invite');
     const notificationId = await createNotification(notification);
@@ -663,7 +681,7 @@ const notifyInvitationAccepted = async (
       await sendPushNotificationToUser(invitedUserId, payload);
     }
   } catch (error) {
-    console.error('Error notifying invitation:', error);
+    console.error('Error notifying invitation accepted:', error);
   }
 };
 
@@ -715,13 +733,18 @@ const notifySubscriptionCanceled = async (
   affectedHouseholds: any[]
 ): Promise<void> => {
   try {
+    if (!affectedHouseholds || affectedHouseholds.length === 0) {
+      console.warn('notifySubscriptionCanceled called with no affected households');
+      return;
+    }
+
     const payload = subscriptionCanceledTemplate(
       affectedHouseholds.length,
-      affectedHouseholds[0]?.name
+      affectedHouseholds[0].name
     );
 
     // Create notification for primary household
-    const primaryHouseholdId = affectedHouseholds[0]?.id || 'unknown';
+    const primaryHouseholdId = affectedHouseholds[0].id;
     const notification = templateToNotification(
       userId,
       primaryHouseholdId,

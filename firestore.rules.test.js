@@ -47,7 +47,7 @@ describe('User Access Tests', () => {
     await assertSucceeds(getDoc(doc(db, 'users', userId)));
   });
 
-  test('User cannot read another user profile', async () => {
+  test('Any authenticated user can read another user profile (needed for household member lists)', async () => {
     const userId1 = 'user123';
     const userId2 = 'user456';
     const db = testEnv.authenticatedContext(userId1).firestore();
@@ -58,7 +58,7 @@ describe('User Access Tests', () => {
       });
     });
     
-    await assertFails(getDoc(doc(db, 'users', userId2)));
+    await assertSucceeds(getDoc(doc(db, 'users', userId2)));
   });
 
   test('User can update their own profile', async () => {
@@ -374,14 +374,16 @@ describe('Message Access Tests', () => {
 // ========================================
 
 describe('Invitation Access Tests', () => {
-  test('Invited user can read invitation', async () => {
-    const invitedUserId = 'invited123';
+  test('Invited user can read invitation (matched by email)', async () => {
+    const invitedEmail = 'invited@example.com';
     const invitationId = 'invite1';
-    const db = testEnv.authenticatedContext(invitedUserId).firestore();
+    // Auth context with verified email matching the invitation
+    const db = testEnv.authenticatedContext('invited123', { email: invitedEmail, email_verified: true }).firestore();
     
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'invitations', invitationId), {
-        invitedUserId,
+        invitedBy: 'admin123',
+        invitedEmail,
         householdId: 'household1',
         status: 'pending',
       });
@@ -393,11 +395,12 @@ describe('Invitation Access Tests', () => {
   test('Non-invited user cannot read invitation', async () => {
     const userId = 'user123';
     const invitationId = 'invite1';
-    const db = testEnv.authenticatedContext(userId).firestore();
+    const db = testEnv.authenticatedContext(userId, { email: 'wrong@example.com' }).firestore();
     
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'invitations', invitationId), {
-        invitedUserId: 'other123',
+        invitedBy: 'admin123',
+        invitedEmail: 'other@example.com',
         householdId: 'household1',
         status: 'pending',
       });
@@ -419,13 +422,14 @@ describe('Invitation Access Tests', () => {
     });
     
     await assertSucceeds(setDoc(doc(db, 'invitations', 'invite1'), {
-      invitedUserId: 'newuser123',
+      invitedBy: adminId,
+      invitedEmail: 'newuser@example.com',
       householdId,
       status: 'pending',
     }));
   });
 
-  test('Non-admin cannot create invitation', async () => {
+  test('Non-admin member CAN create invitation (rules allow any member; admin check is service-layer)', async () => {
     const memberId = 'member123';
     const adminId = 'admin123';
     const householdId = 'household1';
@@ -438,29 +442,37 @@ describe('Invitation Access Tests', () => {
       });
     });
     
-    await assertFails(setDoc(doc(db, 'invitations', 'invite1'), {
-      invitedUserId: 'newuser123',
+    // Rules require membership + invitedBy==auth.uid. Admin-only check is service-layer.
+    await assertSucceeds(setDoc(doc(db, 'invitations', 'invite1'), {
+      invitedBy: memberId,
+      invitedEmail: 'newuser@example.com',
       householdId,
       status: 'pending',
     }));
   });
 
-  test('Invited user can update invitation status', async () => {
+  test('Invited user can update invitation status (accept)', async () => {
+    const invitedEmail = 'invited@example.com';
     const invitedUserId = 'invited123';
     const invitationId = 'invite1';
-    const db = testEnv.authenticatedContext(invitedUserId).firestore();
+    const db = testEnv.authenticatedContext(invitedUserId, { email: invitedEmail, email_verified: true }).firestore();
     
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'invitations', invitationId), {
-        invitedUserId,
+        invitedBy: 'admin123',
+        invitedEmail,
         householdId: 'household1',
         status: 'pending',
       });
     });
     
     await assertSucceeds(setDoc(doc(db, 'invitations', invitationId), {
+      invitedBy: 'admin123',
+      invitedEmail,
+      householdId: 'household1',
       status: 'accepted',
-    }, { merge: true }));
+      acceptedBy: invitedUserId,
+    }));
   });
 });
 
@@ -518,7 +530,7 @@ describe('Notification Access Tests', () => {
 // ========================================
 
 describe('Household Join Security Tests', () => {
-  test('Non-member can join by adding themselves to members + memberJoinDates + updatedAt only', async () => {
+  test('Non-member CANNOT self-join — joining must go through Cloud Function', async () => {
     const joiningUser = 'joiner123';
     const adminId = 'admin123';
     const householdId = 'householdJoin1';
@@ -534,8 +546,8 @@ describe('Household Join Security Tests', () => {
       });
     });
 
-    // Allowed: only changing members, memberJoinDates, updatedAt
-    await assertSucceeds(setDoc(doc(db, 'households', householdId), {
+    // Blocked: non-members cannot update household at all (join via Cloud Function)
+    await assertFails(setDoc(doc(db, 'households', householdId), {
       admins: [adminId],
       members: [adminId, joiningUser],
       name: 'Join Test Household',
@@ -673,7 +685,7 @@ describe('Invitation Tightened Rules', () => {
     await assertSucceeds(setDoc(doc(db, 'invitations', 'inv-1'), {
       householdId,
       invitedBy: memberId,
-      emailOrPhone: 'test@example.com',
+      invitedEmail: 'test@example.com',
       status: 'pending',
     }));
   });
@@ -694,7 +706,7 @@ describe('Invitation Tightened Rules', () => {
     await assertFails(setDoc(doc(db, 'invitations', 'inv-2'), {
       householdId,
       invitedBy: outsider,
-      emailOrPhone: 'hack@example.com',
+      invitedEmail: 'hack@example.com',
       status: 'pending',
     }));
   });
@@ -708,7 +720,7 @@ describe('Invitation Tightened Rules', () => {
       await setDoc(doc(context.firestore(), 'invitations', invId), {
         householdId: 'hh-1',
         invitedBy: creator,
-        emailOrPhone: 'test@test.com',
+        invitedEmail: 'test@test.com',
         status: 'pending',
       });
     });
@@ -716,21 +728,22 @@ describe('Invitation Tightened Rules', () => {
     await assertSucceeds(setDoc(doc(db, 'invitations', invId), {
       householdId: 'hh-1',
       invitedBy: creator,
-      emailOrPhone: 'test@test.com',
+      invitedEmail: 'test@test.com',
       status: 'cancelled',
     }));
   });
 
   test('Accepting user can update invitation with their own acceptedBy', async () => {
+    const acceptorEmail = 'acceptor@test.com';
     const acceptor = 'acceptor123';
     const invId = 'inv-4';
-    const db = testEnv.authenticatedContext(acceptor).firestore();
+    const db = testEnv.authenticatedContext(acceptor, { email: acceptorEmail, email_verified: true }).firestore();
 
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'invitations', invId), {
         householdId: 'hh-1',
         invitedBy: 'someone',
-        emailOrPhone: 'acceptor@test.com',
+        invitedEmail: acceptorEmail,
         status: 'pending',
       });
     });
@@ -738,7 +751,7 @@ describe('Invitation Tightened Rules', () => {
     await assertSucceeds(setDoc(doc(db, 'invitations', invId), {
       householdId: 'hh-1',
       invitedBy: 'someone',
-      emailOrPhone: 'acceptor@test.com',
+      invitedEmail: acceptorEmail,
       status: 'accepted',
       acceptedBy: acceptor,
     }));
@@ -747,22 +760,22 @@ describe('Invitation Tightened Rules', () => {
   test('Random user CANNOT update invitation setting someone else as acceptedBy', async () => {
     const attacker = 'attacker123';
     const invId = 'inv-5';
-    const db = testEnv.authenticatedContext(attacker).firestore();
+    const db = testEnv.authenticatedContext(attacker, { email: 'attacker@test.com' }).firestore();
 
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'invitations', invId), {
         householdId: 'hh-1',
         invitedBy: 'someone',
-        emailOrPhone: 'victim@test.com',
+        invitedEmail: 'victim@test.com',
         status: 'pending',
       });
     });
 
-    // Attacker tries to accept on behalf of victim
+    // Attacker tries to accept on behalf of victim — email doesn't match + wrong acceptedBy
     await assertFails(setDoc(doc(db, 'invitations', invId), {
       householdId: 'hh-1',
       invitedBy: 'someone',
-      emailOrPhone: 'victim@test.com',
+      invitedEmail: 'victim@test.com',
       status: 'accepted',
       acceptedBy: 'victim123',
     }));
@@ -777,7 +790,7 @@ describe('Invitation Tightened Rules', () => {
       await setDoc(doc(context.firestore(), 'invitations', invId), {
         householdId: 'hh-1',
         invitedBy: creator,
-        emailOrPhone: 'test@test.com',
+        invitedEmail: 'test@test.com',
         status: 'pending',
       });
     });

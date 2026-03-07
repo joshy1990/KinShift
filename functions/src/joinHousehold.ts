@@ -60,76 +60,87 @@ export const joinHouseholdByCode = functions.https.onCall(
       throw new functions.https.HttpsError("not-found", "Invalid join code.");
     }
 
-    const householdDoc = snap.docs[0];
-    const household = householdDoc.data();
-    const householdId = householdDoc.id;
+    const householdRef = snap.docs[0].ref;
+    const householdId = snap.docs[0].id;
 
-    // 4. Already a member?
-    if ((household.members ?? []).includes(userId)) {
-      throw new functions.https.HttpsError(
-        "already-exists",
-        "You are already a member of this household."
-      );
-    }
+    // Use a transaction to prevent race conditions where two users
+    // join concurrently and both pass the member-count check.
+    const householdName = await db.runTransaction(async (txn) => {
+      const householdDoc = await txn.get(householdRef);
+      if (!householdDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "Household no longer exists.");
+      }
+      const household = householdDoc.data()!;
 
-    // 5. Join code expiry check
-    if (JOIN_CODE_EXPIRY_DAYS > 0 && household.joinCodeCreatedAt) {
-      const created = household.joinCodeCreatedAt.toDate
-        ? household.joinCodeCreatedAt.toDate()
-        : new Date(household.joinCodeCreatedAt);
-      const expiryMs = JOIN_CODE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-      if (Date.now() - created.getTime() > expiryMs) {
+      // 4. Already a member?
+      if ((household.members ?? []).includes(userId)) {
         throw new functions.https.HttpsError(
-          "failed-precondition",
-          "This join code has expired. Ask a household admin to regenerate it."
+          "already-exists",
+          "You are already a member of this household."
         );
       }
-    }
 
-    // 6. Member cap check
-    const currentCount = (household.members ?? []).length;
-    if (currentCount >= ABSOLUTE_MAX_MEMBERS) {
-      throw new functions.https.HttpsError(
-        "resource-exhausted",
-        "This household has reached the maximum number of members."
-      );
-    }
-
-    // 7. Subscription tier limit (optional — check owner's subscription)
-    const creatorId = household.creatorId || (household.admins ?? [])[0];
-    if (creatorId) {
-      const subSnap = await db
-        .collection("subscriptions")
-        .where("userId", "==", creatorId)
-        .limit(1)
-        .get();
-
-      if (!subSnap.empty) {
-        const sub = subSnap.docs[0].data();
-        const tierLimits: Record<string, number> = {
-          free: 2,
-          standard: 6,
-          premium: 20,
-        };
-        const maxMembers = tierLimits[sub.tier] ?? 2;
-        if (currentCount >= maxMembers) {
+      // 5. Join code expiry check
+      if (JOIN_CODE_EXPIRY_DAYS > 0 && household.joinCodeCreatedAt) {
+        const created = household.joinCodeCreatedAt.toDate
+          ? household.joinCodeCreatedAt.toDate()
+          : new Date(household.joinCodeCreatedAt);
+        const expiryMs = JOIN_CODE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        if (Date.now() - created.getTime() > expiryMs) {
           throw new functions.https.HttpsError(
-            "resource-exhausted",
-            `Member limit (${maxMembers}) reached for this household's subscription tier.`
+            "failed-precondition",
+            "This join code has expired. Ask a household admin to regenerate it."
           );
         }
       }
-    }
 
-    // 8. Add user to household (Admin SDK write — bypasses rules)
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    await householdDoc.ref.update({
-      members: admin.firestore.FieldValue.arrayUnion(userId),
-      [`memberJoinDates.${userId}`]: now,
-      updatedAt: now,
+      // 6. Member cap check (transactional — safe against concurrent joins)
+      const currentCount = (household.members ?? []).length;
+      if (currentCount >= ABSOLUTE_MAX_MEMBERS) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "This household has reached the maximum number of members."
+        );
+      }
+
+      // 7. Subscription tier limit (read inside transaction for consistency)
+      const creatorId = household.creatorId || (household.admins ?? [])[0];
+      if (creatorId) {
+        const subSnap = await txn.get(
+          db.collection("subscriptions")
+            .where("userId", "==", creatorId)
+            .limit(1)
+        );
+
+        if (!subSnap.empty) {
+          const sub = subSnap.docs[0].data();
+          const tierLimits: Record<string, number> = {
+            free: 2,
+            standard: 6,
+            premium: 20,
+          };
+          const maxMembers = tierLimits[sub.tier] ?? 2;
+          if (currentCount >= maxMembers) {
+            throw new functions.https.HttpsError(
+              "resource-exhausted",
+              `Member limit (${maxMembers}) reached for this household's subscription tier.`
+            );
+          }
+        }
+      }
+
+      // 8. Add user to household (transactional write)
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      txn.update(householdRef, {
+        members: admin.firestore.FieldValue.arrayUnion(userId),
+        [`memberJoinDates.${userId}`]: now,
+        updatedAt: now,
+      });
+
+      return household.name ?? "Unnamed Household";
     });
 
-    // 9. Audit log
+    // 9. Audit log (outside transaction — non-critical)
     await db.collection("auditLogs").add({
       userId,
       action: "join_household",
@@ -141,7 +152,7 @@ export const joinHouseholdByCode = functions.https.onCall(
 
     return {
       householdId,
-      householdName: household.name ?? "Unnamed Household",
+      householdName,
     };
   }
 );

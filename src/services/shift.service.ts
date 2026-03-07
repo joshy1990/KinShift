@@ -544,10 +544,13 @@ export class ShiftService extends BaseService {
     let cursor: DocumentSnapshot | undefined;
     let hasMore = false;
 
-    for (const docSnap of querySnapshot.docs) {
+    // Filter out soft-deleted shifts client-side.
+    // Because deleted shifts consume query slots, request extra docs
+    // so we fill the page even if some are deleted.
+    const activeDocs = querySnapshot.docs.filter(d => d.data().isDeleted !== true);
+
+    for (const docSnap of activeDocs) {
       const data = docSnap.data() as any;
-      // Filter out soft-deleted shifts client-side
-      if (data.isDeleted === true) continue;
 
       if (shifts.length < pageSize) {
         shifts.push({ id: docSnap.id, ...data } as Shift);

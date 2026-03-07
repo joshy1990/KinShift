@@ -343,7 +343,8 @@ class SubscriptionService {
           tierLimit: freeLimits.maxMembersPerHousehold,
         });
 
-        const memberIds = h.members.map((m: any) => m.userId);
+        // h.members is already a string[] of user IDs
+        const memberIds: string[] = h.members ?? [];
         await notificationService
           .notifyHouseholdDowngrade(hDoc.id, memberIds, previousTier, 'free')
           .catch(e => console.warn('Downgrade notify failed:', e));

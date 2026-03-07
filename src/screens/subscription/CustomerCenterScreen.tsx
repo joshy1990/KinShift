@@ -8,7 +8,7 @@
  * in the RevenueCat dashboard.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
   Linking,
   ScrollView,
 } from 'react-native';
-import RevenueCatUI from 'react-native-purchases-ui';
+import _RevenueCatUI from 'react-native-purchases-ui';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 
 interface CustomerCenterScreenProps {
@@ -29,7 +29,7 @@ interface CustomerCenterScreenProps {
 }
 
 export const CustomerCenterScreen: React.FC<CustomerCenterScreenProps> = ({ navigation }) => {
-  const { isPro, proStatus, tier, restorePurchases } = useSubscription();
+  const { isPro, proStatus, tier: _tier, restorePurchases } = useSubscription();
   const [loading, setLoading] = useState(false);
 
   const openStoreSubscriptionSettings = () => {

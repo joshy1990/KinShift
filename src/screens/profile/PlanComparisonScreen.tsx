@@ -30,11 +30,22 @@ import {
   Linking,
 } from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
-import {PricingInfo, subscriptionService, SubscriptionTier} from '@/services/subscription.service';
+import {subscriptionService} from '@/services/subscription.service';
+import type {SubscriptionTier} from '@/services/revenueCat.service';
 import {revenueCatService} from '@/services/revenueCat.service';
 import {spacing, typography, borderRadius} from '@/utils/responsive';
 import {useAuth} from '@/contexts/AuthContext';
 import {showAlert, showConfirm} from '@/utils/alert';
+
+/** Local pricing info — replaced old PricingInfo export from subscription.service */
+interface PricingInfo {
+  tier: SubscriptionTier;
+  name: string;
+  priceMonthly: number;
+  priceYearly: number;
+  currency: string;
+  features: string[];
+}
 
 export const PlanComparisonScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -72,7 +83,7 @@ export const PlanComparisonScreen: React.FC = () => {
     }
   };
   
-  // Inline pricing data as workaround for bundler issue
+  // Pricing data — 2-tier model (free / pro)
   const plans: PricingInfo[] = [
     {
       tier: 'free',
@@ -88,24 +99,10 @@ export const PlanComparisonScreen: React.FC = () => {
       ],
     },
     {
-      tier: 'standard',
-      name: 'Standard',
-      priceMonthly: 2.99,
-      priceYearly: 29.99,
-      currency: 'GBP',
-      features: [
-        '1 household',
-        'Up to 4 members',
-        'Unlimited shifts & notes',
-        'All core features',
-        'Ad-free',
-      ],
-    },
-    {
-      tier: 'premium',
-      name: 'Premium',
-      priceMonthly: 4.99,
-      priceYearly: 49.99,
+      tier: 'pro',
+      name: 'Pro',
+      priceMonthly: 3.99,
+      priceYearly: 39.99,
       currency: 'GBP',
       features: [
         'Unlimited households',
@@ -132,9 +129,9 @@ export const PlanComparisonScreen: React.FC = () => {
     }
     
     // Determine if upgrade or downgrade
-    const tierOrder = {free: 0, standard: 1, premium: 2};
-    const isUpgrade = tierOrder[plan.tier] > tierOrder[currentTier];
-    const isDowngrade = tierOrder[plan.tier] < tierOrder[currentTier];
+    const tierOrder: Record<string, number> = {free: 0, pro: 1};
+    const isUpgrade = (tierOrder[plan.tier] ?? 0) > (tierOrder[currentTier] ?? 0);
+    const isDowngrade = (tierOrder[plan.tier] ?? 0) < (tierOrder[currentTier] ?? 0);
     
     if (isDowngrade) {
       // Downgrades must go through the App Store / Play Store
@@ -161,7 +158,7 @@ export const PlanComparisonScreen: React.FC = () => {
       
       showConfirm(
         'Upgrade Plan',
-        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year\n\nCurrent: ${currentTier.toUpperCase()}\nNew: ${plan.tier.toUpperCase()}`,
+        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year`,
         async () => {
           try {
             setLoading(true);
@@ -182,11 +179,10 @@ export const PlanComparisonScreen: React.FC = () => {
               throw new Error('No subscription packages available. Please try again later.');
             }
             
-            // Find the appropriate package for the selected tier
-            // RevenueCat package identifiers should match your product IDs
+            // Find the monthly package for "pro"
             const targetPackage = offerings.find(pkg => {
               const identifier = pkg.identifier.toLowerCase();
-              return identifier.includes(plan.tier.toLowerCase()) && identifier.includes('monthly');
+              return identifier.includes('pro') && identifier.includes('monthly');
             });
             
             if (!targetPackage) {
@@ -200,14 +196,9 @@ export const PlanComparisonScreen: React.FC = () => {
               throw new Error('Purchase failed. Please try again.');
             }
             
-            // Verify purchase and update Firestore subscription
-            const hasEntitlement = plan.tier === 'premium' 
-              ? revenueCatService.hasEntitlement('premium')
-              : revenueCatService.hasEntitlement('standard');
-            
-            if (hasEntitlement) {
-              // Purchase successful - update Firestore
-              await subscriptionService.changeSubscriptionTier(user.id, plan.tier);
+            // Verify purchase via RevenueCat entitlement
+            // The subscription webhook handles Firestore updates automatically
+            if (revenueCatService.isPro) {
               await loadCurrentSubscription();
               
               showAlert(
@@ -244,8 +235,8 @@ export const PlanComparisonScreen: React.FC = () => {
   const getButtonText = (planTier: SubscriptionTier): string => {
     if (planTier === currentTier) return 'Current Plan';
     
-    const tierOrder = {free: 0, standard: 1, premium: 2};
-    const isUpgrade = tierOrder[planTier] > tierOrder[currentTier];
+    const tierOrder: Record<string, number> = {free: 0, pro: 1};
+    const isUpgrade = (tierOrder[planTier] ?? 0) > (tierOrder[currentTier] ?? 0);
     
     if (isUpgrade) return 'Upgrade';
     return 'Downgrade';
@@ -254,22 +245,20 @@ export const PlanComparisonScreen: React.FC = () => {
   const getButtonStyle = (planTier: SubscriptionTier) => {
     if (planTier === currentTier) return styles.currentPlanButton;
     
-    const tierOrder = {free: 0, standard: 1, premium: 2};
-    const isUpgrade = tierOrder[planTier] > tierOrder[currentTier];
+    const tierOrder: Record<string, number> = {free: 0, pro: 1};
+    const isUpgrade = (tierOrder[planTier] ?? 0) > (tierOrder[currentTier] ?? 0);
     
     if (isUpgrade) return styles.upgradeButton;
     return styles.downgradeButton;
   };
 
   const getPlanStyle = (tier: string) => {
-    if (tier === 'premium') return styles.premiumPlan;
-    if (tier === 'standard') return styles.standardPlan;
+    if (tier === 'pro') return styles.proPlan;
     return styles.freePlan;
   };
 
   const getPlanHeaderStyle = (tier: string) => {
-    if (tier === 'premium') return styles.premiumHeader;
-    if (tier === 'standard') return styles.standardHeader;
+    if (tier === 'pro') return styles.proHeader;
     return styles.freeHeader;
   };
 
@@ -292,9 +281,9 @@ export const PlanComparisonScreen: React.FC = () => {
           {plans.map((plan) => (
             <View key={plan.tier} style={[styles.planCard, getPlanStyle(plan.tier)]}>
               {/* Badge for Premium or Current Plan */}
-              {plan.tier === 'premium' && plan.tier !== currentTier && (
+              {plan.tier === 'pro' && plan.tier !== currentTier && (
                 <View style={styles.popularBadge}>
-                  <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
+                  <Text style={styles.popularBadgeText}>RECOMMENDED</Text>
                 </View>
               )}
               {plan.tier === currentTier && (
@@ -441,11 +430,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1F37',
     borderColor: '#2A2A3E',
   },
-  standardPlan: {
-    backgroundColor: '#1E293B',
-    borderColor: '#3B82F6',
-  },
-  premiumPlan: {
+  proPlan: {
     backgroundColor: '#1E1B2E',
     borderColor: '#8B5CF6',
   },
@@ -485,10 +470,7 @@ const styles = StyleSheet.create({
   freeHeader: {
     borderBottomColor: '#2A2A3E',
   },
-  standardHeader: {
-    borderBottomColor: '#3B82F6',
-  },
-  premiumHeader: {
+  proHeader: {
     borderBottomColor: '#8B5CF6',
   },
   planName: {
@@ -553,10 +535,7 @@ const styles = StyleSheet.create({
   freeButton: {
     backgroundColor: '#374151',
   },
-  standardButton: {
-    backgroundColor: '#3B82F6',
-  },
-  premiumButton: {
+  proButton: {
     backgroundColor: '#8B5CF6',
   },
   currentPlanButton: {
