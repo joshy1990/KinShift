@@ -69,8 +69,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     }
 
     return () => {
-      // Cleanup on unmount
-      if (!user && Platform.OS !== 'web') {
+      // Cleanup on unmount or user change — always logout previous RevenueCat session
+      if (Platform.OS !== 'web') {
         revenueCatService.logout();
       }
     };
@@ -119,7 +119,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
     if (!user) {
       throw new Error('No user logged in');
     }
-    // Clean up notifications BEFORE deletion (requires valid auth)
+    // Delete the account first — if this fails (wrong password, re-auth needed),
+    // we haven't disrupted notifications yet
+    await authService.deleteAccount(password);
+
+    // Cleanup notifications AFTER successful deletion
     if (Platform.OS !== 'web' && user.id) {
       try {
         await notificationService.cleanup(user.id);
@@ -127,7 +131,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({children}) => {
         console.error('Error cleaning up notifications during deletion:', error);
       }
     }
-    await authService.deleteAccount(password);
     clearSentryUser();
     rbacService.clearCache();
     setUser(null);

@@ -4,6 +4,7 @@
 // Test utilities would be run with: firebase emulators:exec 'npm run test:firestore'
 // Using: @firebase/rules-unit-testing
 
+const fs = require('fs');
 const firebase = require('@firebase/app');
 const { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, query, where, getDocs } = require('@firebase/firestore');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');

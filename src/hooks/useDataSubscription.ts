@@ -3,7 +3,7 @@
  * Provides consistent pattern for subscribing/unsubscribing to data sources
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ServiceError } from '@/services/base.service';
 
 export interface UseDataSubscriptionOptions<T> {
@@ -28,9 +28,21 @@ export function useDataSubscription<T>(
   const [error, setError] = useState<ServiceError | null>(null);
   const { subscribe, enabled = true, onSuccess, onError } = options;
 
+  // Store callbacks in refs to avoid re-subscribing when they change
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  const subscribeRef = useRef(subscribe);
+  useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  useEffect(() => { subscribeRef.current = subscribe; }, [subscribe]);
+
+  // Counter to force re-subscription on refresh
+  const [refreshCount, setRefreshCount] = useState(0);
+
   const refresh = useCallback(() => {
     setLoading(true);
     setError(null);
+    setRefreshCount(c => c + 1);
   }, []);
 
   useEffect(() => {
@@ -42,12 +54,12 @@ export function useDataSubscription<T>(
     let unsubscribe: (() => void) | undefined;
 
     try {
-      unsubscribe = subscribe(
+      unsubscribe = subscribeRef.current(
         (newData: T) => {
           setData(newData);
           setLoading(false);
           setError(null);
-          onSuccess?.(newData);
+          onSuccessRef.current?.(newData);
         },
         (err: any) => {
           const serviceError: ServiceError = {
@@ -57,7 +69,7 @@ export function useDataSubscription<T>(
           };
           setError(serviceError);
           setLoading(false);
-          onError?.(serviceError);
+          onErrorRef.current?.(serviceError);
         }
       );
     } catch (err: any) {
@@ -68,13 +80,13 @@ export function useDataSubscription<T>(
       };
       setError(serviceError);
       setLoading(false);
-      onError?.(serviceError);
+      onErrorRef.current?.(serviceError);
     }
 
     return () => {
       unsubscribe?.();
     };
-  }, [subscribe, enabled, onSuccess, onError]);
+  }, [enabled, refreshCount]);
 
   return { data, loading, error, refresh };
 }

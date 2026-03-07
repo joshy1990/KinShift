@@ -71,13 +71,15 @@ service cloud.firestore {
       
       // Only existing members can update; self-join bypass removed.
       // Joining via code MUST go through Cloud Function.
-      // Members can update non-admin fields; only admins can change admins/joinCode.
+      // Only admins can change admins, joinCode, members, name, or creatorId.
+      // Non-admins can only update household settings/preferences fields.
       allow update: if isAuthenticated() && isHouseholdMember(householdId)
         && (
           // Admins can update anything
           isHouseholdAdmin(householdId)
-          // Non-admins cannot change admin list or join code
-          || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['admins', 'joinCode']))
+          // Non-admins cannot change structural fields
+          || (!request.resource.data.diff(resource.data).affectedKeys()
+               .hasAny(['admins', 'joinCode', 'members', 'name', 'creatorId']))
         );
       
       // Only admins can delete
@@ -138,18 +140,15 @@ service cloud.firestore {
         && request.resource.data.authorId == request.auth.uid
         && isValidString(request.resource.data.content, 1, 2000);
       
-      // Update: author or household admin only; authorId cannot be changed
-      allow update: if isAuthenticated() && (
-        resource.data.authorId == request.auth.uid ||
-        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
-      ) && request.resource.data.authorId == resource.data.authorId
+      // Update: only the author can edit their own notes; authorId cannot be changed
+      allow update: if isAuthenticated()
+        && resource.data.authorId == request.auth.uid
+        && request.resource.data.authorId == resource.data.authorId
         && isValidString(request.resource.data.content, 1, 2000);
       
-      // Delete: author or household admin
-      allow delete: if isAuthenticated() && (
-        resource.data.authorId == request.auth.uid ||
-        (resource.data.householdId != null && isHouseholdAdmin(resource.data.householdId))
-      );
+      // Delete: only the author can delete their own notes
+      allow delete: if isAuthenticated()
+        && resource.data.authorId == request.auth.uid;
     }
     
     // ========================================
@@ -201,11 +200,20 @@ service cloud.firestore {
         request.resource.data.invitedBy == request.auth.uid &&
         isHouseholdMember(request.resource.data.householdId);
       
-      // Update: creator (cancel) or the invited user (accept/decline)
+      // Update: creator (cancel) or the invited user (accept/decline).
+      // For acceptance, the user must match the invited email AND set themselves
+      // as acceptedBy. Only status, acceptedBy, and acceptedAt may change.
       allow update: if isAuthenticated() && (
-        resource.data.invitedBy == request.auth.uid ||
-        // Accept: user must be setting themselves as acceptedBy
-        request.resource.data.acceptedBy == request.auth.uid
+        // Creator can cancel/modify their own invitation
+        resource.data.invitedBy == request.auth.uid
+        || (
+          // Accept/decline: must be the intended recipient (by email)
+          resource.data.invitedEmail == request.auth.token.email
+          && request.resource.data.acceptedBy == request.auth.uid
+          // Only allow changing status, acceptedBy, acceptedAt, declinedAt
+          && !request.resource.data.diff(resource.data).affectedKeys()
+               .hasAny(['invitedBy', 'householdId', 'invitedEmail', 'invitationCode', 'createdAt'])
+        )
       );
       
       // Delete: only the invitation creator (service layer enforces admin check)
@@ -288,12 +296,14 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.tier == 'free';
       
-      // Client can update non-tier fields (e.g. status timestamps).
-      // The tier field is immutable from the client — tier upgrades/downgrades
-      // MUST come from a trusted server (Cloud Function / Admin SDK).
+      // Client can only update non-sensitive fields.
+      // tier, status, currentPeriodStart, currentPeriodEnd, and canceledAt are
+      // server-managed — changes MUST come from Cloud Function / Admin SDK.
       allow update: if isAuthenticated()
         && resource.data.userId == request.auth.uid
-        && request.resource.data.tier == resource.data.tier;
+        && request.resource.data.tier == resource.data.tier
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.currentPeriodEnd == resource.data.currentPeriodEnd;
       
       // No client-side deletion
       allow delete: if false;

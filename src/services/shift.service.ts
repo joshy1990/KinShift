@@ -310,10 +310,21 @@ export class ShiftService extends BaseService {
         throw new Error('Unauthorized: Cannot change shift owner');
       }
 
-      // SECURITY: Validate updated fields
-      if (updates.endTime && updates.startTime) {
-        if (updates.endTime <= updates.startTime) {
-          throw new Error('Shift end time must be after start time');
+      // SECURITY: Validate updated fields - check against existing shift if only one time is provided
+      if (updates.endTime || updates.startTime) {
+        const existingShift = await this.getShiftById(shiftId);
+        const effectiveStart = updates.startTime || existingShift?.startTime;
+        const effectiveEnd = updates.endTime || existingShift?.endTime;
+        if (effectiveStart && effectiveEnd) {
+          const startMs = effectiveStart instanceof Date ? effectiveStart.getTime()
+            : typeof effectiveStart === 'object' && 'seconds' in effectiveStart
+              ? (effectiveStart as any).seconds * 1000 : new Date(effectiveStart).getTime();
+          const endMs = effectiveEnd instanceof Date ? effectiveEnd.getTime()
+            : typeof effectiveEnd === 'object' && 'seconds' in effectiveEnd
+              ? (effectiveEnd as any).seconds * 1000 : new Date(effectiveEnd).getTime();
+          if (endMs <= startMs) {
+            throw new Error('Shift end time must be after start time');
+          }
         }
       }
 
@@ -440,20 +451,25 @@ export class ShiftService extends BaseService {
   async deleteUserShiftsInHousehold(householdId: string, userId: string): Promise<void> {
     try {
       // Find all shifts for this user in this household
+      // Note: Firestore '!=' only matches docs where the field EXISTS and is not
+      // equal to the value. Since most active shifts never have 'isDeleted' set,
+      // they would be excluded. Instead, query all and filter client-side.
       const q = query(
         collection(db, this.collection),
         where('householdId', '==', householdId),
-        where('ownerId', '==', userId),
-        where('isDeleted', '!=', true)
+        where('ownerId', '==', userId)
       );
       
       const snapshot = await getDocs(q);
       
       // Soft delete all shifts, chunked to respect 500-op batch limit
-      if (snapshot.docs.length > 0) {
-        const BATCH_LIMIT = 499;
-        for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
-          const chunk = snapshot.docs.slice(i, i + BATCH_LIMIT);
+      // Filter out already-deleted shifts client-side
+      const activeDocs = snapshot.docs.filter(d => d.data().isDeleted !== true);
+
+      if (activeDocs.length > 0) {
+        const BATCH_LIMIT = 500;
+        for (let i = 0; i < activeDocs.length; i += BATCH_LIMIT) {
+          const chunk = activeDocs.slice(i, i + BATCH_LIMIT);
           const batch = writeBatch(db);
 
           chunk.forEach((d) => {

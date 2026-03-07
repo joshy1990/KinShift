@@ -105,7 +105,12 @@ export const revenueCatWebhook = functions.https.onRequest(
         case "INITIAL_PURCHASE":
         case "RENEWAL":
         case "PRODUCT_CHANGE": {
-          const newTier = PRODUCT_TO_TIER[productId] ?? "standard";
+          const newTier = PRODUCT_TO_TIER[productId];
+          if (!newTier) {
+            console.error(`Unknown product ID: ${productId}`);
+            res.status(400).json({ error: `Unknown product ID: ${productId}` });
+            return;
+          }
           await subDoc.ref.update({
             tier: newTier,
             status: "active",

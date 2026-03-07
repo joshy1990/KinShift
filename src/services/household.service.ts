@@ -495,26 +495,34 @@ class HouseholdService {
 
       const household = await this.getHousehold(householdId);
 
-      // Can't demote if it's the last admin
+      // Can't demote if it's the last admin — auto-promote another member instead
       if (household.admins.length === 1 && household.admins.includes(userId)) {
-        throw new Error('Cannot demote the last admin');
-      }
-
-      const updateData: any = {
-        admins: arrayRemove(userId),
-      };
-
-      // If this is the last admin and we have another member, promote them
-      if (household.admins.length === 1 && household.admins.includes(userId) && household.members.length > 1) {
-        const secondMember = household.members.find(m => m !== userId);
-        if (secondMember) {
-          updateData.admins = arrayUnion(secondMember);
+        if (household.members.length > 1) {
+          const secondMember = household.members.find(m => m !== userId);
+          if (secondMember) {
+            // Atomically remove old admin and promote replacement
+            const updateData: any = {
+              admins: arrayRemove(userId),
+              updatedAt: new Date(),
+            };
+            await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
+            await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), {
+              admins: arrayUnion(secondMember),
+            });
+          } else {
+            throw new Error('Cannot demote the last admin');
+          }
+        } else {
+          throw new Error('Cannot demote the last admin when there are no other members');
         }
+      } else {
+        const updateData: any = {
+          admins: arrayRemove(userId),
+          updatedAt: new Date(),
+        };
+
+        await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
       }
-
-      updateData.updatedAt = new Date();
-
-      await updateDoc(doc(db, COLLECTIONS.HOUSEHOLDS, householdId), updateData);
 
       // Log audit trail
       await auditService.logHouseholdAction(householdId, requestingUserId, 'demote_member', {

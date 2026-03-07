@@ -1,38 +1,60 @@
 /**
  * Subscription Context
- * Manages subscription state throughout the app
+ *
+ * Provides the current subscription state (Free / Pro) to the entire app.
+ * The RevenueCat SDK is the single source of truth — this context just
+ * exposes its data via React state so components can re-render reactively.
  */
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { revenueCatService } from '@/services/revenueCat.service';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { revenueCatService, SubscriptionTier, ProStatus } from '@/services/revenueCat.service';
 import { subscriptionService } from '@/services/subscription.service';
+import { useAuth } from '@/contexts/AuthContext';
 import { CustomerInfo } from 'react-native-purchases';
 
-export interface SubscriptionContextType {
-  // RevenueCat data
-  isLoading: boolean;
-  customerInfo: CustomerInfo | null;
-  hasActiveSubscription: boolean;
-  activeSubscription: string | null;
-  expirationDate: Date | null;
-  willRenew: boolean;
+// ---------------------------------------------------------------------------
+// Context shape
+// ---------------------------------------------------------------------------
 
-  // Tier information
-  currentTier: 'free' | 'standard' | 'premium';
-  features: {
+export interface SubscriptionContextType {
+  /** True while RevenueCat is being initialised */
+  isLoading: boolean;
+
+  /** Raw CustomerInfo from RevenueCat (may be null before init) */
+  customerInfo: CustomerInfo | null;
+
+  /** Whether the user has an active Pro subscription */
+  isPro: boolean;
+
+  /** 'free' | 'pro' */
+  tier: SubscriptionTier;
+
+  /** Full status snapshot (expiry, billing issue, etc.) */
+  proStatus: ProStatus;
+
+  /** Tier limits for current subscription */
+  limits: {
     maxHouseholds: number;
     maxMembersPerHousehold: number;
-    adsFree: boolean;
+    showAds: boolean;
+    canExportCalendar: boolean;
   };
 
-  // Actions
-  purchaseSubscription: (productId: string) => Promise<boolean>;
+  /** Restore previous purchases (after reinstall) */
   restorePurchases: () => Promise<boolean>;
 
-  // Helpers
-  shouldShowAds: (isAdmin: boolean) => boolean;
+  /** Whether ads should be shown */
+  shouldShowAds: boolean;
 }
+
+const DEFAULT_STATUS: ProStatus = {
+  isPro: false,
+  tier: 'free',
+  willRenew: false,
+  expirationDate: null,
+  activeProductId: null,
+  billingIssue: false,
+};
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
@@ -44,201 +66,106 @@ export const useSubscription = (): SubscriptionContextType => {
   return context;
 };
 
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+
 interface SubscriptionProviderProps {
   children: ReactNode;
 }
 
 export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ children }) => {
   const { user } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
-  const [currentTier, setCurrentTier] = useState<'free' | 'standard' | 'premium'>('free');
+  const [proStatus, setProStatus] = useState<ProStatus>(DEFAULT_STATUS);
 
-  // Initialize RevenueCat when user logs in
+  // ── Bootstrap ────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
+      setProStatus(DEFAULT_STATUS);
+      setCustomerInfo(null);
       return;
     }
 
-    const setupSubscriptions = async () => {
+    let cancelled = false;
+
+    const setup = async () => {
       try {
         setIsLoading(true);
 
-        // Initialize RevenueCat
+        // Initialise RevenueCat (identifies user, starts listener)
         await revenueCatService.initialize(user.id);
 
-        // Register for real-time RevenueCat updates (subscription changes, cancellations, renewals)
+        // Register callback for real-time updates
         revenueCatService.setCustomerInfoUpdateCallback((info) => {
+          if (cancelled) return;
           setCustomerInfo(info);
-          const hasPremium = revenueCatService.hasEntitlement('premium');
-          const hasStandard = revenueCatService.hasEntitlement('standard');
-          const newTier = hasPremium ? 'premium' : hasStandard ? 'standard' : 'free';
-          setCurrentTier(newTier);
-
-          // Sync to Firestore in background
-          if (user?.id) {
-            syncWithFirestore(user.id, newTier).catch(e =>
-              console.warn('[SubscriptionContext] Background Firestore sync failed:', e)
-            );
-          }
+          setProStatus(revenueCatService.getProStatus());
         });
 
-        // Get customer info
+        // Read current state
         const info = await revenueCatService.refreshCustomerInfo();
-        setCustomerInfo(info);
-
-        // Determine tier based on entitlements or subscription
-        const hasActive = revenueCatService.hasActiveSubscription();
-        const hasPremium = revenueCatService.hasEntitlement('premium');
-        const hasStandard = revenueCatService.hasEntitlement('standard');
-
-        if (hasPremium) {
-          setCurrentTier('premium');
-        } else if (hasStandard) {
-          setCurrentTier('standard');
-        } else {
-          setCurrentTier('free');
+        if (!cancelled) {
+          setCustomerInfo(info);
+          setProStatus(revenueCatService.getProStatus());
         }
-
-        // Sync with Firestore subscription service
-        await syncWithFirestore(user.id, hasActive ? (hasPremium ? 'premium' : 'standard') : 'free');
       } catch (error) {
         console.error('[SubscriptionContext] Setup failed:', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    setupSubscriptions();
+    setup();
 
-    // Cleanup listener on unmount
     return () => {
+      cancelled = true;
       revenueCatService.setCustomerInfoUpdateCallback(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const syncWithFirestore = async (userId: string, tier: 'free' | 'standard' | 'premium') => {
+  // ── Restore purchases ────────────────────────────────────────────────
+
+  const restorePurchases = useCallback(async (): Promise<boolean> => {
     try {
-      // Update subscription tier in Firestore if it changed
-      await subscriptionService.changeSubscriptionTier(userId, tier);
-    } catch (error) {
-      console.warn('[SubscriptionContext] Failed to sync with Firestore:', error);
-    }
-  };
-
-  const purchaseSubscription = async (packageId: string): Promise<boolean> => {
-    try {
-      const offerings = await revenueCatService.getOfferings();
-      const package_ = offerings.find((p) => p.identifier === packageId);
-
-      if (!package_) {
-        console.error('[SubscriptionContext] Package not found:', packageId);
-        return false;
-      }
-
-      const result = await revenueCatService.purchasePackage(package_);
-
-      if (result) {
-        setCustomerInfo(result);
-
-        // Update local tier
-        const hasPremium = revenueCatService.hasEntitlement('premium');
-        const hasStandard = revenueCatService.hasEntitlement('standard');
-
-        if (hasPremium) {
-          setCurrentTier('premium');
-        } else if (hasStandard) {
-          setCurrentTier('standard');
-        }
-
-        // Sync with Firestore
-        if (user?.id) {
-          await syncWithFirestore(user.id, hasPremium ? 'premium' : hasStandard ? 'standard' : 'free');
-        }
-
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('[SubscriptionContext] Purchase failed:', error);
-      return false;
-    }
-  };
-
-  const restorePurchases = async (): Promise<boolean> => {
-    try {
-      const result = await revenueCatService.restorePurchases();
-
-      if (result) {
-        setCustomerInfo(result);
-
-        // Update local tier
-        const hasPremium = revenueCatService.hasEntitlement('premium');
-        const hasStandard = revenueCatService.hasEntitlement('standard');
-        const restoredTier = hasPremium ? 'premium' : hasStandard ? 'standard' : 'free';
-
-        if (hasPremium) {
-          setCurrentTier('premium');
-        } else if (hasStandard) {
-          setCurrentTier('standard');
-        }
-
-        // Sync restored tier with Firestore
-        if (user?.id) {
-          await syncWithFirestore(user.id, restoredTier);
-        }
-
-        return true;
-      }
-
-      return false;
+      const info = await revenueCatService.restorePurchases();
+      setCustomerInfo(info);
+      setProStatus(revenueCatService.getProStatus());
+      return revenueCatService.isPro;
     } catch (error) {
       console.error('[SubscriptionContext] Restore failed:', error);
       return false;
     }
-  };
+  }, []);
 
-  // Get tier features — aligned with subscription.service.ts getTierLimits()
-  const getFeatures = (tier: string) => {
-    switch (tier) {
-      case 'premium':
-        return {
-          maxHouseholds: -1, // unlimited
-          maxMembersPerHousehold: 12,
-          adsFree: true,
-        };
-      case 'standard':
-        return {
-          maxHouseholds: 1,
-          maxMembersPerHousehold: 4,
-          adsFree: true, // Standard admin is ad-free
-        };
-      case 'free':
-      default:
-        return {
-          maxHouseholds: 1,
-          maxMembersPerHousehold: 2,
-          adsFree: false,
-        };
-    }
-  };
+  // ── Derived values ───────────────────────────────────────────────────
+
+  const limits = subscriptionService.getTierLimits(proStatus.tier);
 
   const value: SubscriptionContextType = {
     isLoading,
     customerInfo,
-    hasActiveSubscription: revenueCatService.hasActiveSubscription(),
-    activeSubscription: revenueCatService.getActiveSubscription(),
-    expirationDate: revenueCatService.getExpirationDate(),
-    willRenew: revenueCatService.willRenew(),
-    currentTier,
-    features: getFeatures(currentTier),
-    purchaseSubscription,
+    isPro: proStatus.isPro,
+    tier: proStatus.tier,
+    proStatus,
+    limits: {
+      maxHouseholds: limits.maxHouseholds,
+      maxMembersPerHousehold: limits.maxMembersPerHousehold,
+      showAds: limits.showAds,
+      canExportCalendar: limits.canExportCalendar,
+    },
     restorePurchases,
-    shouldShowAds: (isAdmin: boolean) => subscriptionService.shouldShowAds({ tier: currentTier } as any, isAdmin),
+    shouldShowAds: subscriptionService.shouldShowAds(proStatus.tier),
   };
 
-  return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;
+  return (
+    <SubscriptionContext.Provider value={value}>
+      {children}
+    </SubscriptionContext.Provider>
+  );
 };

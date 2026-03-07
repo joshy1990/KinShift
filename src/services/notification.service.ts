@@ -498,7 +498,7 @@ const notifyShiftUpdated = async (
       shift.id
     );
 
-    // Notify each household member (except updater)
+    // Only owners edit their own shifts, so ownerId is always the updater
     for (const memberId of household.members || []) {
       if (memberId !== shift.ownerId) {
         // Create Firestore notification
@@ -784,6 +784,24 @@ const scheduleShiftReminder = async (
   userId?: string
 ): Promise<string | null> => {
   try {
+    // Cancel any existing scheduled reminders for this shift to prevent duplicates.
+    // Each call to scheduleShiftReminder (from create or edit) would otherwise
+    // accumulate additional notifications for the same shift.
+    try {
+      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const staleReminders = allScheduled.filter(
+        (n) => n.content.data?.type === 'shift_reminder' && n.content.data?.shiftId === shift.id
+      );
+      for (const stale of staleReminders) {
+        await Notifications.cancelScheduledNotificationAsync(stale.identifier);
+      }
+      if (staleReminders.length > 0) {
+        console.log(`Cancelled ${staleReminders.length} existing reminder(s) for shift ${shift.id}`);
+      }
+    } catch (cancelError) {
+      console.warn('Failed to cancel existing reminders, continuing:', cancelError);
+    }
+
     // Read user's reminder preference from Firestore
     let minutesBefore = 30;
     if (userId) {

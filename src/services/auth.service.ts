@@ -345,7 +345,7 @@ class AuthService {
       // Delete user's invitations (created by or for the user)
       const invitesFromQuery = query(
         collection(db, COLLECTIONS.INVITATIONS),
-        where('inviterId', '==', userId)
+        where('invitedBy', '==', userId)
       );
       const invitesFromSnapshot = await getDocs(invitesFromQuery);
       invitesFromSnapshot.docs.forEach((invDoc: any) => {

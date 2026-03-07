@@ -98,6 +98,8 @@ export const useOfflineSync = (): OfflineSync & {
     pendingCount,
     pendingEdits,
     isSyncing,
+    forceSync,
+    /** @deprecated Use forceSync instead */
     forcSync: forceSync,
     clearSynced,
   };

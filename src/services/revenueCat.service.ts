@@ -1,348 +1,270 @@
 /**
  * RevenueCat Subscription Service
- * Handles all payment processing and subscription management
+ *
+ * Simplified two-tier model:
+ *   Free  — ad-supported, 1 household, 2 members
+ *   Pro   — ad-free, unlimited households, 12 members/household, calendar export
+ *
+ * Single entitlement: "KinShift Pro"
+ * Products configured in RevenueCat dashboard: monthly & yearly
  */
 
 import Purchases, {
   CustomerInfo,
   PurchasesPackage,
+  PurchasesOfferings,
+  LOG_LEVEL,
 } from 'react-native-purchases';
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// RevenueCat API Key - loaded from app.config.js extra via environment variable
-// This must be set in .env.local (or EAS Secrets for builds)
-const REVENUECAT_API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || '';
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
 
-if (!REVENUECAT_API_KEY) {
-  console.warn('[RevenueCat] API key not configured. Set REVENUECAT_API_KEY in .env.local');
+/** Public SDK key — loaded from app.config.js extra → .env.local / EAS Secrets */
+const REVENUECAT_API_KEY =
+  Constants.expoConfig?.extra?.revenuecatApiKey || '';
+
+if (__DEV__ && !REVENUECAT_API_KEY) {
+  console.warn(
+    '[RevenueCat] API key not configured. Set REVENUECAT_API_KEY in .env.local',
+  );
 }
 
-// Product IDs for subscription tiers
-export const SUBSCRIPTION_PRODUCTS = {
-  FREE: 'free',
-  STANDARD_MONTHLY: 'kinshift_standard_monthly',
-  STANDARD_ANNUAL: 'kinshift_standard_annual',
-  PREMIUM_MONTHLY: 'kinshift_premium_monthly',
-  PREMIUM_ANNUAL: 'kinshift_premium_annual',
-  // Legacy aliases
-  STANDARD: 'kinshift_standard_monthly',
-  PREMIUM: 'kinshift_premium_monthly',
-};
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-// Entitlements (in RevenueCat)
-export const ENTITLEMENTS = {
-  PREMIUM: 'premium',
-  STANDARD: 'standard',
-};
+/** The single entitlement that gates all Pro features */
+export const PRO_ENTITLEMENT = 'KinShift Pro';
 
-export interface RevenueCatCustomerInfo {
-  customerId: string;
-  originalAppUserId: string;
-  activeSubscriptions: string[];
-  allPurchasedProductIdentifiers: string[];
-  entitlements: {
-    active: {
-      [key: string]: Entitlement;
-    };
-  };
-  firstSeen: string;
-  originalPurchaseDate?: string;
-  requestDate: string;
-}
+/**
+ * Legacy entitlement IDs — checked as fallback so users who purchased
+ * under the old standard/premium model keep their access.
+ */
+const LEGACY_ENTITLEMENTS = ['premium', 'standard'] as const;
 
-export interface Entitlement {
-  identifier: string;
-  isActive: boolean;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type SubscriptionTier = 'free' | 'pro';
+
+export interface ProStatus {
+  isPro: boolean;
+  tier: SubscriptionTier;
   willRenew: boolean;
-  billingIssueDetected: boolean;
-  isSandbox: boolean;
-  originalPurchaseDate: string;
-  purchaseDate: string;
-  expirationDate?: string;
+  expirationDate: Date | null;
+  activeProductId: string | null;
+  billingIssue: boolean;
 }
 
-export interface SubscriptionOfference {
-  identifier: string;
-  title: string;
-  description: string;
-  priceString: string;
-  price: number;
-  locale: string;
-  currencyCode: string;
-  localizedTitle: string;
-  localizedDescription: string;
-}
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
 
 class RevenueCatService {
   private initialized = false;
   private customerInfo: CustomerInfo | null = null;
   private onCustomerInfoUpdated: ((info: CustomerInfo) => void) | null = null;
 
-  /**
-   * Register a callback for when customer info changes (used by SubscriptionContext)
-   */
-  setCustomerInfoUpdateCallback(callback: ((info: CustomerInfo) => void) | null): void {
+  // ── Callbacks ──────────────────────────────────────────────────────────
+
+  /** Register a callback for real-time CustomerInfo changes (used by SubscriptionContext) */
+  setCustomerInfoUpdateCallback(
+    callback: ((info: CustomerInfo) => void) | null,
+  ): void {
     this.onCustomerInfoUpdated = callback;
   }
 
+  // ── Initialisation ─────────────────────────────────────────────────────
+
   /**
-   * Initialize RevenueCat
+   * Configure the RevenueCat SDK and log in the given user.
+   * Safe to call multiple times — subsequent calls are no-ops.
    */
   async initialize(userId: string): Promise<void> {
+    if (this.initialized) return;
+
     try {
-      // Check if API key is valid (must be public key for mobile, not secret key)
-      if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.startsWith('sk_') || REVENUECAT_API_KEY.startsWith('appl_')) {
-        console.warn('[RevenueCat] No valid public API key - skipping initialization. RevenueCat requires platform-specific public keys for mobile apps.');
+      if (!REVENUECAT_API_KEY) {
+        console.warn('[RevenueCat] No API key — skipping init');
         return;
       }
 
-      // Initialize RevenueCat with API key
-      await Purchases.configure({
-        apiKey: REVENUECAT_API_KEY,
-      });
+      if (__DEV__) {
+        Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+      }
 
-      // Set user ID
-      await Purchases.setAttributes({
-        userId,
-      });
+      // Configure SDK
+      await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
 
-      // Setup purchase listener
-      this.setupPurchaseListener();
+      // Identify user (creates or retrieves the RC customer)
+      const { customerInfo } = await Purchases.logIn(userId);
+      this.customerInfo = customerInfo;
+
+      // Listen for future changes (upgrades, cancels, renewals, billing issues)
+      Purchases.addCustomerInfoUpdateListener(this.handleCustomerInfoUpdate);
 
       this.initialized = true;
+      await this.persistStatus();
 
-      // Get initial customer info
-      await this.refreshCustomerInfo();
+      console.log('[RevenueCat] Initialised for user', userId);
     } catch (error) {
-      console.error('[RevenueCat] Initialization failed:', error);
-      // Don't throw - allow app to continue without RevenueCat
+      console.error('[RevenueCat] Initialisation failed:', error);
+      // App continues in free tier — non-fatal
     }
   }
 
-  /**
-   * Setup listener for purchase updates
-   */
-  private setupPurchaseListener(): void {
-    Purchases.addCustomerInfoUpdateListener(async (customerInfo: CustomerInfo) => {
-      this.customerInfo = customerInfo;
-      console.log('[RevenueCat] Customer info updated');
+  // ── Entitlement checks ─────────────────────────────────────────────────
 
-      // Save subscription status locally
-      await this.saveSubscriptionStatus(customerInfo);
+  /** Whether the user has *any* Pro-granting entitlement (new or legacy). */
+  get isPro(): boolean {
+    const active = this.customerInfo?.entitlements?.active;
+    if (!active) return false;
 
-      // Notify SubscriptionContext so React state updates in real-time
-      if (this.onCustomerInfoUpdated) {
-        this.onCustomerInfoUpdated(customerInfo);
-      }
-    });
-  }
+    // New entitlement
+    if (active[PRO_ENTITLEMENT]?.isActive) return true;
 
-  /**
-   * Refresh customer info
-   */
-  async refreshCustomerInfo(): Promise<CustomerInfo | null> {
-    try {
-      const customerInfo = await Purchases.getCustomerInfo();
-      this.customerInfo = customerInfo;
-      await this.saveSubscriptionStatus(customerInfo);
-      return customerInfo;
-    } catch (error) {
-      console.error('[RevenueCat] Failed to refresh customer info:', error);
-      return null;
+    // Legacy entitlements (old standard/premium purchasers)
+    for (const id of LEGACY_ENTITLEMENTS) {
+      if (active[id]?.isActive) return true;
     }
+
+    return false;
   }
 
-  /**
-   * Get available packages for a product
-   */
+  /** Convenience: current tier */
+  get tier(): SubscriptionTier {
+    return this.isPro ? 'pro' : 'free';
+  }
+
+  /** Full Pro status snapshot (for UI) */
+  getProStatus(): ProStatus {
+    const entitlement =
+      this.customerInfo?.entitlements?.active?.[PRO_ENTITLEMENT] ??
+      this.findLegacyEntitlement();
+
+    return {
+      isPro: this.isPro,
+      tier: this.tier,
+      willRenew: entitlement?.willRenew ?? false,
+      expirationDate: entitlement?.expirationDate
+        ? new Date(entitlement.expirationDate)
+        : null,
+      activeProductId: entitlement?.productIdentifier ?? null,
+      billingIssue:
+        entitlement?.billingIssueDetectedAt != null,
+    };
+  }
+
+  // ── Offerings / Purchasing ─────────────────────────────────────────────
+
+  /** Get all available packages from the current offering */
   async getOfferings(): Promise<PurchasesPackage[]> {
     try {
-      const offerings = await Purchases.getOfferings();
+      const offerings: PurchasesOfferings = await Purchases.getOfferings();
 
       if (!offerings.current) {
-        console.warn('[RevenueCat] No current offering found');
+        console.warn('[RevenueCat] No current offering configured');
         return [];
       }
 
-      return offerings.current.availablePackages || [];
+      return offerings.current.availablePackages ?? [];
     } catch (error) {
       console.error('[RevenueCat] Failed to get offerings:', error);
       return [];
     }
   }
 
-  /**
-   * Purchase a subscription
-   */
-  async purchasePackage(aPackage: PurchasesPackage): Promise<CustomerInfo | null> {
-    try {
-      const result = await Purchases.purchasePackage(aPackage);
-      const customerInfo = result.customerInfo as CustomerInfo;
-      this.customerInfo = customerInfo;
-      await this.saveSubscriptionStatus(customerInfo);
-      return customerInfo;
-    } catch (error: any) {
-      // Surface error to caller so UI/tests can handle cancellation or failures
-      const err = error instanceof Error ? error : new Error(String(error));
-      console.error('[RevenueCat] Purchase failed:', err);
-      throw err;
-    }
+  /** Purchase a specific package. Throws on failure (caller handles UI). */
+  async purchasePackage(pkg: PurchasesPackage): Promise<CustomerInfo> {
+    const { customerInfo } = await Purchases.purchasePackage(pkg);
+    this.customerInfo = customerInfo;
+    await this.persistStatus();
+    return customerInfo;
   }
 
-  /**
-   * Restore purchases
-   */
-  async restorePurchases(): Promise<CustomerInfo | null> {
+  /** Restore previous purchases (e.g. after reinstall) */
+  async restorePurchases(): Promise<CustomerInfo> {
+    const customerInfo = await Purchases.restorePurchases();
+    this.customerInfo = customerInfo;
+    await this.persistStatus();
+    return customerInfo;
+  }
+
+  // ── Customer Info ──────────────────────────────────────────────────────
+
+  /** Force-refresh customer info from the RevenueCat backend */
+  async refreshCustomerInfo(): Promise<CustomerInfo | null> {
     try {
-      const customerInfo = await Purchases.restorePurchases();
-      this.customerInfo = customerInfo;
-      await this.saveSubscriptionStatus(customerInfo);
-      return customerInfo;
+      const info = await Purchases.getCustomerInfo();
+      this.customerInfo = info;
+      await this.persistStatus();
+      return info;
     } catch (error) {
-      console.error('[RevenueCat] Failed to restore purchases:', error);
+      console.error('[RevenueCat] Refresh failed:', error);
       return null;
     }
   }
 
-  /**
-   * Get active subscription
-   */
-  getActiveSubscription(): string | null {
-    if (!this.customerInfo) {
-      return null;
-    }
-
-    const activeSubscriptions = this.customerInfo.activeSubscriptions || [];
-    if (activeSubscriptions.length > 0) {
-      return activeSubscriptions[0];
-    }
-
-    // Check entitlements as fallback
-    const entitlements = this.customerInfo.entitlements?.active || {};
-    if (entitlements[ENTITLEMENTS.PREMIUM]) {
-      return SUBSCRIPTION_PRODUCTS.PREMIUM;
-    }
-    if (entitlements[ENTITLEMENTS.STANDARD]) {
-      return SUBSCRIPTION_PRODUCTS.STANDARD;
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if user has active subscription
-   */
-  hasActiveSubscription(): boolean {
-    return this.getActiveSubscription() !== null;
-  }
-
-  /**
-   * Check if user has entitlement
-   */
-  hasEntitlement(entitlementId: string): boolean {
-    if (!this.customerInfo) {
-      return false;
-    }
-
-    const activeEntitlements = this.customerInfo.entitlements?.active || {};
-    return !!activeEntitlements[entitlementId];
-  }
-
-  /**
-   * Get subscription expiration date
-   */
-  getExpirationDate(): Date | null {
-    if (!this.customerInfo) {
-      return null;
-    }
-
-    const activeSubscriptions = this.customerInfo.activeSubscriptions || [];
-    if (activeSubscriptions.length === 0) {
-      return null;
-    }
-
-    // Get the first active subscription's expiration
-    const allExpirations = this.customerInfo.allExpirationDates || {};
-    const firstSubscription = activeSubscriptions[0];
-    const expirationString = allExpirations[firstSubscription];
-
-    if (expirationString && typeof expirationString === 'string') {
-      return new Date(expirationString);
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if subscription will renew
-   */
-  willRenew(): boolean {
-    if (!this.customerInfo) {
-      return false;
-    }
-
-    const activeSubscriptions = this.customerInfo.activeSubscriptions || [];
-    if (activeSubscriptions.length === 0) {
-      return false;
-    }
-
-    // Check if there are any active subscriptions (indicates renewal)
-    return activeSubscriptions.length > 0;
-  }
-
-  /**
-   * Get customer info
-   */
+  /** Current in-memory customer info (may be null before init). */
   getCustomerInfo(): CustomerInfo | null {
     return this.customerInfo;
   }
 
-  /**
-   * Save subscription status locally
-   */
-  private async saveSubscriptionStatus(customerInfo: CustomerInfo): Promise<void> {
-    try {
-      const status = {
-        hasActiveSubscription: this.hasActiveSubscription(),
-        activeSubscription: this.getActiveSubscription(),
-        expirationDate: this.getExpirationDate(),
-        willRenew: this.willRenew(),
-        hasStandardEntitlement: this.hasEntitlement(ENTITLEMENTS.STANDARD),
-        hasPremiumEntitlement: this.hasEntitlement(ENTITLEMENTS.PREMIUM),
-      };
+  // ── Cached / Offline Status ────────────────────────────────────────────
 
-  await AsyncStorage.setItem('@kinshift/subscription_status', JSON.stringify(status));
-    } catch (error) {
-      console.error('[RevenueCat] Failed to save subscription status:', error);
-    }
-  }
-
-  /**
-   * Get cached subscription status
-   */
-  async getCachedSubscriptionStatus(): Promise<any> {
+  /** Read the last-saved status from AsyncStorage (for instant splash-screen UI). */
+  async getCachedStatus(): Promise<ProStatus | null> {
     try {
-  const cached = await AsyncStorage.getItem('@kinshift/subscription_status');
-      return cached ? JSON.parse(cached) : null;
-    } catch (error) {
-      console.error('[RevenueCat] Failed to get cached status:', error);
+      const raw = await AsyncStorage.getItem('@kinshift/subscription_status');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
       return null;
     }
   }
 
-  /**
-   * Logout user
-   */
+  // ── Logout ─────────────────────────────────────────────────────────────
+
   async logout(): Promise<void> {
     try {
       await Purchases.logOut();
-      this.customerInfo = null;
-      this.initialized = false;
-  await AsyncStorage.removeItem('@kinshift/subscription_status');
     } catch (error) {
-      console.error('[RevenueCat] Logout failed:', error);
+      console.warn('[RevenueCat] logOut error (may already be anonymous):', error);
+    }
+    this.customerInfo = null;
+    this.initialized = false;
+    await AsyncStorage.removeItem('@kinshift/subscription_status');
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────
+
+  private handleCustomerInfoUpdate = async (info: CustomerInfo) => {
+    this.customerInfo = info;
+    await this.persistStatus();
+    this.onCustomerInfoUpdated?.(info);
+  };
+
+  private findLegacyEntitlement() {
+    const active = this.customerInfo?.entitlements?.active;
+    if (!active) return undefined;
+    for (const id of LEGACY_ENTITLEMENTS) {
+      if (active[id]?.isActive) return active[id];
+    }
+    return undefined;
+  }
+
+  private async persistStatus(): Promise<void> {
+    try {
+      const status = this.getProStatus();
+      await AsyncStorage.setItem(
+        '@kinshift/subscription_status',
+        JSON.stringify(status),
+      );
+    } catch {
+      // Non-critical — cached status is a nicety, not a requirement
     }
   }
 }
