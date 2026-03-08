@@ -28,113 +28,178 @@ import {
   ScrollView,
   Platform,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import {useNavigation, useFocusEffect} from '@react-navigation/native';
 import {subscriptionService} from '@/services/subscription.service';
 import type {SubscriptionTier} from '@/services/revenueCat.service';
 import {revenueCatService} from '@/services/revenueCat.service';
+import {PurchasesPackage, PACKAGE_TYPE} from 'react-native-purchases';
 import {spacing, typography, borderRadius} from '@/utils/responsive';
 import {useAuth} from '@/contexts/AuthContext';
 import {showAlert, showConfirm} from '@/utils/alert';
 
-/** Local pricing info — replaced old PricingInfo export from subscription.service */
-interface PricingInfo {
+/** Plan info displayed on screen — prices come from the store via RevenueCat */
+interface PlanDisplayInfo {
   tier: SubscriptionTier;
   name: string;
-  priceMonthly: number;
-  priceYearly: number;
-  currency: string;
+  /** Localized price string from the store, e.g. "$3.99" or "£3.99" */
+  monthlyPriceString: string | null;
+  yearlyPriceString: string | null;
+  /** Savings text, e.g. "save 16%" */
+  savingsText: string | null;
   features: string[];
+  /** The RevenueCat packages — stored so we can purchase directly */
+  monthlyPackage: PurchasesPackage | null;
+  yearlyPackage: PurchasesPackage | null;
 }
 
 export const PlanComparisonScreen: React.FC = () => {
   const navigation = useNavigation();
   const {user} = useAuth();
   const [currentTier, setCurrentTier] = useState<SubscriptionTier>('free');
-  const [_loading, setLoading] = useState(true);
-  
-  // Reload subscription when screen comes into focus (e.g., after payment success)
+  const [plans, setPlans] = useState<PlanDisplayInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Reload subscription + pricing when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      loadCurrentSubscription();
+      loadData();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user])
   );
 
-  const loadCurrentSubscription = async () => {
-    if (!user) {
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadCurrentSubscription(), loadPricing()]);
+    } finally {
       setLoading(false);
-      return;
     }
-    
+  };
+
+  const loadCurrentSubscription = async () => {
+    if (!user) return;
     try {
       const subscription = await subscriptionService.getUserSubscription(user.id);
       if (subscription) {
-        // Handle both 'tier' and 'plan' properties (service may return either)
         const tierValue = (subscription as any).tier || (subscription as any).plan || 'free';
         setCurrentTier(tierValue as SubscriptionTier);
       }
     } catch (error) {
       console.error('Failed to load subscription:', error);
-      // Default to free tier on error
       setCurrentTier('free');
-    } finally {
-      setLoading(false);
     }
   };
-  
-  // Pricing data — 2-tier model (free / pro)
-  const plans: PricingInfo[] = [
-    {
+
+  /** Fetch localized prices from RevenueCat / the store */
+  const loadPricing = async () => {
+    // Always start with the free plan (no store prices needed)
+    const freePlan: PlanDisplayInfo = {
       tier: 'free',
       name: 'Free',
-      priceMonthly: 0,
-      priceYearly: 0,
-      currency: 'GBP',
+      monthlyPriceString: null,
+      yearlyPriceString: null,
+      savingsText: null,
       features: [
         '1 household',
         'Up to 2 members',
         'Unlimited shifts & notes',
         'All core features',
       ],
-    },
-    {
-      tier: 'pro',
-      name: 'Pro',
-      priceMonthly: 3.99,
-      priceYearly: 39.99,
-      currency: 'GBP',
-      features: [
-        'Unlimited households',
-        'Up to 12 members per household',
-        'Unlimited shifts & notes',
-        'All core features',
-        'Ad-free',
-        'Calendar export',
-        'Priority support',
-      ],
-    },
-  ];
+      monthlyPackage: null,
+      yearlyPackage: null,
+    };
 
-  const handleSelectPlan = async (plan: PricingInfo) => {
+    try {
+      const packages = await revenueCatService.getOfferings();
+
+      // Find monthly and annual packages
+      const monthlyPkg = packages.find(
+        p => p.packageType === PACKAGE_TYPE.MONTHLY,
+      ) ?? packages.find(
+        p => p.identifier.toLowerCase().includes('monthly'),
+      ) ?? null;
+
+      const annualPkg = packages.find(
+        p => p.packageType === PACKAGE_TYPE.ANNUAL,
+      ) ?? packages.find(
+        p => p.identifier.toLowerCase().includes('annual') ||
+             p.identifier.toLowerCase().includes('yearly'),
+      ) ?? null;
+
+      // Calculate savings percentage if both prices are available
+      let savingsText: string | null = null;
+      if (monthlyPkg && annualPkg) {
+        const monthlyAnnualized = monthlyPkg.product.price * 12;
+        const yearlyPrice = annualPkg.product.price;
+        if (monthlyAnnualized > 0) {
+          const pct = Math.round(((monthlyAnnualized - yearlyPrice) / monthlyAnnualized) * 100);
+          if (pct > 0) savingsText = `save ${pct}%`;
+        }
+      }
+
+      const proPlan: PlanDisplayInfo = {
+        tier: 'pro',
+        name: 'Pro',
+        monthlyPriceString: monthlyPkg?.product.priceString ?? null,
+        yearlyPriceString: annualPkg?.product.priceString ?? null,
+        savingsText,
+        features: [
+          'Unlimited households',
+          'Up to 12 members per household',
+          'Unlimited shifts & notes',
+          'All core features',
+          'Ad-free',
+          'Calendar export',
+          'Priority support',
+        ],
+        monthlyPackage: monthlyPkg,
+        yearlyPackage: annualPkg,
+      };
+
+      setPlans([freePlan, proPlan]);
+    } catch (error) {
+      console.error('Failed to load pricing from store:', error);
+      // Fallback — show plans without prices (purchase button will fetch again)
+      const fallbackPro: PlanDisplayInfo = {
+        tier: 'pro',
+        name: 'Pro',
+        monthlyPriceString: null,
+        yearlyPriceString: null,
+        savingsText: null,
+        features: [
+          'Unlimited households',
+          'Up to 12 members per household',
+          'Unlimited shifts & notes',
+          'All core features',
+          'Ad-free',
+          'Calendar export',
+          'Priority support',
+        ],
+        monthlyPackage: null,
+        yearlyPackage: null,
+      };
+      setPlans([freePlan, fallbackPro]);
+    }
+  };
+
+  const handleSelectPlan = async (plan: PlanDisplayInfo) => {
     if (!user) {
       showAlert('Error', 'You must be logged in to change subscription plans.');
       return;
     }
-    
-    // Check if this is the current plan
+
     if (plan.tier === currentTier) {
       showAlert('Current Plan', 'This is your current subscription plan.');
       return;
     }
-    
-    // Determine if upgrade or downgrade
+
     const tierOrder: Record<string, number> = {free: 0, pro: 1};
     const isUpgrade = (tierOrder[plan.tier] ?? 0) > (tierOrder[currentTier] ?? 0);
     const isDowngrade = (tierOrder[plan.tier] ?? 0) < (tierOrder[currentTier] ?? 0);
-    
+
     if (isDowngrade) {
-      // Downgrades must go through the App Store / Play Store
       showConfirm(
         'Downgrade Plan',
         `To downgrade to ${plan.name}, you need to change your subscription in your App Store or Google Play Store settings.\n\nYour current plan will remain active until the end of your billing period.`,
@@ -152,18 +217,19 @@ export const PlanComparisonScreen: React.FC = () => {
         }
       );
     } else if (isUpgrade) {
-      // Handle upgrade - REQUIRES PAYMENT via RevenueCat
-      const monthlyPrice = plan.priceMonthly.toFixed(2);
-      const yearlyPrice = plan.priceYearly.toFixed(2);
-      
+      // Build price line for confirm dialog using store-localized strings
+      const priceLine = [
+        plan.monthlyPriceString ? `${plan.monthlyPriceString}/month` : null,
+        plan.yearlyPriceString ? `${plan.yearlyPriceString}/year` : null,
+      ].filter(Boolean).join('\n');
+
       showConfirm(
         'Upgrade Plan',
-        `Upgrade to ${plan.name}?\n\nMonthly: £${monthlyPrice}/month\nYearly: £${yearlyPrice}/year`,
+        `Upgrade to ${plan.name}?\n\n${priceLine || 'Pricing shown at checkout'}`,
         async () => {
           try {
             setLoading(true);
-            
-            // Web platform does not support in-app purchases
+
             if (Platform.OS === 'web') {
               showAlert(
                 'Not Available',
@@ -171,36 +237,29 @@ export const PlanComparisonScreen: React.FC = () => {
               );
               return;
             }
-            
-            // Get available packages from RevenueCat
-            const offerings = await revenueCatService.getOfferings();
-            
-            if (!offerings || offerings.length === 0) {
+
+            // Use the monthly package we already fetched, or re-fetch
+            let targetPackage = plan.monthlyPackage;
+            if (!targetPackage) {
+              const offerings = await revenueCatService.getOfferings();
+              targetPackage = offerings.find(
+                p => p.packageType === PACKAGE_TYPE.MONTHLY,
+              ) ?? offerings.find(
+                p => p.identifier.toLowerCase().includes('monthly'),
+              ) ?? null;
+            }
+
+            if (!targetPackage) {
               throw new Error('No subscription packages available. Please try again later.');
             }
-            
-            // Find the monthly package for "pro"
-            const targetPackage = offerings.find(pkg => {
-              const identifier = pkg.identifier.toLowerCase();
-              return identifier.includes('pro') && identifier.includes('monthly');
-            });
-            
-            if (!targetPackage) {
-              throw new Error(`No package found for ${plan.name}. Please contact support.`);
-            }
-            
-            // Initiate purchase flow
+
             const customerInfo = await revenueCatService.purchasePackage(targetPackage);
-            
             if (!customerInfo) {
               throw new Error('Purchase failed. Please try again.');
             }
-            
-            // Verify purchase via RevenueCat entitlement
-            // The subscription webhook handles Firestore updates automatically
+
             if (revenueCatService.isPro) {
               await loadCurrentSubscription();
-              
               showAlert(
                 'Upgrade Successful! 🎉',
                 `Welcome to ${plan.name}!\n\nYour subscription is now active. Enjoy your new features!`
@@ -208,19 +267,16 @@ export const PlanComparisonScreen: React.FC = () => {
             } else {
               throw new Error('Purchase verification failed. Please contact support if you were charged.');
             }
-            
           } catch (error: any) {
             console.error('[PlanComparison] Upgrade failed:', error);
-            
-            // Handle specific error cases
-            if (error.message && error.message.includes('cancelled')) {
+            if (error.message?.includes('cancelled')) {
               showAlert('Purchase Cancelled', 'You cancelled the purchase. No charges were made.');
-            } else if (error.message && error.message.includes('already owned')) {
+            } else if (error.message?.includes('already owned')) {
               showAlert('Already Subscribed', 'You already own this subscription. Refreshing your status...');
               await loadCurrentSubscription();
             } else {
               showAlert(
-                'Upgrade Failed', 
+                'Upgrade Failed',
                 error.message || 'Failed to upgrade subscription. Please try again or contact support.'
               );
             }
@@ -276,11 +332,18 @@ export const PlanComparisonScreen: React.FC = () => {
           </Text>
         </View>
 
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#6366F1" />
+            <Text style={styles.loadingText}>Loading plans...</Text>
+          </View>
+        ) : (
+        <>
         {/* Plans */}
         <View style={styles.plansContainer}>
           {plans.map((plan) => (
             <View key={plan.tier} style={[styles.planCard, getPlanStyle(plan.tier)]}>
-              {/* Badge for Premium or Current Plan */}
+              {/* Badge */}
               {plan.tier === 'pro' && plan.tier !== currentTier && (
                 <View style={styles.popularBadge}>
                   <Text style={styles.popularBadgeText}>RECOMMENDED</Text>
@@ -296,19 +359,18 @@ export const PlanComparisonScreen: React.FC = () => {
               <View style={[styles.planHeader, getPlanHeaderStyle(plan.tier)]}>
                 <Text style={styles.planName}>{plan.name}</Text>
                 <View style={styles.priceContainer}>
-                  {plan.priceMonthly > 0 ? (
+                  {plan.monthlyPriceString ? (
                     <>
-                      <Text style={styles.currency}>£</Text>
-                      <Text style={styles.price}>{plan.priceMonthly.toFixed(2)}</Text>
+                      <Text style={styles.priceLocalized}>{plan.monthlyPriceString}</Text>
                       <Text style={styles.period}>/month</Text>
                     </>
                   ) : (
                     <Text style={styles.priceFREE}>FREE</Text>
                   )}
                 </View>
-                {plan.priceYearly > 0 && (
+                {plan.yearlyPriceString && (
                   <Text style={styles.yearlyPrice}>
-                    or £{plan.priceYearly.toFixed(2)}/year (save 16%)
+                    or {plan.yearlyPriceString}/year{plan.savingsText ? ` (${plan.savingsText})` : ''}
                   </Text>
                 )}
               </View>
@@ -378,6 +440,8 @@ export const PlanComparisonScreen: React.FC = () => {
             © 2026 Offeryn Software Ltd
           </Text>
         </View>
+        </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -397,6 +461,16 @@ const styles = StyleSheet.create({
   header: {
     padding: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  loadingContainer: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.body,
+    color: '#A1A1AA',
   },
   backButton: {
     marginBottom: spacing.md,
@@ -484,16 +558,10 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     marginBottom: spacing.xs,
   },
-  currency: {
-    fontSize: typography.subtitle,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  price: {
-    fontSize: 36,
+  priceLocalized: {
+    fontSize: 32,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginHorizontal: 4,
   },
   priceFREE: {
     fontSize: 36,

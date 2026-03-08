@@ -458,12 +458,14 @@ const sendPushNotificationToUser = async (
 const notifyShiftCreated = async (shift: any, household: any, creatorName?: string): Promise<void> => {
   try {
     const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
+    const timeStr = st.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const payload = shiftCreatedTemplate(
       creatorName || 'Team Member',
       shift.shiftType || 'shift',
       st.toLocaleDateString(),
       household.name,
-      shift.id
+      shift.id,
+      timeStr
     );
 
     // Notify each household member (except creator)
@@ -500,12 +502,14 @@ const notifyShiftUpdated = async (
 ): Promise<void> => {
   try {
     const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
+    const timeStr = st.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const payload = shiftUpdatedTemplate(
       updaterName || 'Team Member',
       shift.shiftType || 'shift',
       st.toLocaleDateString(),
       household.name,
-      shift.id
+      shift.id,
+      timeStr
     );
 
     // Only owners edit their own shifts, so ownerId is always the updater
@@ -598,11 +602,13 @@ const notifyShiftDeleted = async (
     const shiftTypeLabel = `${shiftType.charAt(0).toUpperCase()}${shiftType.slice(1)}`;
     const st = shift.startTime?.toDate ? shift.startTime.toDate() : new Date(shift.startTime);
     const dateString = st.toLocaleDateString();
+    const timeStr = st.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const payload = shiftDeletedTemplate(
       deleterName,
       shiftTypeLabel,
       dateString,
-      household.name || 'Household'
+      household.name || 'Household',
+      timeStr
     );
 
     for (const memberId of household.members || []) {

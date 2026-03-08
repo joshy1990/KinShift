@@ -19,10 +19,11 @@ export const shiftCreatedTemplate = (
   shiftType: string,
   date: string,
   householdName: string,
-  shiftId: string
+  shiftId: string,
+  startTime?: string
 ): NotificationPayload => ({
   title: `New shift from ${creatorName}`,
-  body: `${shiftType} shift on ${date} • ${householdName}`,
+  body: `${creatorName}'s ${shiftType} shift on ${date}${startTime ? ` at ${startTime}` : ''} • ${householdName}`,
   data: {
     type: 'shift_created',
     shiftId,
@@ -38,10 +39,11 @@ export const shiftUpdatedTemplate = (
   shiftType: string,
   date: string,
   householdName: string,
-  shiftId: string
+  shiftId: string,
+  startTime?: string
 ): NotificationPayload => ({
   title: `Shift updated by ${updaterName}`,
-  body: `${shiftType} shift on ${date} • ${householdName}`,
+  body: `${updaterName}'s ${shiftType} shift on ${date}${startTime ? ` at ${startTime}` : ''} • ${householdName}`,
   data: {
     type: 'shift_updated',
     shiftId,
@@ -56,10 +58,11 @@ export const shiftDeletedTemplate = (
   deleterName: string,
   shiftType: string,
   date: string,
-  householdName: string
+  householdName: string,
+  startTime?: string
 ): NotificationPayload => ({
   title: `Shift deleted by ${deleterName}`,
-  body: `${shiftType} shift on ${date} was removed from ${householdName}`,
+  body: `${deleterName}'s ${shiftType} shift on ${date}${startTime ? ` at ${startTime}` : ''} was removed from ${householdName}`,
   data: {
     type: 'shift_deleted',
   },
