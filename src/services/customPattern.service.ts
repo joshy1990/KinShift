@@ -22,6 +22,7 @@ import { ShiftType } from '@/types';
 // Re-export for convenience
 export type { PatternCell, CustomPattern, PatternPreview };
 import { shiftService } from './shift.service';
+import { householdService } from './household.service';
 import { addDays, addMonths, differenceInDays, startOfDay } from 'date-fns';
 
 const COLLECTIONS = {
@@ -179,6 +180,47 @@ export class CustomPatternService {
   }
 
   /**
+   * Get all shared patterns for a household (for admins to see all members' shared patterns)
+   */
+  async getHouseholdPatterns(householdId: string): Promise<CustomPattern[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.CUSTOM_PATTERNS),
+        where('householdId', '==', householdId),
+        where('isShared', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      const patterns: CustomPattern[] = [];
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (!Array.isArray(data.cells) || data.cells.length === 0) {
+          return;
+        }
+        patterns.push({
+          id: doc.id,
+          userId: data.userId,
+          householdId: data.householdId,
+          name: data.name,
+          description: data.description,
+          cells: data.cells,
+          patternMode: data.patternMode || 'repetition',
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+          isShared: data.isShared || false,
+        });
+      });
+
+      return patterns;
+    } catch (error) {
+      console.error('Failed to load household patterns:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get a specific pattern by ID
    */
   async getPattern(patternId: string): Promise<CustomPattern | null> {
@@ -210,7 +252,21 @@ export class CustomPatternService {
   }
 
   /**
+   * Check if user is an admin of the household that owns a pattern
+   */
+  private async isAdminOfPatternHousehold(pattern: CustomPattern, userId: string): Promise<boolean> {
+    if (!pattern.householdId) return false;
+    try {
+      const household = await householdService.getHousehold(pattern.householdId);
+      return Array.isArray(household.admins) && household.admins.includes(userId);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Update an existing pattern
+   * Admins can update shared patterns belonging to their household
    */
   async updatePattern(
     patternId: string,
@@ -218,10 +274,15 @@ export class CustomPatternService {
     updates: Partial<Pick<CustomPattern, 'name' | 'description' | 'cells' | 'isShared'>>
   ): Promise<void> {
     try {
-      // SECURITY: Verify ownership before allowing update
+      // SECURITY: Verify ownership or admin status before allowing update
       const pattern = await this.getPattern(patternId);
-      if (!pattern || pattern.userId !== userId) {
-        throw new Error('Unauthorized: You can only edit your own patterns');
+      if (!pattern) {
+        throw new Error('Pattern not found');
+      }
+      const isOwner = pattern.userId === userId;
+      const isAdmin = await this.isAdminOfPatternHousehold(pattern, userId);
+      if (!isOwner && !isAdmin) {
+        throw new Error('Unauthorized: You can only edit your own patterns or household patterns as admin');
       }
 
       const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);
@@ -237,13 +298,19 @@ export class CustomPatternService {
 
   /**
    * Delete a pattern
+   * Admins can delete shared patterns belonging to their household
    */
   async deletePattern(patternId: string, userId: string): Promise<void> {
     try {
-      // SECURITY: Verify ownership before allowing delete
+      // SECURITY: Verify ownership or admin status before allowing delete
       const pattern = await this.getPattern(patternId);
-      if (!pattern || pattern.userId !== userId) {
-        throw new Error('Unauthorized: You can only delete your own patterns');
+      if (!pattern) {
+        throw new Error('Pattern not found');
+      }
+      const isOwner = pattern.userId === userId;
+      const isAdmin = await this.isAdminOfPatternHousehold(pattern, userId);
+      if (!isOwner && !isAdmin) {
+        throw new Error('Unauthorized: You can only delete your own patterns or household patterns as admin');
       }
 
       const docRef = doc(db, COLLECTIONS.CUSTOM_PATTERNS, patternId);

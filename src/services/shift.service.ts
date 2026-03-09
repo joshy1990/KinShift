@@ -86,18 +86,20 @@ export class ShiftService extends BaseService {
       if (shift.householdId) {
         const household = await householdService.getHousehold(shift.householdId);
 
-        // User must be a member
-        if (!household.members.includes(userId)) {
+        // User must be a member or admin of the household
+        const isMember = household.members.includes(userId);
+        const isAdmin = Array.isArray(household.admins) && household.admins.includes(userId);
+        if (!isMember && !isAdmin) {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
-        // OWNER-ONLY: Only the shift owner can edit their own shifts
-        if (shift.ownerId !== userId) {
+        // Admins can edit any household member's shifts; non-admins can only edit their own
+        if (shift.ownerId !== userId && !isAdmin) {
           throw new Error('Unauthorized: You can only edit your own shifts');
         }
 
         // Additional checks based on required role
-        if (requiredRole === 'admin' && !household.admins.includes(userId)) {
+        if (requiredRole === 'admin' && !isAdmin) {
           throw new Error('Unauthorized: Only household admins can perform this action');
         }
       } else {
@@ -136,18 +138,20 @@ export class ShiftService extends BaseService {
       if (shift.householdId) {
         const household = await householdService.getHousehold(shift.householdId);
 
-        // User must be a member
-        if (!household.members.includes(userId)) {
+        // User must be a member or admin of the household
+        const isMember = household.members.includes(userId);
+        const isAdmin = Array.isArray(household.admins) && household.admins.includes(userId);
+        if (!isMember && !isAdmin) {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
-        // OWNER-ONLY: Only the shift owner can modify their own shifts
-        if (shift.ownerId !== userId) {
+        // Admins can modify any household member's shifts; non-admins can only modify their own
+        if (shift.ownerId !== userId && !isAdmin) {
           throw new Error('Unauthorized: You can only modify your own shifts');
         }
 
         // Additional checks based on required role
-        if (requiredRole === 'admin' && !household.admins.includes(userId)) {
+        if (requiredRole === 'admin' && !isAdmin) {
           throw new Error('Unauthorized: Only household admins can perform this action');
         }
       } else {
@@ -182,7 +186,9 @@ export class ShiftService extends BaseService {
       if (shiftData.householdId) {
         const household = await householdService.getHousehold(shiftData.householdId);
 
-        if (!household.members.includes(currentUserId)) {
+        const isMember = household.members.includes(currentUserId);
+        const isAdmin = Array.isArray(household.admins) && household.admins.includes(currentUserId);
+        if (!isMember && !isAdmin) {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
@@ -671,7 +677,7 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
         throw new Error('Unauthorized: Must be logged in to create shifts');
       }
 
-      // SECURITY: Validate all shifts belong to current user
+      // SECURITY: Validate all shifts belong to current user (admins may create for themselves)
       const invalidOwner = shiftsData.find(s => s.ownerId !== currentUser.id);
       if (invalidOwner) {
         throw new Error('Unauthorized: Cannot create shifts for another user');
@@ -682,7 +688,9 @@ return { id: shiftDoc.id, ...shiftDoc.data() } as Shift;
       let requiresApproval = false;
       if (householdId) {
         const household = await householdService.getHousehold(householdId);
-        if (!household.members.includes(currentUser.id)) {
+        const isMember = household.members.includes(currentUser.id);
+        const isAdmin = Array.isArray(household.admins) && household.admins.includes(currentUser.id);
+        if (!isMember && !isAdmin) {
           throw new Error('Unauthorized: You are not a member of this household');
         }
         // Check tier compliance

@@ -152,28 +152,47 @@ export const AddShiftScreen: React.FC<Props> = ({navigation, route}) => {
     const loadPatterns = async () => {
       if (!user) return;
       try {
-        const patterns = await customPatternService.getUserPatterns(user.id);
-        setCustomPatterns(patterns);
+        // Load user's own patterns
+        const userPatterns = await customPatternService.getUserPatterns(user.id);
+
+        // Also load shared household patterns (visible to admins and members)
+        let allPatterns = [...userPatterns];
+        if (currentHouseholdId) {
+          const householdPatterns = await customPatternService.getHouseholdPatterns(currentHouseholdId);
+          // Merge, avoiding duplicates (user's own shared patterns already in userPatterns)
+          const userPatternIds = new Set(userPatterns.map(p => p.id));
+          const uniqueHouseholdPatterns = householdPatterns.filter(p => !userPatternIds.has(p.id));
+          allPatterns = [...userPatterns, ...uniqueHouseholdPatterns];
+        }
+
+        setCustomPatterns(allPatterns);
       } catch (error) {
         console.error('Failed to load custom patterns:', error);
       }
     };
     loadPatterns();
-  }, [user]);
+  }, [user, currentHouseholdId]);
 
   // Reload patterns when navigating back from PatternBuilder
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
       if (!user) return;
       try {
-        const patterns = await customPatternService.getUserPatterns(user.id);
-        setCustomPatterns(patterns);
+        const userPatterns = await customPatternService.getUserPatterns(user.id);
+        let allPatterns = [...userPatterns];
+        if (currentHouseholdId) {
+          const householdPatterns = await customPatternService.getHouseholdPatterns(currentHouseholdId);
+          const userPatternIds = new Set(userPatterns.map(p => p.id));
+          const uniqueHouseholdPatterns = householdPatterns.filter(p => !userPatternIds.has(p.id));
+          allPatterns = [...userPatterns, ...uniqueHouseholdPatterns];
+        }
+        setCustomPatterns(allPatterns);
       } catch (error) {
         console.error('Failed to reload custom patterns:', error);
       }
     });
     return unsubscribe;
-  }, [navigation, user]);
+  }, [navigation, user, currentHouseholdId]);
 
   // Auto-select pattern if passed from PatternBuilder
   useEffect(() => {

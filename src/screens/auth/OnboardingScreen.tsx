@@ -90,7 +90,7 @@ export const OnboardingScreen: React.FC<Props> = ({navigation}) => {
             onPress={() => navigation.navigate('Signup')}
             activeOpacity={0.8}>
             <Text style={styles.primaryButtonText}>Get Started Free</Text>
-            <Text style={styles.buttonArrow}>?</Text>
+            <Text style={styles.buttonArrow}></Text>
           </TouchableOpacity>
 
           <TouchableOpacity
