@@ -22,7 +22,6 @@ module.exports = {
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kinshift.app",
-      "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -35,7 +34,6 @@ module.exports = {
     "android": {
       "backgroundColor": "#0F0F23",
       "package": "com.kinshift.app",
-      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0F0F23"
@@ -74,15 +72,14 @@ module.exports = {
       //     "iosAppId": process.env.ADMOB_APP_ID_IOS || "ca-app-pub-xxxxxxxxxxxxxxxx"
       //   }
       // ]
-      // Sentry plugin temporarily disabled - will re-enable after adding SENTRY_AUTH_TOKEN to EAS
-      // [
-      //   "@sentry/react-native/expo",
-      //   {
-      //     "url": "https://sentry.io/",
-      //     "project": "kinshift",
-      //     "organization": "kinshift"
-      //   }
-      // ]
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "kinshift",
+          "organization": "kinshift"
+        }
+      ]
     ],
     "owner": process.env.EXPO_OWNER || "kinshift",
     "extra": {

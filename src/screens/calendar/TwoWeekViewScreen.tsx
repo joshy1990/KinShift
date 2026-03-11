@@ -78,25 +78,8 @@ export const TwoWeekViewScreen: React.FC<Props> = ({navigation}) => {
         if (unsubscribe) unsubscribe();
       };
     } catch (error) {
-      // Firebase not available, using sample data
-      
-      // Sample shifts for demo
-      const sampleShifts: Shift[] = [
-        {
-          id: '1',
-          title: 'Day Shift',
-          householdId: currentHouseholdId,
-          ownerId: 'user1',
-          startTime: new Date(startDate.getTime() + 8 * 60 * 60 * 1000),
-          endTime: new Date(startDate.getTime() + 16 * 60 * 60 * 1000),
-          colorTag: '#2ECC71',
-          shiftType: 'day',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastEditedBy: 'user1',
-        },
-      ];
-      setShifts(sampleShifts);
+      console.error('Error subscribing to shifts:', error);
+      setShifts([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, currentHouseholdId]);

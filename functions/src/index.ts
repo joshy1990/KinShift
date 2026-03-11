@@ -13,4 +13,5 @@ export { joinHouseholdByCode } from "./joinHousehold";
 export { lookupInvitationByCode } from "./lookupInvitation";
 export { revenueCatWebhook } from "./subscriptionWebhook";
 export { sendPushNotification } from "./sendPush";
+export { onNotificationCreated } from "./onNotificationCreated";
 export { scheduledCleanup } from "./scheduledCleanup";

@@ -36,7 +36,6 @@ import {
   getPushToken,
   registerPushToken,
   unregisterPushToken,
-  getUserTokens,
   initializePushNotifications,
 } from '@/utils/pushTokenManager';
 
@@ -357,95 +356,21 @@ const registerDeviceToken = async (userId: string, householdId: string): Promise
 };
 
 /**
- * Send push notification to user(s)
- * 
- * ⚠️ SECURITY NOTE: This calls the Expo Push API directly from the client.
- * In production, push notifications should be sent from a backend server
- * (e.g., Cloud Functions) to prevent token exposure and abuse.
- * This is a simplified implementation for development/MVP.
- * 
- * Rate limiting: Max 10 push notifications per minute per user to prevent abuse.
+ * Push notification delivery is now handled server-side by
+ * the onNotificationCreated Cloud Function trigger.
+ * When a notification doc is created in Firestore, the trigger
+ * reads push tokens from the private subcollection and sends
+ * via Expo Push API — tokens never leave the server.
+ *
+ * This stub is kept for backward compatibility with callers
+ * that haven't been updated yet.
  */
-const pushRateLimit = new Map<string, number[]>();
-const PUSH_RATE_LIMIT = 10;
-const PUSH_RATE_WINDOW_MS = 60_000;
-
 const sendPushNotificationToUser = async (
-  userId: string,
-  payload: NotificationPayload
+  _userId: string,
+  _payload: NotificationPayload
 ): Promise<boolean> => {
-  try {
-    // Rate limiting check
-    const now = Date.now();
-    const userHistory = pushRateLimit.get(userId) || [];
-    const recentSends = userHistory.filter(t => now - t < PUSH_RATE_WINDOW_MS);
-    if (recentSends.length >= PUSH_RATE_LIMIT) {
-      console.warn(`Push rate limit exceeded for user ${userId}. Skipping push (notification still in Firestore).`);
-      return true; // Notification is already in Firestore
-    }
-    pushRateLimit.set(userId, [...recentSends, now]);
-
-    // Get all registered push tokens for the user
-    const tokens = await getUserTokens(userId);
-
-    if (!tokens || tokens.length === 0) {
-      console.log(`No push tokens registered for user ${userId}. Notification saved to Firestore.`);
-      return true; // Still return true since notification was created in Firestore
-    }
-
-    // Prepare message for Expo push service
-    const messages = tokens
-      .filter((token) => token && typeof token === 'string')
-      .map((token) => ({
-        to: token,
-        sound: 'default',
-        title: payload.title,
-        body: payload.body,
-        data: payload.data || {},
-        badge: 1,
-        priority: 'high',
-        channelId: 'default',
-      }));
-
-    if (messages.length === 0) {
-      console.log(`No valid push tokens for user ${userId}`);
-      return true;
-    }
-
-    // Send to Expo push service
-    // In production, this should be sent from your backend server for security
-    // This is a simplified client-side implementation
-    const expoApiUrl = 'https://exp.host/--/api/v2/push/send';
-
-    for (const message of messages) {
-      try {
-        const response = await fetch(expoApiUrl, {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Accept-Encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(message),
-        });
-
-        const result = await response.json();
-
-        if (result.errors) {
-          console.warn('Expo push error:', result.errors);
-        } else {
-          console.log('? Push sent via Expo to token:', message.to.substring(0, 10) + '...');
-        }
-      } catch (error) {
-        console.error('Error sending individual push notification:', error);
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Error sending push notification:', error);
-    return false;
-  }
+  // No-op: push delivery handled by onNotificationCreated Cloud Function
+  return true;
 };
 
 // ========================================
@@ -480,11 +405,6 @@ const notifyShiftCreated = async (shift: any, household: any, creatorName?: stri
           shift.ownerId
         );
         const notificationId = await createNotification(notification);
-
-        // Send push notification
-        if (notificationId) {
-          await sendPushNotificationToUser(memberId, payload);
-        }
       }
     }
   } catch (error) {
@@ -524,11 +444,6 @@ const notifyShiftUpdated = async (
           shift.ownerId
         );
         const notificationId = await createNotification(notification);
-
-        // Send push notification
-        if (notificationId) {
-          await sendPushNotificationToUser(memberId, payload);
-        }
       }
     }
   } catch (error) {
@@ -565,10 +480,6 @@ const notifyMultipleShiftsCreated = async (
           'shifts_created'
         );
         const notificationId = await createNotification(notification);
-
-        if (notificationId) {
-          await sendPushNotificationToUser(memberId, payload as NotificationPayload);
-        }
       }
     }
   } catch (error) {
@@ -623,10 +534,6 @@ const notifyShiftDeleted = async (
         'shift_deleted'
       );
       const notificationId = await createNotification(notification);
-
-      if (notificationId) {
-        await sendPushNotificationToUser(memberId, payload);
-      }
     }
   } catch (error) {
     console.error('Error notifying shift deleted:', error);
@@ -650,11 +557,7 @@ const notifyInvitationReceived = async (
     };
 
     const notification = templateToNotification(invitedUserId, householdId, payload, 'invitation_received');
-    const notificationId = await createNotification(notification);
-
-    if (notificationId) {
-      await sendPushNotificationToUser(invitedUserId, payload);
-    }
+    await createNotification(notification);
   } catch (error) {
     console.error('Error notifying invitation received:', error);
   }
@@ -681,11 +584,7 @@ const notifyInvitationAccepted = async (
     };
 
     const notification = templateToNotification(invitedUserId, householdId, payload, 'invite');
-    const notificationId = await createNotification(notification);
-
-    if (notificationId) {
-      await sendPushNotificationToUser(invitedUserId, payload);
-    }
+    await createNotification(notification);
   } catch (error) {
     console.error('Error notifying invitation accepted:', error);
   }
@@ -721,10 +620,6 @@ const notifyHouseholdDowngrade = async (
         'subscription_downgrade'
       );
       const notificationId = await createNotification(notification);
-
-      if (notificationId) {
-        await sendPushNotificationToUser(memberId, payload);
-      }
     }
   } catch (error) {
     console.error('Error notifying household downgrade:', error);
@@ -758,10 +653,6 @@ const notifySubscriptionCanceled = async (
       'subscription_canceled'
     );
     const notificationId = await createNotification(notification);
-
-    if (notificationId) {
-      await sendPushNotificationToUser(userId, payload);
-    }
   } catch (error) {
     console.error('Error notifying subscription canceled:', error);
   }
@@ -781,11 +672,13 @@ const onNotificationReceived = (callback: (notification: Notifications.Notificat
 
 /**
  * Send push notification (generic method)
+ * Push delivery is now handled by Cloud Function trigger.
  */
 const sendNotification = async (notification: any): Promise<boolean> => {
   try {
     if (notification.userId && notification.data) {
-      return await sendPushNotificationToUser(notification.userId, notification.data);
+      await createNotification(notification as Omit<Notification, 'id'>);
+      return true;
     }
     return false;
   } catch (error) {
@@ -928,10 +821,6 @@ const notifyDayNoteAdded = async (
           'day_note_added'
         );
         const notificationId = await createNotification(notification);
-
-        if (notificationId) {
-          await sendPushNotificationToUser(memberId, payload);
-        }
       }
     }
   } catch (error) {

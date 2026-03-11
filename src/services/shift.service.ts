@@ -93,8 +93,8 @@ export class ShiftService extends BaseService {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
-        // Admins can edit any household member's shifts; non-admins can only edit their own
-        if (shift.ownerId !== userId && !isAdmin) {
+        // Only the shift owner can edit their own shifts
+        if (shift.ownerId !== userId) {
           throw new Error('Unauthorized: You can only edit your own shifts');
         }
 
@@ -145,8 +145,8 @@ export class ShiftService extends BaseService {
           throw new Error('Unauthorized: You are not a member of this household');
         }
 
-        // Admins can modify any household member's shifts; non-admins can only modify their own
-        if (shift.ownerId !== userId && !isAdmin) {
+        // Only the shift owner can modify their own shifts
+        if (shift.ownerId !== userId) {
           throw new Error('Unauthorized: You can only modify your own shifts');
         }
 

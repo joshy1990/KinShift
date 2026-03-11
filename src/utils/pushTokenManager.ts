@@ -1,12 +1,15 @@
 /**
  * Push Token Manager
  * Handles registration, storage, and cleanup of push tokens
+ * 
+ * Tokens are stored in a private subcollection: users/{userId}/pushTokens/{tokenId}
+ * This prevents other authenticated users from reading push tokens.
+ * Cloud Functions use Admin SDK (bypasses rules) for server-side reads.
  */
 
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from '@/config/firestore.compat';
 import { db } from '@/config/firebase.config';
 import Constants from 'expo-constants';
 
@@ -20,6 +23,10 @@ export interface PushTokenInfo {
   lastUsed: Date;
   platform: 'ios' | 'android' | 'web';
 }
+
+/** Subcollection ref for a user's push tokens */
+const pushTokensCollection = (userId: string) =>
+  db.collection('users').doc(userId).collection('pushTokens');
 
 /**
  * Get current push token
@@ -60,7 +67,7 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
 };
 
 /**
- * Register push token for user in Firestore
+ * Register push token for user in Firestore subcollection
  */
 export const registerPushToken = async (
   userId: string,
@@ -73,20 +80,23 @@ export const registerPushToken = async (
   }
 
   try {
-    const userDocRef = doc(db, 'users', userId);
-    const tokenInfo: PushTokenInfo = {
-      token,
-      deviceId: `${platform}-${Date.now()}`, // Simple device ID
-      createdAt: new Date(),
-      lastUsed: new Date(),
-      platform,
-    };
+    const colRef = pushTokensCollection(userId);
 
-    // Add token to user's pushTokens array
-    await updateDoc(userDocRef, {
-      pushTokens: arrayUnion(tokenInfo),
-      updatedAt: new Date(),
-    });
+    // Check if this token already exists
+    const existing = await colRef.where('token', '==', token).get();
+    if (!existing.empty) {
+      // Update lastUsed on the existing doc
+      await existing.docs[0].ref.update({ lastUsed: new Date() });
+    } else {
+      const tokenInfo: PushTokenInfo = {
+        token,
+        deviceId: `${platform}-${Date.now()}`,
+        createdAt: new Date(),
+        lastUsed: new Date(),
+        platform,
+      };
+      await colRef.add(tokenInfo);
+    }
 
     // Store locally for reference
     await AsyncStorage.setItem(STORAGE_KEY, token);
@@ -114,13 +124,11 @@ export const unregisterPushToken = async (
   }
 
   try {
-    const userDocRef = doc(db, 'users', userId);
-
-    // Remove token from user's pushTokens array
-    await updateDoc(userDocRef, {
-      pushTokens: arrayRemove({ token } as any),
-      updatedAt: new Date(),
-    });
+    const colRef = pushTokensCollection(userId);
+    const snapshot = await colRef.where('token', '==', token).get();
+    for (const tokenDoc of snapshot.docs) {
+      await tokenDoc.ref.delete();
+    }
 
     // Clear from local storage
     await AsyncStorage.removeItem(STORAGE_KEY);
@@ -136,7 +144,7 @@ export const unregisterPushToken = async (
 };
 
 /**
- * Get all tokens for a user
+ * Get all tokens for a user (reads from subcollection)
  */
 export const getUserTokens = async (userId: string): Promise<string[]> => {
   if (!userId) {
@@ -144,15 +152,10 @@ export const getUserTokens = async (userId: string): Promise<string[]> => {
   }
 
   try {
-    const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
-
-    if (!userDoc.exists()) {
-      return [];
-    }
-
-    const pushTokens = userDoc.data()?.pushTokens || [];
-    return pushTokens.map((t: any) => t.token).filter((t: string) => !!t);
+    const snapshot = await pushTokensCollection(userId).get();
+    return snapshot.docs
+      .map((d: any) => d.data()?.token)
+      .filter((t: string) => !!t);
   } catch (error) {
     console.error('Error getting user tokens:', error);
     return [];
@@ -168,23 +171,9 @@ export const updateTokenLastUsed = async (userId: string, token: string): Promis
   }
 
   try {
-    const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
-
-    if (!userDoc.exists()) {
-      return false;
-    }
-
-    const pushTokens = userDoc.data()?.pushTokens || [];
-    const updatedTokens = pushTokens.map((t: any) =>
-      t.token === token ? { ...t, lastUsed: new Date() } : t
-    );
-
-    await updateDoc(userDocRef, {
-      pushTokens: updatedTokens,
-      updatedAt: new Date(),
-    });
-
+    const snapshot = await pushTokensCollection(userId).where('token', '==', token).get();
+    if (snapshot.empty) return false;
+    await snapshot.docs[0].ref.update({ lastUsed: new Date() });
     return true;
   } catch (error) {
     console.error('Error updating token last used:', error);
@@ -201,32 +190,23 @@ export const cleanupOldTokens = async (userId: string): Promise<number> => {
   }
 
   try {
-    const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
+    const snapshot = await pushTokensCollection(userId).get();
+    const docs = snapshot.docs.map((d: any) => ({ id: d.id, ref: d.ref, ...d.data() }));
 
-    if (!userDoc.exists()) {
-      return 0;
+    if (docs.length <= MAX_TOKENS_PER_USER) return 0;
+
+    // Sort by lastUsed descending, keep most recent
+    docs.sort((a: any, b: any) =>
+      new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime()
+    );
+    const toRemove = docs.slice(MAX_TOKENS_PER_USER);
+
+    for (const tokenDoc of toRemove) {
+      await tokenDoc.ref.delete();
     }
 
-    const pushTokens = (userDoc.data()?.pushTokens || []) as PushTokenInfo[];
-
-    // Sort by lastUsed, keep only most recent MAX_TOKENS_PER_USER
-    const sortedTokens = pushTokens
-      .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
-      .slice(0, MAX_TOKENS_PER_USER);
-
-    const removedCount = pushTokens.length - sortedTokens.length;
-
-    if (removedCount > 0) {
-      await updateDoc(userDocRef, {
-        pushTokens: sortedTokens,
-        updatedAt: new Date(),
-      });
-
-      console.log(`✅ Cleaned up ${removedCount} old tokens`);
-    }
-
-    return removedCount;
+    console.log(`✅ Cleaned up ${toRemove.length} old tokens`);
+    return toRemove.length;
   } catch (error) {
     console.error('Error cleaning up tokens:', error);
     return 0;

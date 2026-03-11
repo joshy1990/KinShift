@@ -457,14 +457,7 @@ class DayNoteService {
 
         await batch.commit();
 
-        // Send push notifications so devices actually ping
-        for (const userId of recipientList) {
-          try {
-            await notificationService.sendPushToUser(userId, pushPayload);
-          } catch (pushError) {
-            console.warn('Failed to send push for smart notification:', pushError);
-          }
-        }
+        // Push delivery handled by onNotificationCreated Cloud Function trigger
       }
     } catch (error) {
       console.error('Failed to send smart notifications:', error);

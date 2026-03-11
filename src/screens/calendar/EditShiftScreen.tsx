@@ -23,7 +23,6 @@ import {format} from 'date-fns';
 import {shiftService} from '@/services/shift.service';
 import {notificationService} from '@/services/notification.service';
 import {useAuth} from '@/contexts/AuthContext';
-import {useHousehold} from '@/contexts/HouseholdContext';
 import {showSuccess, showError} from '@/utils/alert';
 import {ShiftTypePicker} from '@/components/ShiftTypePicker';
 import {TimePickerModal} from '@/components/TimePickerModal';
@@ -44,10 +43,6 @@ function toDate(value: any): Date {
 export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
   const {shiftId} = route.params;
   const {user} = useAuth();
-  const {currentHousehold} = useHousehold();
-
-  // Check if current user is a household admin
-  const isAdmin = !!(currentHousehold && user && Array.isArray(currentHousehold.admins) && currentHousehold.admins.includes(user.id));
 
   // ── Loading / error state ──
   const [loadingShift, setLoadingShift] = useState(true);
@@ -93,11 +88,8 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
           return;
         }
 
-        // SECURITY: Only the shift owner or a household admin can edit the shift
-        const isOwner = fetched.ownerId === user?.id;
-        const isHouseholdAdmin = !!(fetched.householdId && currentHousehold && user &&
-          Array.isArray(currentHousehold.admins) && currentHousehold.admins.includes(user.id));
-        if (!isOwner && !isHouseholdAdmin) {
+        // SECURITY: Only the shift owner can edit the shift
+        if (fetched.ownerId !== user?.id) {
           showError('You can only edit your own shifts');
           navigation.goBack();
           return;
@@ -131,14 +123,13 @@ export const EditShiftScreen: React.FC<Props> = ({navigation, route}) => {
     load();
 
     return () => { cancelled = true; };
-  }, [shiftId, navigation, user?.id, user, currentHousehold]);
+  }, [shiftId, navigation, user?.id]);
 
   // ── Handlers ──
 
   const handleShiftTypeChange = (newType: ShiftType) => {
     // 'custom' type is handled via PatternBuilder in AddShift, not directly selectable in edit
-    // But admins should still be able to set it if needed
-    if (newType === 'custom' && !isAdmin) return;
+    if (newType === 'custom') return;
     setShiftType(newType);
   };
 

@@ -42,11 +42,13 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#0F0F23' }}>
-          <Text style={{ color: '#fff', fontSize: 18, marginBottom: 10, textAlign: 'center' }}>App Failed to Start</Text>
-          <Text style={{ color: '#999', fontSize: 14, textAlign: 'center' }}>{this.state.error?.message || 'Unknown error'}</Text>
-          <Text style={{ color: '#666', fontSize: 12, marginTop: 10, textAlign: 'center' }}>
-            {this.state.error?.stack?.substring(0, 200)}
-          </Text>
+          <Text style={{ flex: 0, color: '#fff', fontSize: 18, marginBottom: 10, textAlign: 'center' }}>App Failed to Start</Text>
+          <Text style={{ flex: 0, color: '#999', fontSize: 14, textAlign: 'center' }}>{this.state.error?.message || 'Unknown error'}</Text>
+          {__DEV__ && (
+            <Text style={{ flex: 0, color: '#666', fontSize: 12, marginTop: 10, textAlign: 'center' }}>
+              {this.state.error?.stack?.substring(0, 200)}
+            </Text>
+          )}
         </View>
       );
     }

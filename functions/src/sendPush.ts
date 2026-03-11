@@ -88,13 +88,28 @@ export const sendPushNotification = functions.https.onCall(
       );
     }
 
-    // Look up target user's push tokens (Admin SDK — never sent to client)
+    // Look up target user's push tokens from private subcollection (Admin SDK)
+    const tokensSnapshot = await db
+      .collection("users")
+      .doc(targetUserId)
+      .collection("pushTokens")
+      .get();
+
+    const subcollectionTokens: string[] = tokensSnapshot.docs
+      .map((d) => d.data()?.token)
+      .filter((t: string | undefined) => !!t);
+
+    // Also check legacy array field for tokens not yet migrated
     const userDoc = await db.collection("users").doc(targetUserId).get();
     if (!userDoc.exists) {
       return { sent: false, reason: "Target user not found." };
     }
+    const legacyTokens: string[] = (userDoc.data()?.pushTokens ?? [])
+      .map((t: any) => (typeof t === "string" ? t : t?.token))
+      .filter((t: string | undefined) => !!t);
 
-    const tokens: string[] = userDoc.data()?.pushTokens ?? [];
+    // Deduplicate
+    const tokens = [...new Set([...subcollectionTokens, ...legacyTokens])];
     const validTokens = tokens.filter(
       (t) => t && typeof t === "string" && t.startsWith("ExponentPushToken")
     );

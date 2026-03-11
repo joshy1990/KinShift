@@ -46,6 +46,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       // Only the owner can write their own profile
       allow write: if isOwner(userId);
+      
+      // Push tokens subcollection — owner-only access.
+      // Cloud Functions use Admin SDK (bypasses rules) for server-side reads.
+      match /pushTokens/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
     }
     
     // ========================================
@@ -227,12 +233,15 @@ service cloud.firestore {
       // Users can read their own notifications
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
-      // Create: sender must be authenticated, identify themselves, and share
-      // a household with the target user. Validates required fields.
+      // Create: sender must be authenticated, identify themselves, share
+      // a household with the target user, and provide valid fields.
       allow create: if isAuthenticated()
-        && request.resource.data.keys().hasAll(['userId', 'senderId', 'type', 'title', 'body'])
+        && request.resource.data.keys().hasAll(['userId', 'senderId', 'householdId', 'type', 'title', 'body'])
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.userId != request.auth.uid
+        && request.resource.data.householdId is string
+        && request.resource.data.householdId.size() > 0
+        && isHouseholdMember(request.resource.data.householdId)
         && isValidString(request.resource.data.title, 1, 200)
         && isValidString(request.resource.data.body, 1, 1000);
       
@@ -247,10 +256,21 @@ service cloud.firestore {
     // CUSTOM PATTERNS COLLECTION
     // ========================================
     match /customPatterns/{patternId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Read: owner, or household members if the pattern is shared (has householdId)
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+        || (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdMember(resource.data.householdId))
+      );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Update/delete: owner or household admin
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+        || (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdAdmin(resource.data.householdId))
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+        || (resource.data.householdId != null && resource.data.householdId != '' && isHouseholdAdmin(resource.data.householdId))
+      );
     }
     
     // ========================================
